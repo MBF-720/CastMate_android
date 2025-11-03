@@ -23,16 +23,17 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.projecct_mobile.ui.theme.*
+import kotlinx.coroutines.launch
 
 data class CastingItem(
-    val id: Int,
+    val id: String,
     val title: String,
     val date: String,
     val description: String,
@@ -41,6 +42,22 @@ data class CastingItem(
     val compensation: String,
     val isFavorite: Boolean = false
 )
+
+/**
+ * Extension function pour convertir un Casting de l'API en CastingItem pour l'UI
+ */
+fun com.example.projecct_mobile.data.model.Casting.toCastingItem(isFavorite: Boolean = false): CastingItem {
+    return CastingItem(
+        id = this.actualId ?: "",
+        title = this.titre ?: "Sans titre",
+        date = this.dateDebut ?: this.dateFin ?: "Date non spécifiée",
+        description = this.descriptionRole ?: this.synopsis ?: "Aucune description",
+        role = this.descriptionRole ?: "Rôle non spécifié",
+        age = "", // Pas disponible dans l'API
+        compensation = this.remuneration ?: "Non spécifié",
+        isFavorite = isFavorite
+    )
+}
 
 @Composable
 fun CastingListScreen(
@@ -53,61 +70,58 @@ fun CastingListScreen(
     onFilterClick: () -> Unit = {}
 ) {
     var searchQuery by remember { mutableStateOf("") }
-    val castings = remember {
-        listOf(
-            CastingItem(
-                id = 1,
-                title = "Dune : Part 3",
-                date = "30/10/2025",
-                description = "Paul Atreides faces new political and spiritual challenges as...",
-                role = "Arven",
-                age = "20+",
-                compensation = "20$",
-                isFavorite = false
-            ),
-            CastingItem(
-                id = 2,
-                title = "Keeper",
-                date = "25/11/2025",
-                description = "An intense thriller about a young security guard...",
-                role = "men",
-                age = "18+",
-                compensation = "20$",
-                isFavorite = true
-            ),
-            CastingItem(
-                id = 3,
-                title = "Mutiny",
-                date = "15/12/2025",
-                description = "A historical drama set during a naval rebellion...",
-                role = "spy",
-                age = "30+",
-                compensation = "20$",
-                isFavorite = false
-            ),
-            CastingItem(
-                id = 4,
-                title = "The Last Empire",
-                date = "20/12/2025",
-                description = "Epic fantasy series about the fall of an ancient kingdom...",
-                role = "Guardian",
-                age = "25+",
-                compensation = "25$",
-                isFavorite = true
-            ),
-            CastingItem(
-                id = 5,
-                title = "City Lights",
-                date = "05/01/2026",
-                description = "Romantic drama in the bustling streets of Paris...",
-                role = "Artist",
-                age = "22+",
-                compensation = "18$",
-                isFavorite = false
-            )
-        )
+    var castings by remember { mutableStateOf<List<CastingItem>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val castingRepository = remember { com.example.projecct_mobile.data.repository.CastingRepository() }
+    val scope = rememberCoroutineScope()
+    
+    // Charger les castings depuis l'API au démarrage
+    LaunchedEffect(Unit) {
+        isLoading = true
+        errorMessage = null
+        
+        try {
+            val result = castingRepository.getAllCastings()
+            
+            result.onSuccess { apiCastings ->
+                android.util.Log.d("CastingListScreen", "Castings reçus: ${apiCastings.size}")
+                castings = apiCastings.map { it.toCastingItem() }
+                android.util.Log.d("CastingListScreen", "Castings convertis: ${castings.size}")
+                isLoading = false
+            }
+            
+            result.onFailure { exception ->
+                android.util.Log.e("CastingListScreen", "Erreur: ${exception.message}", exception)
+                errorMessage = "Erreur lors du chargement: ${exception.message}"
+                isLoading = false
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("CastingListScreen", "Exception: ${e.message}", e)
+            errorMessage = "Erreur: ${e.message}"
+            isLoading = false
+        }
     }
+    
     var favoriteCastingItems by remember { mutableStateOf(castings) }
+    
+    // Mettre à jour favoriteCastingItems quand castings change
+    LaunchedEffect(castings) {
+        favoriteCastingItems = castings
+    }
+    
+    // Filtrer les castings selon la recherche
+    val filteredCastings = remember(castings, searchQuery) {
+        if (searchQuery.isBlank()) {
+            castings
+        } else {
+            castings.filter {
+                it.title.contains(searchQuery, ignoreCase = true) ||
+                it.description.contains(searchQuery, ignoreCase = true) ||
+                it.role.contains(searchQuery, ignoreCase = true)
+            }
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         // En-tête bleu
@@ -206,22 +220,78 @@ fun CastingListScreen(
                 .background(White)
                 .clip(RoundedCornerShape(topStart = 25.dp, topEnd = 25.dp))
         ) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(favoriteCastingItems) { casting ->
-                    CastingItemCard(
-                        casting = casting,
-                        onFavoriteClick = {
-                            favoriteCastingItems = favoriteCastingItems.map { item ->
-                                if (item.id == casting.id) item.copy(isFavorite = !item.isFavorite)
-                                else item
+            if (isLoading) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = DarkBlue)
+                }
+            } else if (errorMessage != null) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Text(
+                            text = errorMessage ?: "Erreur",
+                            color = Red,
+                            textAlign = TextAlign.Center
+                        )
+                        Button(onClick = {
+                            scope.launch {
+                                isLoading = true
+                                errorMessage = null
+                                val result = castingRepository.getAllCastings()
+                                isLoading = false
+                                result.onSuccess { apiCastings ->
+                                    castings = apiCastings.map { it.toCastingItem() }
+                                }
+                                result.onFailure { exception ->
+                                    errorMessage = "Erreur: ${exception.message}"
+                                }
                             }
-                        },
-                        onItemClick = onItemClick
-                    )
+                        }) {
+                            Text("Réessayer")
+                        }
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (filteredCastings.isEmpty()) {
+                        item {
+                            Box(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = if (searchQuery.isNotBlank()) "Aucun casting trouvé" else "Aucun casting disponible",
+                                    color = GrayBorder,
+                                    modifier = Modifier.padding(32.dp)
+                                )
+                            }
+                        }
+                    } else {
+                        items(filteredCastings) { casting ->
+                            CastingItemCard(
+                                casting = casting,
+                                onFavoriteClick = {
+                                    castings = castings.map { item ->
+                                        if (item.id == casting.id) item.copy(isFavorite = !item.isFavorite)
+                                        else item
+                                    }
+                                },
+                                onItemClick = onItemClick
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -445,7 +515,7 @@ fun CastingItemCardPreview() {
     Projecct_MobileTheme {
         CastingItemCard(
             casting = CastingItem(
-                id = 1,
+                id = "1",
                 title = "Dune : Part 3",
                 date = "30/10/2025",
                 description = "Paul Atreides faces new political and spiritual challenges as...",

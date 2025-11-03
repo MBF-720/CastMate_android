@@ -1,6 +1,5 @@
 package com.example.projecct_mobile.ui.theme
 
-import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -10,7 +9,10 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.graphics.Color
+
+// Les couleurs (Purple80, DarkBlue, White, etc.) sont dans Color.kt (même package)
+// Typography est défini dans Type.kt (même package)
+// Tous sont accessibles directement car ils sont dans le même package
 
 private val DarkColorScheme = darkColorScheme(
     primary = Purple80,

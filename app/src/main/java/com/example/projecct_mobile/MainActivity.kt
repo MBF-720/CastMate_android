@@ -12,12 +12,17 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.projecct_mobile.data.api.ApiClient
 import com.example.projecct_mobile.ui.theme.Projecct_MobileTheme
 import com.example.projecct_mobile.ui.screens.*
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Initialiser l'API client
+        ApiClient.initialize(this)
+        
         enableEdgeToEdge()
         setContent {
             Projecct_MobileTheme {

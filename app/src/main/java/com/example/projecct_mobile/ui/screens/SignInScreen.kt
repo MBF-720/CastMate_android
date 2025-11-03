@@ -11,7 +11,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.text.SpanStyle
@@ -20,15 +19,27 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.projecct_mobile.data.model.ApiException
+import com.example.projecct_mobile.data.repository.AuthRepository
 import com.example.projecct_mobile.ui.theme.*
+import kotlinx.coroutines.launch
 
 @Composable
-fun SignInScreen(onSignInClick: () -> Unit = {}, onSignUpClick: () -> Unit = {}, onForgotPasswordClick: () -> Unit = {}) {
+fun SignInScreen(
+    onSignInClick: () -> Unit = {}, 
+    onSignUpClick: () -> Unit = {}, 
+    onForgotPasswordClick: () -> Unit = {}
+) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val authRepository = remember { AuthRepository() }
+    val scope = rememberCoroutineScope()
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Section bleue avec l'icône utilisateur
@@ -97,13 +108,15 @@ fun SignInScreen(onSignInClick: () -> Unit = {}, onSignUpClick: () -> Unit = {},
                 OutlinedTextField(
                     value = email,
                     onValueChange = { email = it },
-                    placeholder = { Text("Email", color = GrayBorder) },
+                    label = { Text("Email") },
+                    placeholder = { Text("ex: john.doe@example.com", color = GrayBorder) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = GrayBorder,
                         unfocusedBorderColor = GrayBorder
-                    )
+                    ),
+                    singleLine = true
                 )
                 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -112,13 +125,16 @@ fun SignInScreen(onSignInClick: () -> Unit = {}, onSignUpClick: () -> Unit = {},
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
-                    placeholder = { Text("Password", color = GrayBorder) },
+                    label = { Text("Mot de passe") },
+                    placeholder = { Text("Entrez votre mot de passe", color = GrayBorder) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = GrayBorder,
                         unfocusedBorderColor = GrayBorder
-                    )
+                    ),
+                    visualTransformation = PasswordVisualTransformation(),
+                    singleLine = true
                 )
                 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -137,16 +153,71 @@ fun SignInScreen(onSignInClick: () -> Unit = {}, onSignUpClick: () -> Unit = {},
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 
+                // Message d'erreur
+                errorMessage?.let { error ->
+                    Text(
+                        text = error,
+                        color = Red,
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
+                
                 // Bouton Sign in
                 Button(
-                    onClick = onSignInClick,
+                    onClick = {
+                        if (email.isBlank() || password.isBlank()) {
+                            errorMessage = "Veuillez remplir tous les champs"
+                            return@Button
+                        }
+                        
+                        isLoading = true
+                        errorMessage = null
+                        
+                        scope.launch {
+                            val result = authRepository.login(email.trim(), password)
+                            
+                            result.onSuccess { authResponse ->
+                                isLoading = false
+                                onSignInClick()
+                            }
+                            
+                            result.onFailure { exception ->
+                                isLoading = false
+                                errorMessage = when (exception) {
+                                    is ApiException.UnauthorizedException -> 
+                                        "Email ou mot de passe incorrect"
+                                    is ApiException.BadRequestException -> {
+                                        val message = exception.message ?: "Vérifiez vos informations"
+                                        if (message.length > 150) {
+                                            message.take(150) + "..."
+                                        } else {
+                                            message
+                                        }
+                                    }
+                                    is ApiException.NetworkException -> 
+                                        "Erreur de connexion. Vérifiez votre connexion internet."
+                                    else -> 
+                                        "Erreur: ${exception.message ?: "Erreur inconnue"}"
+                                }
+                            }
+                        }
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(50.dp),
                     shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = DarkBlue)
+                    colors = ButtonDefaults.buttonColors(containerColor = DarkBlue),
+                    enabled = !isLoading
                 ) {
-                    Text("Sign in", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            color = White
+                        )
+                    } else {
+                        Text("Sign in", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
                 
                 Spacer(modifier = Modifier.height(24.dp))

@@ -13,7 +13,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -48,7 +47,7 @@ fun ForgotPasswordScreen(onBackClick: () -> Unit = {}, onSubmitClick: () -> Unit
                     modifier = Modifier
                         .size(80.dp)
                         .clip(RoundedCornerShape(40.dp))
-                        .background(Color(0xFFFFA726)), // Orange pour la cadenas
+                        .background(Orange), // Orange pour la cadenas
                     contentAlignment = Alignment.Center
                 ) {
                     // Vous pouvez ajouter une vraie icône ici
@@ -108,13 +107,15 @@ fun ForgotPasswordScreen(onBackClick: () -> Unit = {}, onSubmitClick: () -> Unit
                 OutlinedTextField(
                     value = email,
                     onValueChange = { email = it },
-                    placeholder = { Text("Email", color = GrayBorder) },
+                    label = { Text("Email") },
+                    placeholder = { Text("ex: john.doe@example.com", color = GrayBorder) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = GrayBorder,
                         unfocusedBorderColor = GrayBorder
-                    )
+                    ),
+                    singleLine = true
                 )
                 
                 Spacer(modifier = Modifier.height(24.dp))
