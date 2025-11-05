@@ -23,6 +23,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.Color
 import com.example.projecct_mobile.data.model.ApiException
 import com.example.projecct_mobile.data.repository.AuthRepository
 import com.example.projecct_mobile.ui.theme.*
