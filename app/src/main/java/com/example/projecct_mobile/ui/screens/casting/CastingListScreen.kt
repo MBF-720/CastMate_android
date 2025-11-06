@@ -1,4 +1,4 @@
-package com.example.projecct_mobile.ui.screens
+package com.example.projecct_mobile.ui.screens.casting
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -67,7 +67,8 @@ fun CastingListScreen(
     onHistoryClick: () -> Unit = {},
     onProfileClick: () -> Unit = {},
     onAgendaClick: () -> Unit = {},
-    onFilterClick: () -> Unit = {}
+    onFilterClick: () -> Unit = {},
+    onNavigateToProfile: (() -> Unit)? = null
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var castings by remember { mutableStateOf<List<CastingItem>>(emptyList()) }
@@ -155,11 +156,21 @@ fun CastingListScreen(
                         color = White
                     )
                     
-                    IconButton(onClick = onAgendaClick) {
+                    Box(
+                        modifier = Modifier
+                            .clickable {
+                                android.util.Log.d("CastingListScreen", "Bouton agenda cliqué")
+                                onAgendaClick()
+                            }
+                            .size(48.dp)
+                            .padding(8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Icon(
                             imageVector = Icons.Default.CalendarToday,
                             contentDescription = "Calendar",
-                            tint = White
+                            tint = White,
+                            modifier = Modifier.size(24.dp)
                         )
                     }
                 }
@@ -288,7 +299,15 @@ fun CastingListScreen(
                                         else item
                                     }
                                 },
-                                onItemClick = onItemClick
+                                onItemClick = { clickedCasting ->
+                                    android.util.Log.d("CastingListScreen", "Clic sur casting: ${clickedCasting.id} - ${clickedCasting.title}")
+                                    try {
+                                        onItemClick(clickedCasting)
+                                        android.util.Log.d("CastingListScreen", "Navigation déclenchée pour casting: ${clickedCasting.id}")
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("CastingListScreen", "Erreur lors de la navigation: ${e.message}", e)
+                                    }
+                                }
                             )
                         }
                     }
@@ -300,7 +319,9 @@ fun CastingListScreen(
         BottomNavigationBar(
             onHomeClick = onHomeClick,
             onHistoryClick = onHistoryClick,
-            onProfileClick = onProfileClick
+            onProfileClick = {
+                onNavigateToProfile?.invoke() ?: onProfileClick()
+            }
         )
     }
 }
@@ -314,7 +335,12 @@ fun CastingItemCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onItemClick(casting) },
+            .clickable(
+                onClick = {
+                    android.util.Log.d("CastingItemCard", "Carte cliquée pour: ${casting.id}")
+                    onItemClick(casting)
+                }
+            ),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = White)
     ) {

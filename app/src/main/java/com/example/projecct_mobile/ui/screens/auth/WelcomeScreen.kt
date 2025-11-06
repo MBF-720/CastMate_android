@@ -1,4 +1,4 @@
-package com.example.projecct_mobile.ui.screens
+package com.example.projecct_mobile.ui.screens.auth
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image

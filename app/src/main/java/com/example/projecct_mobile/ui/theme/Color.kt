@@ -12,6 +12,7 @@ val Pink40 = Color(0xFF7D5260)
 
 // Couleurs pour l'application de casting
 val DarkBlue = Color(0xFF1A237E)
+val DarkBlueLight = Color(0xFF3949AB)
 val LightBlue = Color(0xFFE3F2FD)
 val GrayBorder = Color(0xFFE0E0E0)
 val LightGray = Color(0xFFF5F5F5)

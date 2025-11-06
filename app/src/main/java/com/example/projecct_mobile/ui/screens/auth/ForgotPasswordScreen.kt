@@ -1,14 +1,11 @@
-package com.example.projecct_mobile.ui.screens
+package com.example.projecct_mobile.ui.screens.auth
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -19,10 +16,16 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.projecct_mobile.ui.theme.*
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun ForgotPasswordScreen(onBackClick: () -> Unit = {}, onSubmitClick: () -> Unit = {}) {
     var email by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(false) }
+    var successMessage by remember { mutableStateOf<String?>(null) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Section bleue avec l'icône de cadenas
@@ -120,16 +123,75 @@ fun ForgotPasswordScreen(onBackClick: () -> Unit = {}, onSubmitClick: () -> Unit
                 
                 Spacer(modifier = Modifier.height(24.dp))
                 
-                // Bouton Submit
+                // Message d'erreur
+                errorMessage?.let { error ->
+                    Text(
+                        text = error,
+                        color = Red,
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                        textAlign = TextAlign.Center
+                    )
+                }
+                
+                // Message de succès
+                successMessage?.let { success ->
+                    Text(
+                        text = success,
+                        color = DarkBlue,
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                        textAlign = TextAlign.Center
+                    )
+                }
+                
+                // Bouton Submit (Mode test - validation simple)
                 Button(
-                    onClick = onSubmitClick,
+                    onClick = {
+                        if (email.isBlank()) {
+                            errorMessage = "Veuillez entrer votre email"
+                            successMessage = null
+                            return@Button
+                        }
+                        
+                        // Validation simple de l'email
+                        if (!email.contains("@") || !email.contains(".")) {
+                            errorMessage = "Veuillez entrer un email valide"
+                            successMessage = null
+                            return@Button
+                        }
+                        
+                        isLoading = true
+                        errorMessage = null
+                        successMessage = null
+                        
+                        // Simulation d'un envoi d'email (mode test)
+                        scope.launch {
+                            delay(1000) // Simuler un délai d'envoi
+                            isLoading = false
+                            successMessage = "Un email de réinitialisation a été envoyé à $email"
+                            errorMessage = null
+                            
+                            // Navigation après 2 secondes
+                            delay(2000)
+                            onSubmitClick()
+                        }
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(50.dp),
                     shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = DarkBlue)
+                    colors = ButtonDefaults.buttonColors(containerColor = DarkBlue),
+                    enabled = !isLoading
                 ) {
-                    Text("Submit", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            color = White
+                        )
+                    } else {
+                        Text("Submit", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
                 
                 Spacer(modifier = Modifier.height(24.dp))

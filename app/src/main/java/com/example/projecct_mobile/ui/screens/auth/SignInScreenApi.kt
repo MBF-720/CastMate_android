@@ -1,4 +1,4 @@
-package com.example.projecct_mobile.ui.screens
+package com.example.projecct_mobile.ui.screens.auth
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -29,8 +29,11 @@ import com.example.projecct_mobile.data.repository.AuthRepository
 import com.example.projecct_mobile.ui.theme.*
 import kotlinx.coroutines.launch
 
+/**
+ * Version avec API - À utiliser quand l'API sera disponible
+ */
 @Composable
-fun SignInScreen(
+fun SignInScreenApi(
     onSignInClick: () -> Unit = {}, 
     onSignUpClick: () -> Unit = {}, 
     onForgotPasswordClick: () -> Unit = {}
@@ -256,7 +259,7 @@ fun SignInScreen(
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     // Bouton Google
-                    SocialButton(
+                    SocialButtonApi(
                         modifier = Modifier.weight(1f),
                         backgroundColor = White,
                         borderColor = GrayBorder
@@ -266,7 +269,7 @@ fun SignInScreen(
                     }
                     
                     // Bouton LinkedIn
-                    SocialButton(
+                    SocialButtonApi(
                         modifier = Modifier.weight(1f),
                         backgroundColor = DarkBlue,
                         borderColor = DarkBlue
@@ -275,7 +278,7 @@ fun SignInScreen(
                     }
                     
                     // Bouton Facebook
-                    SocialButton(
+                    SocialButtonApi(
                         modifier = Modifier.weight(1f),
                         backgroundColor = AccentBlue,
                         borderColor = AccentBlue
@@ -312,7 +315,7 @@ fun SignInScreen(
 }
 
 @Composable
-fun SocialButton(
+private fun SocialButtonApi(
     modifier: Modifier = Modifier,
     backgroundColor: Color,
     borderColor: Color,
@@ -332,9 +335,9 @@ fun SocialButton(
 
 @Preview(showBackground = true)
 @Composable
-fun SignInScreenPreview() {
+fun SignInScreenApiPreview() {
     Projecct_MobileTheme {
-        SignInScreen()
+        SignInScreenApi()
     }
 }
 
