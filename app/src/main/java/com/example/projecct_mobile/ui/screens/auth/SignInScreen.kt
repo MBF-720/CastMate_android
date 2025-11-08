@@ -25,8 +25,10 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.Color
+import com.example.projecct_mobile.data.model.ApiException
+import com.example.projecct_mobile.data.repository.AuthRepository
+import com.example.projecct_mobile.ui.components.getErrorMessage
 import com.example.projecct_mobile.ui.theme.*
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -41,86 +43,53 @@ fun SignInScreen(
     var rememberMe by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    val authRepository = remember { AuthRepository() }
     val scope = rememberCoroutineScope()
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        // Section bleue avec gradient et icône utilisateur
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(White)
+    ) {
+        // Section bleue simplifiée en haut
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(240.dp)
+                .height(200.dp)
                 .background(
                     brush = androidx.compose.ui.graphics.Brush.verticalGradient(
-                        colors = listOf(DarkBlue, DarkBlueLight)
+                        colors = listOf(DarkBlue, DarkBlue.copy(alpha = 0.8f))
                     )
                 )
-        ) {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Spacer(modifier = Modifier.weight(1f))
-                
-                // Icône utilisateur avec effet
-                Card(
-                    modifier = Modifier
-                        .size(100.dp)
-                        .shadow(
-                            elevation = 12.dp,
-                            shape = CircleShape,
-                            spotColor = White.copy(alpha = 0.3f)
-                        ),
-                    shape = CircleShape,
-                    colors = CardDefaults.cardColors(
-                        containerColor = White.copy(alpha = 0.2f)
-                    )
-                ) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Person,
-                            contentDescription = "User",
-                            tint = White,
-                            modifier = Modifier.size(56.dp)
-                        )
-                    }
-                }
-                
-                Spacer(modifier = Modifier.height(20.dp))
-            }
-        }
+        )
 
-        // Contenu blanc principal avec ombre
+        // Contenu blanc principal avec effet flottant
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 160.dp)
+                .padding(horizontal = 20.dp)
+                .padding(top = 140.dp)
                 .shadow(
-                    elevation = 20.dp,
-                    shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
-                    spotColor = DarkBlue.copy(alpha = 0.3f)
-                )
-                .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)),
-            shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+                    elevation = 8.dp,
+                    shape = RoundedCornerShape(24.dp),
+                    spotColor = DarkBlue.copy(alpha = 0.2f)
+                ),
+            shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.cardColors(containerColor = White),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(24.dp),
+                    .padding(28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(16.dp))
                 
-                Spacer(modifier = Modifier.height(32.dp))
-                
-                // Titre avec style amélioré
+                // Titre avec style moderne
                 Text(
-                    text = "Connexion",
-                    fontSize = 32.sp,
+                    text = "Bienvenue",
+                    fontSize = 36.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = DarkBlue,
                     letterSpacing = 0.5.sp
@@ -128,57 +97,61 @@ fun SignInScreen(
                 
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Connectez-vous à votre compte",
-                    fontSize = 14.sp,
+                    text = "Connectez-vous pour continuer",
+                    fontSize = 15.sp,
                     color = GrayBorder,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Normal
                 )
                 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(40.dp))
                 
-                // Champ Email avec style amélioré
+                // Champ Email avec style moderne
                 OutlinedTextField(
                     value = email,
                     onValueChange = { email = it },
                     label = { Text("Email", fontWeight = FontWeight.Medium) },
-                    placeholder = { Text("ex: john.doe@example.com", color = GrayBorder) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .shadow(2.dp, RoundedCornerShape(14.dp)),
-                    shape = RoundedCornerShape(14.dp),
+                    placeholder = { Text("ex: john.doe@example.com", color = GrayBorder.copy(alpha = 0.6f)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = DarkBlue,
-                        unfocusedBorderColor = GrayBorder.copy(alpha = 0.6f),
-                        focusedContainerColor = LightGray.copy(alpha = 0.3f),
-                        unfocusedContainerColor = White
+                        unfocusedBorderColor = GrayBorder.copy(alpha = 0.3f),
+                        focusedContainerColor = White,
+                        unfocusedContainerColor = White,
+                        focusedLabelColor = DarkBlue,
+                        unfocusedLabelColor = GrayBorder,
+                        focusedTextColor = Black,
+                        unfocusedTextColor = Black
                     ),
                     singleLine = true,
                     leadingIcon = {
                         Icon(
                             imageVector = Icons.Default.Email,
                             contentDescription = null,
-                            tint = DarkBlue.copy(alpha = 0.6f)
+                            tint = DarkBlue.copy(alpha = 0.8f)
                         )
                     }
                 )
                 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(24.dp))
                 
-                // Champ Password avec style amélioré
+                // Champ Password avec style moderne
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
                     label = { Text("Mot de passe", fontWeight = FontWeight.Medium) },
-                    placeholder = { Text("Entrez votre mot de passe", color = GrayBorder) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .shadow(2.dp, RoundedCornerShape(14.dp)),
-                    shape = RoundedCornerShape(14.dp),
+                    placeholder = { Text("Entrez votre mot de passe", color = GrayBorder.copy(alpha = 0.6f)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = DarkBlue,
-                        unfocusedBorderColor = GrayBorder.copy(alpha = 0.6f),
-                        focusedContainerColor = LightGray.copy(alpha = 0.3f),
-                        unfocusedContainerColor = White
+                        unfocusedBorderColor = GrayBorder.copy(alpha = 0.3f),
+                        focusedContainerColor = White,
+                        unfocusedContainerColor = White,
+                        focusedLabelColor = DarkBlue,
+                        unfocusedLabelColor = GrayBorder,
+                        focusedTextColor = Black,
+                        unfocusedTextColor = Black
                     ),
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true,
@@ -186,7 +159,7 @@ fun SignInScreen(
                         Icon(
                             imageVector = Icons.Default.Lock,
                             contentDescription = null,
-                            tint = DarkBlue.copy(alpha = 0.6f)
+                            tint = DarkBlue.copy(alpha = 0.8f)
                         )
                     }
                 )
@@ -241,16 +214,14 @@ fun SignInScreen(
                     )
                 }
                 
-                // Bouton Sign in (MODE TEST - validation simple sans API)
+                // Bouton Sign in avec API
                 Button(
                     onClick = {
-                        // Validation simple (mode test)
                         if (email.isBlank() || password.isBlank()) {
                             errorMessage = "Veuillez remplir tous les champs"
                             return@Button
                         }
                         
-                        // Validation simple de l'email
                         if (!email.contains("@") || !email.contains(".")) {
                             errorMessage = "Veuillez entrer un email valide"
                             return@Button
@@ -259,27 +230,37 @@ fun SignInScreen(
                         isLoading = true
                         errorMessage = null
                         
-                        // Simulation d'un délai (mode test - pas de vérification API)
                         scope.launch {
-                            delay(800) // Simulation d'un délai de connexion
-                            isLoading = false
-                            // Mode test : accepte n'importe quel email/password valide
-                            onSignInClick()
+                            try {
+                                val result = authRepository.login(email.trim(), password)
+                                
+                                result.onSuccess {
+                                    isLoading = false
+                                    onSignInClick()
+                                }
+                                
+                                result.onFailure { exception ->
+                                    isLoading = false
+                                    errorMessage = getErrorMessage(exception)
+                                }
+                            } catch (e: Exception) {
+                                isLoading = false
+                                errorMessage = getErrorMessage(e)
+                            }
                         }
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(56.dp)
-                        .shadow(
-                            elevation = 8.dp,
-                            shape = RoundedCornerShape(16.dp),
-                            spotColor = DarkBlue.copy(alpha = 0.4f)
-                        ),
+                        .height(58.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = DarkBlue
                     ),
-                    enabled = !isLoading
+                    enabled = !isLoading,
+                    elevation = ButtonDefaults.buttonElevation(
+                        defaultElevation = 4.dp,
+                        pressedElevation = 2.dp
+                    )
                 ) {
                     if (isLoading) {
                         CircularProgressIndicator(
@@ -325,14 +306,13 @@ fun SignInScreen(
                 
                 Spacer(modifier = Modifier.height(24.dp))
                 
-                // Bouton "Continuer avec Google" avec style amélioré
+                // Bouton "Continuer avec Google" sans ombre
                 OutlinedButton(
                     onClick = onGoogleSignInClick,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(56.dp)
-                        .shadow(2.dp, RoundedCornerShape(16.dp)),
-                    shape = RoundedCornerShape(16.dp),
+                        .height(56.dp),
+                    shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.outlinedButtonColors(
                         contentColor = Black,
                         containerColor = White

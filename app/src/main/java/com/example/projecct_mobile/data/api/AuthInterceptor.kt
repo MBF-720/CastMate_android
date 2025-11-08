@@ -18,8 +18,9 @@ class AuthInterceptor(
         
         // Liste des routes publiques qui ne nécessitent pas de token
         val publicRoutes = listOf(
-            "/auth/register",
             "/auth/login",
+            "/acteur/signup",
+            "/agence/signup",
             "/castings",
             "/api"
         )

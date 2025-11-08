@@ -31,7 +31,9 @@ import com.example.projecct_mobile.ui.theme.*
 @Composable
 fun SignUpActorStep3Screen(
     onBackClick: () -> Unit = {},
-    onFinishClick: (centresInteret: List<String>) -> Unit = {}
+    onFinishClick: (centresInteret: List<String>) -> Unit = {},
+    isLoading: Boolean = false,
+    errorMessage: String? = null
 ) {
     val defaultInterests = listOf(
         "Publicité", "Cinéma", "Théâtre", "Mannequinat", 
@@ -41,6 +43,7 @@ fun SignUpActorStep3Screen(
     var selectedInterests by remember { mutableStateOf(setOf<String>()) }
     var customTag by remember { mutableStateOf("") }
     var allInterests by remember { mutableStateOf(defaultInterests) }
+    var localError by remember { mutableStateOf<String?>(null) }
     
     Column(modifier = Modifier.fillMaxSize()) {
         // En-tête
@@ -217,9 +220,37 @@ fun SignUpActorStep3Screen(
                 
                 Spacer(modifier = Modifier.weight(1f))
                 
+                // Messages d'erreur
+                localError?.let { message ->
+                    Text(
+                        text = message,
+                        color = com.example.projecct_mobile.ui.theme.Red,
+                        fontSize = 14.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                    )
+                }
+                
+                errorMessage?.let { error ->
+                    Text(
+                        text = error,
+                        color = com.example.projecct_mobile.ui.theme.Red,
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(vertical = 8.dp),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+                
                 // Bouton Terminer
                 Button(
                     onClick = {
+                        if (selectedInterests.isEmpty()) {
+                            localError = "Sélectionnez au moins un centre d'intérêt"
+                            return@Button
+                        }
+                        localError = null
                         onFinishClick(selectedInterests.toList())
                     },
                     modifier = Modifier
@@ -229,14 +260,21 @@ fun SignUpActorStep3Screen(
                     colors = ButtonDefaults.buttonColors(
                         containerColor = DarkBlue
                     ),
-                    enabled = selectedInterests.isNotEmpty()
+                    enabled = !isLoading
                 ) {
-                    Text(
-                        text = "Terminer",
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = White
-                    )
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            color = com.example.projecct_mobile.ui.theme.White
+                        )
+                    } else {
+                        Text(
+                            text = "Terminer",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = com.example.projecct_mobile.ui.theme.White
+                        )
+                    }
                 }
             }
         }

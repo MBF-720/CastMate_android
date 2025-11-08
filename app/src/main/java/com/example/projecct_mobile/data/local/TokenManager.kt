@@ -73,5 +73,19 @@ class TokenManager(private val context: Context) {
     suspend fun hasToken(): Boolean {
         return getTokenSync() != null
     }
+    
+    /**
+     * Récupère l'ID utilisateur stocké
+     */
+    suspend fun getUserIdSync(): String? {
+        return context.dataStore.data.first()[USER_ID_KEY]
+    }
+    
+    /**
+     * Récupère l'email utilisateur stocké
+     */
+    suspend fun getUserEmailSync(): String? {
+        return context.dataStore.data.first()[USER_EMAIL_KEY]
+    }
 }
 

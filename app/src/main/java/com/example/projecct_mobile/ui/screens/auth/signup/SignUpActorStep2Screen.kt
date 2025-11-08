@@ -1,5 +1,6 @@
 package com.example.projecct_mobile.ui.screens.auth.signup
 
+import android.util.Patterns
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -31,6 +32,7 @@ fun SignUpActorStep2Screen(
     var instagram by remember { mutableStateOf("") }
     var youtube by remember { mutableStateOf("") }
     var tiktok by remember { mutableStateOf("") }
+    var formError by remember { mutableStateOf<String?>(null) }
     
     Column(modifier = Modifier.fillMaxSize()) {
         // En-tête
@@ -221,12 +223,60 @@ fun SignUpActorStep2Screen(
                 
                 Spacer(modifier = Modifier.weight(1f))
                 
+                formError?.let { message ->
+                    Text(
+                        text = message,
+                        color = Red,
+                        fontSize = 13.sp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+                
                 // Bouton Suivant
                 Button(
                     onClick = {
-                        if (anneesExperience.isNotBlank()) {
-                            onNextClick(anneesExperience, cvUrl, instagram, youtube, tiktok)
+                        val experienceValue = anneesExperience.toIntOrNull()
+                        if (experienceValue == null) {
+                            formError = "Veuillez saisir un nombre d'années d'expérience valide"
+                            return@Button
                         }
+                        if (experienceValue < 0 || experienceValue > 60) {
+                            formError = "L'expérience doit être comprise entre 0 et 60 ans"
+                            return@Button
+                        }
+                        
+                        val urlFields = listOf(
+                            youtube to "YouTube",
+                            instagram to "Instagram",
+                            tiktok to "TikTok"
+                        )
+                        
+                        urlFields.forEach { (value, label) ->
+                            if (value.isNotBlank()) {
+                                val sanitized = value.trim()
+                                val isUrl = sanitized.startsWith("http://") || sanitized.startsWith("https://")
+                                val matchesPattern = Patterns.WEB_URL.matcher(sanitized).matches()
+                                val isHandle = sanitized.startsWith("@") && sanitized.length >= 3
+                                if (!(isUrl && matchesPattern) && !isHandle) {
+                                    formError = "$label doit être un lien valide ou commencer par @"
+                                    return@Button
+                                }
+                            }
+                        }
+                        
+                        if (cvUrl != null) {
+                            val isPdf = cvUrl?.endsWith(".pdf", ignoreCase = true) == true
+                            if (!isPdf) {
+                                formError = "Le CV doit être un fichier PDF"
+                                return@Button
+                            }
+                        }
+                        
+                        formError = null
+                        onNextClick(experienceValue.toString(), cvUrl, instagram.trim(), youtube.trim(), tiktok.trim())
                     },
                     modifier = Modifier
                         .fillMaxWidth()

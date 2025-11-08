@@ -29,6 +29,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.projecct_mobile.ui.components.ComingSoonAlert
+import com.example.projecct_mobile.ui.components.ErrorMessage
+import com.example.projecct_mobile.ui.components.getErrorMessage
 import com.example.projecct_mobile.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -74,6 +77,7 @@ fun CastingListScreen(
     var castings by remember { mutableStateOf<List<CastingItem>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var showComingSoon by remember { mutableStateOf<String?>(null) }
     val castingRepository = remember { com.example.projecct_mobile.data.repository.CastingRepository() }
     val scope = rememberCoroutineScope()
     
@@ -94,12 +98,12 @@ fun CastingListScreen(
             
             result.onFailure { exception ->
                 android.util.Log.e("CastingListScreen", "Erreur: ${exception.message}", exception)
-                errorMessage = "Erreur lors du chargement: ${exception.message}"
+                errorMessage = com.example.projecct_mobile.ui.components.getErrorMessage(exception)
                 isLoading = false
             }
         } catch (e: Exception) {
             android.util.Log.e("CastingListScreen", "Exception: ${e.message}", e)
-            errorMessage = "Erreur: ${e.message}"
+            errorMessage = com.example.projecct_mobile.ui.components.getErrorMessage(e)
             isLoading = false
         }
     }
@@ -205,7 +209,7 @@ fun CastingListScreen(
                     )
                     
                     IconButton(
-                        onClick = onFilterClick,
+                        onClick = { showComingSoon = "Filtres" },
                         modifier = Modifier
                             .size(50.dp)
                             .clip(RoundedCornerShape(12.dp))
@@ -243,32 +247,29 @@ fun CastingListScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Text(
-                            text = errorMessage ?: "Erreur",
-                            color = Red,
-                            textAlign = TextAlign.Center
-                        )
-                        Button(onClick = {
+                    ErrorMessage(
+                        message = errorMessage ?: "Erreur",
+                        onRetry = {
                             scope.launch {
                                 isLoading = true
                                 errorMessage = null
-                                val result = castingRepository.getAllCastings()
-                                isLoading = false
-                                result.onSuccess { apiCastings ->
-                                    castings = apiCastings.map { it.toCastingItem() }
-                                }
-                                result.onFailure { exception ->
-                                    errorMessage = "Erreur: ${exception.message}"
+                                try {
+                                    val result = castingRepository.getAllCastings()
+                                    result.onSuccess { apiCastings ->
+                                        castings = apiCastings.map { it.toCastingItem() }
+                                        isLoading = false
+                                    }
+                                    result.onFailure { exception ->
+                                        errorMessage = getErrorMessage(exception)
+                                        isLoading = false
+                                    }
+                                } catch (e: Exception) {
+                                    errorMessage = getErrorMessage(e)
+                                    isLoading = false
                                 }
                             }
-                        }) {
-                            Text("Réessayer")
                         }
-                    }
+                    )
                 }
             } else {
                 LazyColumn(
@@ -318,10 +319,18 @@ fun CastingListScreen(
         // Barre de navigation du bas
         BottomNavigationBar(
             onHomeClick = onHomeClick,
-            onHistoryClick = onHistoryClick,
+            onHistoryClick = { showComingSoon = "Historique" },
             onProfileClick = {
                 onNavigateToProfile?.invoke() ?: onProfileClick()
             }
+        )
+    }
+    
+    // Alerte Coming Soon
+    showComingSoon?.let { feature ->
+        ComingSoonAlert(
+            onDismiss = { showComingSoon = null },
+            featureName = feature
         )
     }
 }

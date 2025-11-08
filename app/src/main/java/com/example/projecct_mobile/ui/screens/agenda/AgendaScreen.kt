@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.projecct_mobile.ui.components.ComingSoonAlert
 import com.example.projecct_mobile.ui.theme.*
 import com.example.projecct_mobile.ui.screens.casting.CastingItem
 import com.example.projecct_mobile.ui.screens.casting.CastingItemCard
@@ -36,6 +37,12 @@ fun AgendaScreen(
     onFilterClick: () -> Unit = {},
     onNavigateToProfile: (() -> Unit)? = null
 ) {
+    var showComingSoon by remember { mutableStateOf(false) }
+    
+    // Afficher l'alerte "Coming Soon" au chargement
+    LaunchedEffect(Unit) {
+        showComingSoon = true
+    }
     // État pour le calendrier
     var currentMonth by remember { mutableStateOf(YearMonth.now()) }
     var selectedDate by remember { mutableStateOf(LocalDate.now().dayOfMonth) }
@@ -200,6 +207,14 @@ fun AgendaScreen(
             onProfileClick = {
                 onNavigateToProfile?.invoke()
             }
+        )
+    }
+    
+    // Alerte Coming Soon
+    if (showComingSoon) {
+        ComingSoonAlert(
+            onDismiss = { showComingSoon = false },
+            featureName = "Agenda"
         )
     }
 }

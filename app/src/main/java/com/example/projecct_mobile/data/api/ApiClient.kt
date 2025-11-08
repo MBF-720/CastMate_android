@@ -91,5 +91,12 @@ object ApiClient {
     fun getUserService(): UserApiService {
         return getRetrofit().create(UserApiService::class.java)
     }
+    
+    /**
+     * Crée une instance du service des acteurs
+     */
+    fun getActeurService(): ActeurApiService {
+        return getRetrofit().create(ActeurApiService::class.java)
+    }
 }
 

@@ -3,27 +3,35 @@ package com.example.projecct_mobile.ui.screens.auth.signup
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.graphics.Color
+import android.util.Patterns
 import com.example.projecct_mobile.ui.theme.*
 
 /**
  * Étape 1 - Informations personnelles pour l'inscription ACTEUR
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SignUpActorStep1Screen(
     initialNom: String = "",
@@ -31,27 +39,37 @@ fun SignUpActorStep1Screen(
     initialEmail: String = "",
     initialPhotoUrl: String? = null,
     onBackClick: () -> Unit = {},
-    onNextClick: (nom: String, prenom: String, age: String, email: String, telephone: String, gouvernorat: String, photoUrl: String?) -> Unit = { _, _, _, _, _, _, _ -> }
+    onNextClick: (nom: String, prenom: String, age: String, email: String, motDePasse: String, telephone: String, gouvernorat: String, photoUrl: String?) -> Unit = { _, _, _, _, _, _, _, _ -> }
 ) {
     var nom by remember { mutableStateOf(initialNom) }
     var prenom by remember { mutableStateOf(initialPrenom) }
-    var age by remember { mutableStateOf("") }
+    var ageInt by remember { mutableStateOf(18) }
+    var age by remember { mutableStateOf("18") }
     var email by remember { mutableStateOf(initialEmail) }
+    var motDePasse by remember { mutableStateOf("") }
     var telephone by remember { mutableStateOf("") }
     var gouvernorat by remember { mutableStateOf("") }
     var photoUrl by remember { mutableStateOf(initialPhotoUrl) }
     
+    val scrollState = rememberScrollState()
+    var formError by remember { mutableStateOf<String?>(null) }
+    val gouvernorats = remember {
+        listOf(
+            "Tunis", "Ariana", "Ben Arous", "Manouba", "Nabeul", "Zaghouan",
+            "Bizerte", "Béja", "Jendouba", "Kef", "Siliana", "Sousse",
+            "Monastir", "Mahdia", "Sfax", "Kairouan", "Kasserine", "Sidi Bouzid",
+            "Gabès", "Médenine", "Tataouine", "Gafsa", "Tozeur", "Kébili"
+        )
+    }
+    var gouvernoratExpanded by remember { mutableStateOf(false) }
+
     Column(modifier = Modifier.fillMaxSize()) {
-        // En-tête
+        // En-tête simplifié
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(140.dp)
-                .background(
-                    brush = androidx.compose.ui.graphics.Brush.verticalGradient(
-                        colors = listOf(DarkBlue, DarkBlueLight)
-                    )
-                )
+                .height(100.dp)
+                .background(DarkBlue)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 Row(
@@ -89,17 +107,11 @@ fun SignUpActorStep1Screen(
             }
         }
         
-        // Contenu avec ombre
+        // Contenu sans ombre excessive
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f)
-                .shadow(
-                    elevation = 20.dp,
-                    shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp),
-                    spotColor = DarkBlue.copy(alpha = 0.2f)
-                )
-                .clip(RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp)),
+                .weight(1f),
             shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp),
             colors = CardDefaults.cardColors(containerColor = White),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
@@ -107,10 +119,11 @@ fun SignUpActorStep1Screen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .verticalScroll(scrollState)
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Photo de profil
+                // Photo de profil simplifiée
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier
@@ -119,16 +132,11 @@ fun SignUpActorStep1Screen(
                 ) {
                     Card(
                         modifier = Modifier
-                            .size(100.dp)
-                            .shadow(
-                                elevation = 8.dp,
-                                shape = CircleShape,
-                                spotColor = DarkBlue.copy(alpha = 0.3f)
-                            )
+                            .size(90.dp)
                             .clickable { /* TODO: Ouvrir sélecteur d'image */ },
                         shape = CircleShape,
                         colors = CardDefaults.cardColors(
-                            containerColor = if (photoUrl != null) Color.Transparent else LightGray
+                            containerColor = if (photoUrl != null) Color.Transparent else LightGray.copy(alpha = 0.5f)
                         )
                     ) {
                         Box(
@@ -143,7 +151,7 @@ fun SignUpActorStep1Screen(
                                     imageVector = Icons.Default.CameraAlt,
                                     contentDescription = "Photo",
                                     tint = DarkBlue,
-                                    modifier = Modifier.size(36.dp)
+                                    modifier = Modifier.size(32.dp)
                                 )
                             }
                         }
@@ -163,20 +171,21 @@ fun SignUpActorStep1Screen(
                     label = { 
                         Text(
                             "Nom *", 
-                            fontWeight = FontWeight.SemiBold, 
-                            fontSize = 14.sp,
-                            color = Color(0xFF1A1A1A)
+                            fontWeight = FontWeight.Medium, 
+                            fontSize = 14.sp
                         ) 
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = DarkBlue,
-                        unfocusedBorderColor = GrayBorder.copy(alpha = 0.4f),
+                        unfocusedBorderColor = GrayBorder.copy(alpha = 0.5f),
                         focusedContainerColor = White,
-                        unfocusedContainerColor = White
+                        unfocusedContainerColor = White,
+                        focusedTextColor = Color(0xFF1A1A1A),
+                        unfocusedTextColor = Color(0xFF1A1A1A),
+                        focusedLabelColor = DarkBlue,
+                        unfocusedLabelColor = GrayBorder
                     ),
                     singleLine = true
                 )
@@ -188,49 +197,117 @@ fun SignUpActorStep1Screen(
                     label = { 
                         Text(
                             "Prénom *", 
-                            fontWeight = FontWeight.SemiBold, 
-                            fontSize = 14.sp,
-                            color = Color(0xFF1A1A1A)
+                            fontWeight = FontWeight.Medium, 
+                            fontSize = 14.sp
                         ) 
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = DarkBlue,
-                        unfocusedBorderColor = GrayBorder.copy(alpha = 0.4f),
+                        unfocusedBorderColor = GrayBorder.copy(alpha = 0.5f),
                         focusedContainerColor = White,
-                        unfocusedContainerColor = White
+                        unfocusedContainerColor = White,
+                        focusedTextColor = Color(0xFF1A1A1A),
+                        unfocusedTextColor = Color(0xFF1A1A1A),
+                        focusedLabelColor = DarkBlue,
+                        unfocusedLabelColor = GrayBorder
                     ),
                     singleLine = true
                 )
                 
-                // Âge
-                OutlinedTextField(
-                    value = age,
-                    onValueChange = { age = it },
-                    label = { 
-                        Text(
-                            "Âge *", 
-                            fontWeight = FontWeight.SemiBold, 
-                            fontSize = 14.sp,
-                            color = Color(0xFF1A1A1A)
-                        ) 
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = DarkBlue,
-                        unfocusedBorderColor = GrayBorder.copy(alpha = 0.4f),
-                        focusedContainerColor = White,
-                        unfocusedContainerColor = White
-                    ),
-                    singleLine = true,
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
-                )
+                // Âge avec boutons d'incrémentation
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Bouton -
+                    IconButton(
+                        onClick = { 
+                            if (ageInt > 1) {
+                                ageInt--
+                                age = ageInt.toString()
+                            }
+                        },
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(
+                                DarkBlue.copy(alpha = 0.1f),
+                                RoundedCornerShape(12.dp)
+                            )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Remove,
+                            contentDescription = "Diminuer",
+                            tint = DarkBlue,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    
+                    // Champ âge
+                    OutlinedTextField(
+                        value = ageInt.toString(),
+                        onValueChange = { 
+                            val newValue = it.toIntOrNull()
+                            if (newValue != null && newValue > 0 && newValue <= 120) {
+                                ageInt = newValue
+                                age = newValue.toString()
+                            }
+                        },
+                        label = { 
+                            Text(
+                                "Âge *", 
+                                fontWeight = FontWeight.Medium, 
+                                fontSize = 14.sp
+                            ) 
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = DarkBlue,
+                            unfocusedBorderColor = GrayBorder.copy(alpha = 0.5f),
+                            focusedContainerColor = White,
+                            unfocusedContainerColor = White,
+                            focusedTextColor = Color(0xFF1A1A1A),
+                            unfocusedTextColor = Color(0xFF1A1A1A),
+                            focusedLabelColor = DarkBlue,
+                            unfocusedLabelColor = GrayBorder
+                        ),
+                        singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium
+                        ),
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                        )
+                    )
+                    
+                    // Bouton +
+                    IconButton(
+                        onClick = { 
+                            if (ageInt < 120) {
+                                ageInt++
+                                age = ageInt.toString()
+                            }
+                        },
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(
+                                DarkBlue.copy(alpha = 0.1f),
+                                RoundedCornerShape(12.dp)
+                            )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Augmenter",
+                            tint = DarkBlue,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
                 
                 // Email
                 OutlinedTextField(
@@ -239,23 +316,51 @@ fun SignUpActorStep1Screen(
                     label = { 
                         Text(
                             "Email *", 
-                            fontWeight = FontWeight.SemiBold, 
-                            fontSize = 14.sp,
-                            color = Color(0xFF1A1A1A)
+                            fontWeight = FontWeight.Medium, 
+                            fontSize = 14.sp
                         ) 
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = DarkBlue,
-                        unfocusedBorderColor = GrayBorder.copy(alpha = 0.4f),
+                        unfocusedBorderColor = GrayBorder.copy(alpha = 0.5f),
                         focusedContainerColor = White,
-                        unfocusedContainerColor = White
+                        unfocusedContainerColor = White,
+                        focusedTextColor = Color(0xFF1A1A1A),
+                        unfocusedTextColor = Color(0xFF1A1A1A),
+                        focusedLabelColor = DarkBlue,
+                        unfocusedLabelColor = GrayBorder
                     ),
                     singleLine = true,
                     enabled = initialEmail.isEmpty() // Désactivé si rempli par Google
+                )
+                
+                // Mot de passe
+                OutlinedTextField(
+                    value = motDePasse,
+                    onValueChange = { motDePasse = it },
+                    label = { 
+                        Text(
+                            "Mot de passe *", 
+                            fontWeight = FontWeight.Medium, 
+                            fontSize = 14.sp
+                        ) 
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = DarkBlue,
+                        unfocusedBorderColor = GrayBorder.copy(alpha = 0.5f),
+                        focusedContainerColor = White,
+                        unfocusedContainerColor = White,
+                        focusedTextColor = Color(0xFF1A1A1A),
+                        unfocusedTextColor = Color(0xFF1A1A1A),
+                        focusedLabelColor = DarkBlue,
+                        unfocusedLabelColor = GrayBorder
+                    ),
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation()
                 )
                 
                 // Numéro de téléphone
@@ -265,74 +370,145 @@ fun SignUpActorStep1Screen(
                     label = { 
                         Text(
                             "Numéro de téléphone *", 
-                            fontWeight = FontWeight.SemiBold, 
-                            fontSize = 14.sp,
-                            color = Color(0xFF1A1A1A)
+                            fontWeight = FontWeight.Medium, 
+                            fontSize = 14.sp
                         ) 
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = DarkBlue,
-                        unfocusedBorderColor = GrayBorder.copy(alpha = 0.4f),
+                        unfocusedBorderColor = GrayBorder.copy(alpha = 0.5f),
                         focusedContainerColor = White,
-                        unfocusedContainerColor = White
+                        unfocusedContainerColor = White,
+                        focusedTextColor = Color(0xFF1A1A1A),
+                        unfocusedTextColor = Color(0xFF1A1A1A),
+                        focusedLabelColor = DarkBlue,
+                        unfocusedLabelColor = GrayBorder
                     ),
                     singleLine = true,
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone)
                 )
                 
                 // Gouvernorat
-                OutlinedTextField(
-                    value = gouvernorat,
-                    onValueChange = { gouvernorat = it },
-                    label = { 
-                        Text(
-                            "Gouvernorat *", 
-                            fontWeight = FontWeight.SemiBold, 
-                            fontSize = 14.sp,
-                            color = Color(0xFF1A1A1A)
-                        ) 
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = DarkBlue,
-                        unfocusedBorderColor = GrayBorder.copy(alpha = 0.4f),
-                        focusedContainerColor = White,
-                        unfocusedContainerColor = White
-                    ),
-                    singleLine = true
-                )
+                ExposedDropdownMenuBox(
+                    expanded = gouvernoratExpanded,
+                    onExpandedChange = { gouvernoratExpanded = !gouvernoratExpanded }
+                ) {
+                    OutlinedTextField(
+                        value = gouvernorat,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = {
+                            Text(
+                                "Gouvernorat *",
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 14.sp
+                            )
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = DarkBlue,
+                            unfocusedBorderColor = GrayBorder.copy(alpha = 0.5f),
+                            focusedContainerColor = White,
+                            unfocusedContainerColor = White,
+                            focusedTextColor = Color(0xFF1A1A1A),
+                            unfocusedTextColor = Color(0xFF1A1A1A),
+                            focusedLabelColor = DarkBlue,
+                            unfocusedLabelColor = GrayBorder
+                        ),
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = gouvernoratExpanded)
+                        },
+                        singleLine = true,
+                        placeholder = { Text("Sélectionnez un gouvernorat") }
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = gouvernoratExpanded,
+                        onDismissRequest = { gouvernoratExpanded = false }
+                    ) {
+                        gouvernorats.forEach { item ->
+                            DropdownMenuItem(
+                                text = { Text(item) },
+                                onClick = {
+                                    gouvernorat = item
+                                    gouvernoratExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
                 
                 Spacer(modifier = Modifier.height(8.dp))
                 
-                // Bouton Suivant avec style amélioré
+                // Message d'erreur de validation
+                formError?.let { message ->
+                    Text(
+                        text = message,
+                        color = Red,
+                        fontSize = 13.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp)
+                    )
+                }
+
+                // Bouton Suivant sans ombre excessive
                 Button(
                     onClick = {
-                        if (nom.isNotBlank() && prenom.isNotBlank() && age.isNotBlank() 
-                            && email.isNotBlank() && telephone.isNotBlank() && gouvernorat.isNotBlank()) {
-                            onNextClick(nom, prenom, age, email, telephone, gouvernorat, photoUrl)
+                        if (nom.isBlank() || prenom.isBlank() || ageInt <= 0
+                            || email.isBlank() || motDePasse.isBlank()
+                            || telephone.isBlank() || gouvernorat.isBlank()) {
+                            formError = "Veuillez remplir tous les champs obligatoires"
+                            return@Button
                         }
+
+                        if (ageInt !in 16..80) {
+                            formError = "L'âge doit être compris entre 16 et 80 ans"
+                            return@Button
+                        }
+
+                        if (!Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                            formError = "Veuillez saisir une adresse email valide"
+                            return@Button
+                        }
+
+                        if (motDePasse.length < 8) {
+                            formError = "Le mot de passe doit contenir au moins 8 caractères"
+                            return@Button
+                        }
+
+                        val phoneRegex = Regex("^[0-9]{8}\$")
+                        val sanitizedPhone = telephone.replace(" ", "")
+                        if (!phoneRegex.matches(sanitizedPhone)) {
+                            formError = "Le numéro de téléphone doit contenir exactement 8 chiffres"
+                            return@Button
+                        }
+
+                        if (!gouvernorats.contains(gouvernorat)) {
+                            formError = "Veuillez sélectionner un gouvernorat dans la liste"
+                            return@Button
+                        }
+
+                        formError = null
+                        onNextClick(nom, prenom, ageInt.toString(), email, motDePasse, sanitizedPhone, gouvernorat, photoUrl)
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp)
-                        .shadow(
-                            elevation = 8.dp,
-                            shape = RoundedCornerShape(14.dp),
-                            spotColor = DarkBlue.copy(alpha = 0.4f)
-                        ),
+                        .height(52.dp),
                     shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = DarkBlue
                     ),
-                    enabled = nom.isNotBlank() && prenom.isNotBlank() && age.isNotBlank() 
-                        && email.isNotBlank() && telephone.isNotBlank() && gouvernorat.isNotBlank()
+                    enabled = nom.isNotBlank() && prenom.isNotBlank() && ageInt > 0 
+                        && email.isNotBlank() && motDePasse.isNotBlank() 
+                        && telephone.isNotBlank() && gouvernorat.isNotBlank()
+                        && Patterns.EMAIL_ADDRESS.matcher(email).matches()
                 ) {
                     Text(
                         text = "Suivant",

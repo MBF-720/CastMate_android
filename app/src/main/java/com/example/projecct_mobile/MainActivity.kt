@@ -25,7 +25,9 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.projecct_mobile.data.api.ApiClient
 import com.example.projecct_mobile.data.local.TokenManager
+import com.example.projecct_mobile.data.repository.AuthRepository
 import com.example.projecct_mobile.data.repository.CastingRepository
+import com.example.projecct_mobile.data.model.ApiException
 import com.example.projecct_mobile.ui.theme.Projecct_MobileTheme
 import com.example.projecct_mobile.ui.screens.auth.*
 import com.example.projecct_mobile.ui.screens.auth.signup.*
@@ -33,6 +35,7 @@ import com.example.projecct_mobile.ui.screens.casting.*
 import com.example.projecct_mobile.ui.screens.agenda.*
 import com.example.projecct_mobile.ui.screens.map.*
 import com.example.projecct_mobile.ui.screens.profile.*
+import com.example.projecct_mobile.ui.screens.acteur.*
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -59,6 +62,25 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun NavigationScreen() {
     val navController = rememberNavController()
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    
+    // Stockage temporaire des données d'inscription acteur
+    var actorSignupData by remember {
+        mutableStateOf<ActorSignupData?>(null)
+    }
+    
+    // Vérifier si l'utilisateur est déjà connecté (Remember Me)
+    LaunchedEffect(Unit) {
+        val tokenManager = TokenManager(context)
+        val hasToken = tokenManager.hasToken()
+        if (hasToken) {
+            // Rediriger vers la page d'accueil acteur si un token existe
+            navController.navigate("actorHome") {
+                popUpTo("welcome") { inclusive = true }
+            }
+        }
+    }
     
     NavHost(
         navController = navController,
@@ -98,8 +120,8 @@ fun NavigationScreen() {
             
             SignInScreen(
                 onSignInClick = {
-                    // Navigation vers la liste des castings après connexion
-                    navController.navigate("castingList") {
+                    // Navigation vers la page d'accueil acteur après connexion
+                    navController.navigate("actorHome") {
                         popUpTo("home") { inclusive = true }
                     }
                 },
@@ -124,17 +146,26 @@ fun NavigationScreen() {
         }
         
         composable("signUpActorStep1") {
-            // TODO: En production, récupérer les données Google depuis un ViewModel ou un état partagé
-            // Pour l'instant, on utilise des valeurs vides (sera pré-rempli si Google SignIn)
             SignUpActorStep1Screen(
-                initialNom = "",
-                initialPrenom = "",
-                initialEmail = "",
+                initialNom = actorSignupData?.nom ?: "",
+                initialPrenom = actorSignupData?.prenom ?: "",
+                initialEmail = actorSignupData?.email ?: "",
+                initialPhotoUrl = actorSignupData?.photoProfil,
                 onBackClick = {
                     navController.popBackStack()
                 },
-                onNextClick = { nom, prenom, age, email, telephone, gouvernorat, photoUrl ->
-                    // Sauvegarder les données de l'étape 1 (vous pouvez utiliser un ViewModel ou un état partagé)
+                onNextClick = { nom, prenom, age, email, motDePasse, telephone, gouvernorat, photoUrl ->
+                    // Sauvegarder les données de l'étape 1
+                    actorSignupData = ActorSignupData(
+                        nom = nom,
+                        prenom = prenom,
+                        age = age.toIntOrNull() ?: 0,
+                        email = email,
+                        motDePasse = motDePasse,
+                        telephone = telephone,
+                        gouvernorat = gouvernorat,
+                        photoProfil = photoUrl
+                    )
                     navController.navigate("signUpActorStep2")
                 }
             )
@@ -146,25 +177,95 @@ fun NavigationScreen() {
                     navController.popBackStack()
                 },
                 onNextClick = { anneesExperience, cvUrl, instagram, youtube, tiktok ->
-                    // Sauvegarder les données de l'étape 2
+                    // Mettre à jour les données de l'étape 2
+                    actorSignupData = actorSignupData?.copy(
+                        experience = anneesExperience.toIntOrNull() ?: 0,
+                        cvPdf = cvUrl,
+                        instagram = instagram.takeIf { it.isNotBlank() },
+                        youtube = youtube.takeIf { it.isNotBlank() },
+                        tiktok = tiktok.takeIf { it.isNotBlank() }
+                    )
                     navController.navigate("signUpActorStep3")
                 }
             )
         }
         
         composable("signUpActorStep3") {
+            var isLoading by remember { mutableStateOf(false) }
+            var errorMessage by remember { mutableStateOf<String?>(null) }
+            val authRepository = remember { AuthRepository() }
+            
             SignUpActorStep3Screen(
                 onBackClick = {
                     navController.popBackStack()
                 },
+                isLoading = isLoading,
+                errorMessage = errorMessage,
                 onFinishClick = { centresInteret ->
-                    // TODO: Envoyer toutes les données au backend pour créer le compte ACTEUR
-                    // Après succès, naviguer vers la liste des castings
-                    navController.navigate("castingList") {
-                        popUpTo("home") { inclusive = true }
+                    val data = actorSignupData
+                    if (data == null) {
+                        errorMessage = "Données manquantes. Veuillez recommencer."
+                        return@SignUpActorStep3Screen
+                    }
+                    
+                    // Vérifier que toutes les données obligatoires sont présentes
+                    if (data.nom.isBlank() || data.prenom.isBlank() || data.email.isBlank() 
+                        || data.motDePasse.isBlank() || data.telephone.isBlank() 
+                        || data.gouvernorat.isBlank() || data.age == 0 || data.experience == 0) {
+                        errorMessage = "Veuillez remplir tous les champs obligatoires."
+                        return@SignUpActorStep3Screen
+                    }
+                    
+                    isLoading = true
+                    errorMessage = null
+                    
+                    scope.launch {
+                        try {
+                            val result = authRepository.signupActeur(
+                                nom = data.nom,
+                                prenom = data.prenom,
+                                email = data.email,
+                                motDePasse = data.motDePasse,
+                                tel = data.telephone,
+                                age = data.age,
+                                gouvernorat = data.gouvernorat,
+                                experience = data.experience,
+                                cvPdf = data.cvPdf,
+                                centresInteret = centresInteret.takeIf { it.isNotEmpty() },
+                                photoProfil = data.photoProfil,
+                                instagram = data.instagram,
+                                youtube = data.youtube,
+                                tiktok = data.tiktok
+                            )
+                            
+                            result.onSuccess {
+                                isLoading = false
+                                actorSignupData = null // Réinitialiser les données
+                                navController.navigate("actorHome") {
+                                    popUpTo("home") { inclusive = true }
+                                }
+                            }
+                            
+                            result.onFailure { exception ->
+                                isLoading = false
+                                val message = com.example.projecct_mobile.ui.components.getErrorMessage(exception)
+                                errorMessage = if (message.isNotBlank()) {
+                                    message
+                                } else {
+                                    "Une erreur est survenue. Merci de réessayer."
+                                }
+                            }
+                        } catch (e: com.example.projecct_mobile.data.model.ApiException) {
+                            isLoading = false
+                            errorMessage = com.example.projecct_mobile.ui.components.getErrorMessage(e)
+                        } catch (e: Exception) {
+                            isLoading = false
+                            errorMessage = "Une erreur inattendue est survenue: ${e.message ?: "erreur inconnue"}"
+                        }
                     }
                 }
             )
+            
         }
         
         composable("signUp") {
@@ -191,39 +292,62 @@ fun NavigationScreen() {
             )
         }
         
-        composable("castingList") {
-            CastingListScreen(
-                onBackClick = {
-                    navController.navigate("signIn")
-                },
-                onItemClick = { casting ->
-                    // Navigation simple vers les détails du casting
+        composable("actorHome") {
+            ActorHomeScreen(
+                onCastingClick = { casting ->
                     navController.navigate("castingDetail/${casting.id}")
                 },
-                onHomeClick = {
-                    // Rester sur la liste (pas de navigation)
-                },
-                onHistoryClick = {
-                    // TODO: Navigation vers l'historique (à implémenter)
-                },
                 onProfileClick = {
-                    // Navigation vers le profil
-                    navController.navigate("profile")
+                    navController.navigate("actorProfile")
                 },
                 onAgendaClick = {
-                    android.util.Log.d("MainActivity", "Navigation vers agenda déclenchée")
-                    try {
-                        navController.navigate("agenda")
-                        android.util.Log.d("MainActivity", "Navigation vers agenda réussie")
-                    } catch (e: Exception) {
-                        android.util.Log.e("MainActivity", "Erreur navigation agenda: ${e.message}", e)
-                    }
+                    navController.navigate("agenda")
                 },
                 onFilterClick = {
                     navController.navigate("filter")
                 },
+                onHistoryClick = {
+                    // Géré par l'alerte "coming soon" dans ActorHomeScreen
+                },
+                onLogoutClick = {
+                    scope.launch {
+                        val tokenManager = TokenManager(context)
+                        tokenManager.clearToken()
+                    }
+                    navController.navigate("signIn") {
+                        popUpTo("welcome") { inclusive = false }
+                    }
+                }
+            )
+        }
+        
+        composable("castingList") {
+            CastingListScreen(
+                onBackClick = {
+                    navController.popBackStack()
+                },
+                onItemClick = { casting ->
+                    navController.navigate("castingDetail/${casting.id}")
+                },
+                onHomeClick = {
+                    navController.navigate("actorHome") {
+                        popUpTo("actorHome") { inclusive = false }
+                    }
+                },
+                onHistoryClick = {
+                    // Géré par l'alerte "coming soon" dans CastingListScreen
+                },
+                onProfileClick = {
+                    navController.navigate("actorProfile")
+                },
+                onAgendaClick = {
+                    navController.navigate("agenda")
+                },
+                onFilterClick = {
+                    // Géré par l'alerte "coming soon" dans CastingListScreen
+                },
                 onNavigateToProfile = {
-                    navController.navigate("profile")
+                    navController.navigate("actorProfile")
                 }
             )
         }
@@ -495,6 +619,35 @@ fun NavigationScreen() {
             )
         }
         
+        composable("actorProfile") {
+            val context = LocalContext.current
+            ActorProfileScreen(
+                onBackClick = {
+                    navController.popBackStack()
+                },
+                onLogoutClick = {
+                    scope.launch {
+                        val tokenManager = TokenManager(context)
+                        tokenManager.clearToken()
+                    }
+                    navController.navigate("signIn") {
+                        popUpTo("welcome") { inclusive = false }
+                    }
+                },
+                onHomeClick = {
+                    navController.navigate("actorHome") {
+                        popUpTo("actorHome") { inclusive = false }
+                    }
+                },
+                onAgendaClick = {
+                    navController.navigate("agenda")
+                },
+                onHistoryClick = {
+                    // Géré par l'alerte "coming soon" dans la navbar
+                }
+            )
+        }
+        
         composable("profile") {
             val context = LocalContext.current
             val scope = rememberCoroutineScope()
@@ -504,10 +657,9 @@ fun NavigationScreen() {
                     navController.popBackStack()
                 },
                 onEditProfileClick = {
-                    // TODO: Navigation vers l'écran d'édition du profil
+                    navController.navigate("actorProfile")
                 },
                 onLogoutClick = {
-                    // Déconnexion : supprimer le token et rediriger vers signIn
                     scope.launch {
                         val tokenManager = TokenManager(context)
                         tokenManager.clearToken()
@@ -520,3 +672,22 @@ fun NavigationScreen() {
         }
     }
 }
+
+/**
+ * Classe de données pour stocker temporairement les informations d'inscription d'un acteur
+ */
+private data class ActorSignupData(
+    val nom: String,
+    val prenom: String,
+    val age: Int,
+    val email: String,
+    val motDePasse: String,
+    val telephone: String,
+    val gouvernorat: String,
+    val photoProfil: String? = null,
+    val experience: Int = 0,
+    val cvPdf: String? = null,
+    val instagram: String? = null,
+    val youtube: String? = null,
+    val tiktok: String? = null
+)

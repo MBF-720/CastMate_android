@@ -4,10 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.ArrowDropUp
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,6 +22,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.util.Patterns
 import com.example.projecct_mobile.data.model.ApiException
 import com.example.projecct_mobile.data.repository.AuthRepository
 import com.example.projecct_mobile.ui.theme.*
@@ -30,25 +30,27 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun SignUpScreen(onSignUpClick: () -> Unit = {}, onLoginClick: () -> Unit = {}) {
+    var nomAgence by remember { mutableStateOf("") }
+    var responsable by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
-    var nom by remember { mutableStateOf("") }
-    var prenom by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
-    var selectedRole by remember { mutableStateOf<String?>(null) }
-    var isRoleDropdownExpanded by remember { mutableStateOf(false) }
+    var tel by remember { mutableStateOf("") }
+    var gouvernorat by remember { mutableStateOf("") }
+    var siteWeb by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val authRepository = remember { AuthRepository() }
     val scope = rememberCoroutineScope()
-    
-    val roles = listOf("ACTEUR", "RECRUTEUR")
-    val roleDisplayNames = mapOf(
-        "ACTEUR" to "Acteur",
-        "RECRUTEUR" to "Agence / Recruteur"
-    )
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    val scrollState = rememberScrollState()
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(color = White)
+    ) {
         // Section bleue décorative
         Column(
             modifier = Modifier
@@ -70,9 +72,8 @@ fun SignUpScreen(onSignUpClick: () -> Unit = {}, onLoginClick: () -> Unit = {}) 
         // Contenu blanc principal
         Card(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 80.dp, start = 16.dp, end = 16.dp, bottom = 16.dp)
-                .clip(RoundedCornerShape(15.dp)),
+                .fillMaxSize()
+                .padding(top = 80.dp, start = 16.dp, end = 16.dp, bottom = 16.dp),
             shape = RoundedCornerShape(15.dp),
             colors = CardDefaults.cardColors(containerColor = White)
         ) {
@@ -88,7 +89,8 @@ fun SignUpScreen(onSignUpClick: () -> Unit = {}, onLoginClick: () -> Unit = {}) 
             ) {
                 Column(
                     modifier = Modifier
-                        .fillMaxWidth()
+                        .fillMaxSize()
+                        .verticalScroll(scrollState)
                         .padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
@@ -96,7 +98,7 @@ fun SignUpScreen(onSignUpClick: () -> Unit = {}, onLoginClick: () -> Unit = {}) 
                     
                     // Titre
                     Text(
-                        text = "Sign Up",
+                        text = "Inscription Agence",
                         fontSize = 28.sp,
                         fontWeight = FontWeight.Bold,
                         color = Black
@@ -104,12 +106,12 @@ fun SignUpScreen(onSignUpClick: () -> Unit = {}, onLoginClick: () -> Unit = {}) 
                     
                     Spacer(modifier = Modifier.height(24.dp))
                     
-                    // Champ Email (obligatoire)
+                    // Nom de l'agence (obligatoire)
                     OutlinedTextField(
-                        value = email,
-                        onValueChange = { email = it },
-                        label = { Text("Email *") },
-                        placeholder = { Text("ex: john.doe@example.com", color = LightGray) },
+                        value = nomAgence,
+                        onValueChange = { nomAgence = it },
+                        label = { Text("Nom de l'agence *") },
+                        placeholder = { Text("ex: Agence de Casting Tunis", color = LightGray) },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(8.dp),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -123,43 +125,79 @@ fun SignUpScreen(onSignUpClick: () -> Unit = {}, onLoginClick: () -> Unit = {}) 
                     
                     Spacer(modifier = Modifier.height(12.dp))
                     
-                    // Champs First Name et Last Name
-                    Row(
+                    // Responsable (obligatoire)
+                    OutlinedTextField(
+                        value = responsable,
+                        onValueChange = { responsable = it },
+                        label = { Text("Responsable *") },
+                        placeholder = { Text("ex: Mohamed Ben Ali", color = LightGray) },
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedTextField(
-                            value = prenom,
-                            onValueChange = { prenom = it },
-                            label = { Text("Prénom") },
-                            placeholder = { Text("ex: Jean", color = LightGray) },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(8.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = LightBlue,
-                                unfocusedBorderColor = LightBlue,
-                                focusedContainerColor = LightGray,
-                                unfocusedContainerColor = LightGray
-                            ),
-                            singleLine = true
-                        )
-                        
-                        OutlinedTextField(
-                            value = nom,
-                            onValueChange = { nom = it },
-                            label = { Text("Nom") },
-                            placeholder = { Text("ex: Dupont", color = LightGray) },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(8.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = LightBlue,
-                                unfocusedBorderColor = LightBlue,
-                                focusedContainerColor = LightGray,
-                                unfocusedContainerColor = LightGray
-                            ),
-                            singleLine = true
-                        )
-                    }
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = LightBlue,
+                            unfocusedBorderColor = LightBlue,
+                            focusedContainerColor = LightGray,
+                            unfocusedContainerColor = LightGray
+                        ),
+                        singleLine = true
+                    )
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    // Champ Email (obligatoire)
+                    OutlinedTextField(
+                        value = email,
+                        onValueChange = { email = it },
+                        label = { Text("Email *") },
+                        placeholder = { Text("ex: contact@agence.tn", color = LightGray) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = LightBlue,
+                            unfocusedBorderColor = LightBlue,
+                            focusedContainerColor = LightGray,
+                            unfocusedContainerColor = LightGray
+                        ),
+                        singleLine = true
+                    )
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    // Téléphone (obligatoire)
+                    OutlinedTextField(
+                        value = tel,
+                        onValueChange = { tel = it },
+                        label = { Text("Téléphone *") },
+                        placeholder = { Text("ex: +21612345678", color = LightGray) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = LightBlue,
+                            unfocusedBorderColor = LightBlue,
+                            focusedContainerColor = LightGray,
+                            unfocusedContainerColor = LightGray
+                        ),
+                        singleLine = true
+                    )
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    // Gouvernorat (obligatoire)
+                    OutlinedTextField(
+                        value = gouvernorat,
+                        onValueChange = { gouvernorat = it },
+                        label = { Text("Gouvernorat *") },
+                        placeholder = { Text("ex: Tunis", color = LightGray) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = LightBlue,
+                            unfocusedBorderColor = LightBlue,
+                            focusedContainerColor = LightGray,
+                            unfocusedContainerColor = LightGray
+                        ),
+                        singleLine = true
+                    )
                     
                     Spacer(modifier = Modifier.height(12.dp))
                     
@@ -203,55 +241,45 @@ fun SignUpScreen(onSignUpClick: () -> Unit = {}, onLoginClick: () -> Unit = {}) 
                     
                     Spacer(modifier = Modifier.height(12.dp))
                     
-                    // Sélecteur de rôle (obligatoire)
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        OutlinedTextField(
-                            value = selectedRole?.let { roleDisplayNames[it] ?: it } ?: "",
-                            onValueChange = { },
-                            label = { Text("Rôle *") },
-                            placeholder = { Text("Sélectionnez votre rôle", color = LightGray) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { isRoleDropdownExpanded = true },
-                            shape = RoundedCornerShape(8.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = LightBlue,
-                                unfocusedBorderColor = LightBlue,
-                                focusedContainerColor = LightGray,
-                                unfocusedContainerColor = LightGray
-                            ),
-                            readOnly = true,
-                            trailingIcon = {
-                                Icon(
-                                    imageVector = if (isRoleDropdownExpanded) 
-                                        Icons.Default.ArrowDropUp 
-                                    else 
-                                        Icons.Default.ArrowDropDown,
-                                    contentDescription = "Rôle",
-                                    tint = DarkBlue
-                                )
-                            },
-                            singleLine = true
-                        )
-                        
-                        DropdownMenu(
-                            expanded = isRoleDropdownExpanded,
-                            onDismissRequest = { isRoleDropdownExpanded = false },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            roles.forEach { role ->
-                                DropdownMenuItem(
-                                    text = { Text(roleDisplayNames[role] ?: role) },
-                                    onClick = {
-                                        selectedRole = role
-                                        isRoleDropdownExpanded = false
-                                    }
-                                )
-                            }
-                        }
-                    }
+                    // Site web (optionnel)
+                    OutlinedTextField(
+                        value = siteWeb,
+                        onValueChange = { siteWeb = it },
+                        label = { Text("Site web") },
+                        placeholder = { Text("ex: https://www.agence.tn", color = LightGray) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = LightBlue,
+                            unfocusedBorderColor = LightBlue,
+                            focusedContainerColor = LightGray,
+                            unfocusedContainerColor = LightGray
+                        ),
+                        singleLine = true
+                    )
                     
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    // Description (optionnel)
+                    OutlinedTextField(
+                        value = description,
+                        onValueChange = { description = it },
+                        label = { Text("Description") },
+                        placeholder = { Text("Description de l'agence", color = LightGray) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(100.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = LightBlue,
+                            unfocusedBorderColor = LightBlue,
+                            focusedContainerColor = LightGray,
+                            unfocusedContainerColor = LightGray
+                        ),
+                        maxLines = 4
+                    )
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
                     
                     // Ligne pointillée
                     Box(
@@ -278,13 +306,14 @@ fun SignUpScreen(onSignUpClick: () -> Unit = {}, onLoginClick: () -> Unit = {}) 
                     Button(
                         onClick = {
                             // Validation
-                            if (email.isBlank() || password.isBlank()) {
-                                errorMessage = "L'email et le mot de passe sont obligatoires"
+                            if (nomAgence.isBlank() || responsable.isBlank() || email.isBlank() 
+                                || password.isBlank() || tel.isBlank() || gouvernorat.isBlank()) {
+                                errorMessage = "Veuillez remplir tous les champs obligatoires"
                                 return@Button
                             }
-                            
-                            if (selectedRole.isNullOrBlank()) {
-                                errorMessage = "Veuillez sélectionner un rôle"
+
+                            if (!Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                                errorMessage = "Veuillez saisir une adresse email valide"
                                 return@Button
                             }
                             
@@ -302,15 +331,18 @@ fun SignUpScreen(onSignUpClick: () -> Unit = {}, onLoginClick: () -> Unit = {}) 
                             errorMessage = null
                             
                             scope.launch {
-                                val result = authRepository.register(
+                                val result = authRepository.signupAgence(
+                                    nomAgence = nomAgence.trim(),
+                                    responsable = responsable.trim(),
                                     email = email.trim(),
-                                    password = password,
-                                    nom = nom.takeIf { it.isNotBlank() },
-                                    prenom = prenom.takeIf { it.isNotBlank() },
-                                    role = selectedRole
+                                    motDePasse = password,
+                                    tel = tel.trim(),
+                                    gouvernorat = gouvernorat.trim(),
+                                    siteWeb = siteWeb.takeIf { it.isNotBlank() },
+                                    description = description.takeIf { it.isNotBlank() }
                                 )
                                 
-                                result.onSuccess { authResponse ->
+                                result.onSuccess {
                                     isLoading = false
                                     onSignUpClick()
                                 }
@@ -318,12 +350,8 @@ fun SignUpScreen(onSignUpClick: () -> Unit = {}, onLoginClick: () -> Unit = {}) 
                                 result.onFailure { exception ->
                                     isLoading = false
                                     errorMessage = when (exception) {
-                                        is ApiException.ConflictException -> 
-                                            "Cet email est déjà utilisé"
                                         is ApiException.BadRequestException -> {
-                                            // Afficher le message détaillé de l'erreur
                                             val message = exception.message ?: "Vérifiez vos informations"
-                                            // Limiter à 150 caractères pour l'affichage
                                             if (message.length > 150) {
                                                 message.take(150) + "..."
                                             } else {

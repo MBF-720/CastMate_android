@@ -50,5 +50,8 @@ sealed class ApiException(
     
     class UnknownException(message: String = "Erreur inconnue") 
         : ApiException(message, null)
+    
+    class CanceledException(message: String = "Requête annulée") 
+        : ApiException(message, null)
 }
 

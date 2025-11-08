@@ -11,30 +11,37 @@ import kotlinx.coroutines.launch
  * Fichier d'exemples d'utilisation de l'API
  * 
  * Ce fichier contient des exemples complets pour :
- * 1. Inscription (POST /auth/register)
- * 2. Connexion (POST /auth/login)
- * 3. Requêtes protégées (GET /users/:id, GET /users/me)
- * 4. Création de casting (POST /castings)
- * 5. Gestion des erreurs HTTP
- * 6. Gestion de l'expiration du token
+ * 1. Inscription Acteur (POST /acteur/signup)
+ * 2. Inscription Agence (POST /agence/signup)
+ * 3. Connexion (POST /auth/login)
+ * 4. Requêtes protégées (GET /users/:id, GET /users/me)
+ * 5. Création de casting (POST /castings)
+ * 6. Gestion des erreurs HTTP
+ * 7. Gestion de l'expiration du token
  */
 
 /**
- * EXEMPLE 1 : Inscription complète avec tous les champs optionnels
+ * EXEMPLE 1 : Inscription d'un acteur avec tous les champs
  */
-fun exampleRegisterWithAllFields(scope: CoroutineScope) {
+fun exampleSignupActeur(scope: CoroutineScope) {
     val authRepository = AuthRepository()
     
     scope.launch {
-        val result = authRepository.register(
-            email = "jean.dupont@example.com",
-            password = "password123",
+        val result = authRepository.signupActeur(
             nom = "Dupont",
             prenom = "Jean",
-            bio = "Acteur professionnel avec 10 ans d'expérience",
-            role = "ACTEUR", // "ACTEUR", "RECRUTEUR", ou "ADMIN"
-            cvUrl = "https://example.com/cv.pdf",
-            photoProfil = "https://example.com/photo.jpg"
+            email = "jean.dupont@example.com",
+            motDePasse = "password123",
+            tel = "+21612345678",
+            age = 25,
+            gouvernorat = "Tunis",
+            experience = 5,
+            cvPdf = "https://example.com/cv.pdf",
+            centresInteret = listOf("Théâtre", "Cinéma", "Télévision"),
+            photoProfil = "https://example.com/photo.jpg",
+            instagram = "https://instagram.com/acteur",
+            youtube = "https://youtube.com/@acteur",
+            tiktok = "https://tiktok.com/@acteur"
         )
         
         result.onSuccess { authResponse ->
@@ -46,9 +53,6 @@ fun exampleRegisterWithAllFields(scope: CoroutineScope) {
         
         result.onFailure { exception ->
             when (exception) {
-                is ApiException.ConflictException -> {
-                    println("Erreur 409: Cet email est déjà utilisé")
-                }
                 is ApiException.BadRequestException -> {
                     println("Erreur 400: Vérifiez vos informations - ${exception.message}")
                 }
@@ -64,24 +68,43 @@ fun exampleRegisterWithAllFields(scope: CoroutineScope) {
 }
 
 /**
- * EXEMPLE 2 : Inscription minimale (seulement email et password)
+ * EXEMPLE 2 : Inscription d'une agence
  */
-fun exampleRegisterMinimal(scope: CoroutineScope) {
+fun exampleSignupAgence(scope: CoroutineScope) {
     val authRepository = AuthRepository()
     
     scope.launch {
-        val result = authRepository.register(
-            email = "user@example.com",
-            password = "password123"
+        val result = authRepository.signupAgence(
+            nomAgence = "Agence de Casting Tunis",
+            responsable = "Mohamed Ben Ali",
+            email = "contact@agence-casting.tn",
+            motDePasse = "password123",
+            tel = "+21612345678",
+            gouvernorat = "Tunis",
+            siteWeb = "https://www.agence-casting.tn",
+            description = "Agence spécialisée dans le casting",
+            logoUrl = "https://example.com/logo.png",
+            documents = "https://example.com/documents.pdf"
         )
         
         result.onSuccess { authResponse ->
             println("Inscription réussie!")
+            println("Token: ${authResponse.accessToken}")
             // Le token est automatiquement stocké
         }
         
         result.onFailure { exception ->
-            println("Erreur: ${exception.message}")
+            when (exception) {
+                is ApiException.BadRequestException -> {
+                    println("Erreur 400: Vérifiez vos informations - ${exception.message}")
+                }
+                is ApiException.NetworkException -> {
+                    println("Erreur réseau: ${exception.message}")
+                }
+                else -> {
+                    println("Erreur: ${exception.message}")
+                }
+            }
         }
     }
 }

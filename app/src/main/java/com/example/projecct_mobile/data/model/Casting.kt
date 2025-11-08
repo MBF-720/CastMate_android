@@ -38,7 +38,7 @@ data class Casting(
     val conditions: String? = null,
     
     @SerializedName("recruteur")
-    val recruteur: String? = null, // ID du recruteur
+    val recruteur: Any? = null, // Peut être un String (ID) ou un objet (recruteur complet)
     
     @SerializedName("createdAt")
     val createdAt: String? = null,
