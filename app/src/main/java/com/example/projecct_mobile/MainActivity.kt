@@ -1,9 +1,12 @@
 package com.example.projecct_mobile
 
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.ui.Alignment
@@ -28,6 +31,9 @@ import com.example.projecct_mobile.data.local.TokenManager
 import com.example.projecct_mobile.data.repository.AuthRepository
 import com.example.projecct_mobile.data.repository.CastingRepository
 import com.example.projecct_mobile.data.model.ApiException
+import com.example.projecct_mobile.data.utils.GoogleAuthUiClient
+import com.google.android.gms.common.api.ApiException as GoogleApiException
+import com.example.projecct_mobile.ui.components.getErrorMessage
 import com.example.projecct_mobile.ui.theme.Projecct_MobileTheme
 import com.example.projecct_mobile.ui.screens.auth.*
 import com.example.projecct_mobile.ui.screens.auth.signup.*
@@ -64,6 +70,10 @@ fun NavigationScreen() {
     val navController = rememberNavController()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val sharedAuthRepository = remember { AuthRepository() }
+    val googleAuthClient = remember { GoogleAuthUiClient(context) }
+    var googleSignInLoading by remember { mutableStateOf(false) }
+    var googleSignInError by remember { mutableStateOf<String?>(null) }
     
     // Stockage temporaire des données d'inscription acteur
     var actorSignupData by remember {
@@ -80,6 +90,83 @@ fun NavigationScreen() {
                 popUpTo("welcome") { inclusive = true }
             }
         }
+    }
+    
+    LaunchedEffect(googleSignInError) {
+        googleSignInError?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            googleSignInError = null
+        }
+    }
+    
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val accountResult = googleAuthClient.getAccountFromIntent(result.data)
+        accountResult.onFailure { error ->
+            googleSignInLoading = false
+            googleSignInError = when (error) {
+                is GoogleApiException -> when (error.statusCode) {
+                    12501 -> "Connexion Google annulée" // SIGN_IN_CANCELLED
+                    7 -> "Impossible de contacter Google. Vérifiez votre connexion."
+                    else -> "Erreur Google (${error.statusCode})"
+                }
+                else -> "Connexion Google annulée"
+            }
+        }.onSuccess { account ->
+            val idToken = account.idToken
+            if (idToken.isNullOrBlank()) {
+                googleSignInLoading = false
+                googleSignInError = "Impossible de récupérer le token Google"
+                return@rememberLauncherForActivityResult
+            }
+            
+            scope.launch {
+                val resultLogin = sharedAuthRepository.loginWithGoogle(idToken)
+                resultLogin.onSuccess {
+                    googleSignInLoading = false
+                    actorSignupData = null
+                    googleSignInError = null
+                    navController.navigate("actorHome") {
+                        popUpTo("home") { inclusive = true }
+                    }
+                }
+                resultLogin.onFailure { exception ->
+                    googleSignInLoading = false
+                    when (exception) {
+                        is ApiException.NotFoundException,
+                        is ApiException.BadRequestException -> {
+                            val prenom = account.givenName
+                                ?: account.displayName?.split(" ")?.firstOrNull().orEmpty()
+                            val nom = account.familyName
+                                ?: account.displayName
+                                    ?.takeIf { it.contains(" ") }
+                                    ?.split(" ")
+                                    ?.drop(1)
+                                    ?.joinToString(" ")
+                                    .orEmpty()
+                            
+                            actorSignupData = ActorSignupData(
+                                nom = nom,
+                                prenom = prenom,
+                                age = 0,
+                                email = account.email.orEmpty(),
+                                motDePasse = "",
+                                telephone = "",
+                                gouvernorat = "",
+                                photoProfil = account.photoUrl?.toString()
+                            )
+                            googleSignInError = "Complétez votre inscription"
+                            navController.navigate("signUpActorStep1")
+                        }
+                        else -> {
+                            googleSignInError = getErrorMessage(exception)
+                        }
+                    }
+                }
+            }
+        }
+        
     }
     
     NavHost(
@@ -137,11 +224,14 @@ fun NavigationScreen() {
                     navController.navigate("forgotPassword")
                 },
                 onGoogleSignInClick = {
-                    // Simulation Google SignIn - pré-remplir les données
-                    // En production, ici vous récupéreriez les données Google
-                    // Pour l'instant, on navigue vers l'étape 1 avec des valeurs par défaut
-                    navController.navigate("signUpActorStep1")
-                }
+                    if (!googleSignInLoading) {
+                        googleSignInError = null
+                        googleSignInLoading = true
+                        googleAuthClient.signOut()
+                        googleSignInLauncher.launch(googleAuthClient.getSignInIntent())
+                    }
+                },
+                isGoogleLoading = googleSignInLoading
             )
         }
         
@@ -193,7 +283,7 @@ fun NavigationScreen() {
         composable("signUpActorStep3") {
             var isLoading by remember { mutableStateOf(false) }
             var errorMessage by remember { mutableStateOf<String?>(null) }
-            val authRepository = remember { AuthRepository() }
+            val authRepository = sharedAuthRepository
             
             SignUpActorStep3Screen(
                 onBackClick = {

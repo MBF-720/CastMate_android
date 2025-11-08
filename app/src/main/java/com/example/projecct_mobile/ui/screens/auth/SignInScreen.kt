@@ -36,7 +36,8 @@ fun SignInScreen(
     onSignInClick: () -> Unit = {}, 
     onSignUpClick: () -> Unit = {}, 
     onForgotPasswordClick: () -> Unit = {},
-    onGoogleSignInClick: () -> Unit = {}
+    onGoogleSignInClick: () -> Unit = {},
+    isGoogleLoading: Boolean = false
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -320,25 +321,34 @@ fun SignInScreen(
                     border = androidx.compose.foundation.BorderStroke(
                         1.5.dp,
                         GrayBorder.copy(alpha = 0.8f)
-                    )
+                    ),
+                    enabled = !isGoogleLoading
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            "G+",
-                            color = Black,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp,
-                            modifier = Modifier.padding(end = 12.dp)
+                    if (isGoogleLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            color = DarkBlue,
+                            strokeWidth = 2.dp
                         )
-                        Text(
-                            "Continuer avec Google",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Black
-                        )
+                    } else {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                "G+",
+                                color = Black,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp,
+                                modifier = Modifier.padding(end = 12.dp)
+                            )
+                            Text(
+                                "Continuer avec Google",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Black
+                            )
+                        }
                     }
                 }
                 

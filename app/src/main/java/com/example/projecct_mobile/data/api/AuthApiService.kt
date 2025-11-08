@@ -4,6 +4,7 @@ import com.example.projecct_mobile.data.model.LoginRequest
 import com.example.projecct_mobile.data.model.ActeurSignupRequest
 import com.example.projecct_mobile.data.model.AgenceSignupRequest
 import com.example.projecct_mobile.data.model.AuthResponse
+import com.example.projecct_mobile.data.model.GoogleLoginRequest
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.POST
@@ -61,6 +62,15 @@ interface AuthApiService {
     @POST("acteur/signup")
     suspend fun signupActeur(
         @Body request: ActeurSignupRequest
+    ): Response<AuthResponse>
+    
+    /**
+     * Authentifie un utilisateur via Google Sign-In.
+     * POST /auth/google
+     */
+    @POST("auth/google")
+    suspend fun loginWithGoogle(
+        @Body request: GoogleLoginRequest
     ): Response<AuthResponse>
     
     /**

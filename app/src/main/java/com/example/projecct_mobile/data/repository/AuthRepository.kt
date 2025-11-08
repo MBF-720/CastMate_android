@@ -8,6 +8,7 @@ import com.example.projecct_mobile.data.model.AgenceSignupRequest
 import com.example.projecct_mobile.data.model.AuthResponse
 import com.example.projecct_mobile.data.model.ApiException
 import com.example.projecct_mobile.data.model.SocialLinks
+import com.example.projecct_mobile.data.model.GoogleLoginRequest
 import com.example.projecct_mobile.data.utils.JwtDecoder
 import kotlinx.coroutines.flow.Flow
 
@@ -194,6 +195,60 @@ class AuthRepository {
             Result.failure(e)
         } catch (e: Exception) {
             Result.failure(ApiException.UnknownException("Erreur inconnue: ${e.message}"))
+        }
+    }
+    
+    /**
+     * Connexion d'un utilisateur via Google Sign-In.
+     * @param idToken Jeton renvoyé par Google contenant l'identité de l'utilisateur.
+     * @return Result<AuthResponse> succès si l'utilisateur existe déjà, sinon une erreur.
+     */
+    suspend fun loginWithGoogle(idToken: String): Result<AuthResponse> {
+        return try {
+            val request = GoogleLoginRequest(idToken = idToken)
+            val response = authService.loginWithGoogle(request)
+            
+            if (response.isSuccessful && response.body() != null) {
+                val authResponse = response.body()!!
+                val accessToken = authResponse.accessToken
+                
+                if (accessToken.isNullOrBlank()) {
+                    return Result.failure(
+                        ApiException.UnknownException("Réponse invalide: token manquant")
+                    )
+                }
+                
+                tokenManager.saveToken(accessToken)
+                
+                val fallbackUserId = authResponse.user?.id ?: JwtDecoder.getUserIdFromToken(accessToken)
+                val fallbackEmail = authResponse.user?.email
+                tokenManager.saveUserInfo(fallbackUserId, fallbackEmail)
+                
+                Result.success(authResponse)
+            } else {
+                val errorBody = response.errorBody()?.string()
+                when (response.code()) {
+                    404 -> Result.failure(
+                        ApiException.NotFoundException(
+                            errorBody ?: "Compte Google non trouvé"
+                        )
+                    )
+                    401 -> Result.failure(
+                        ApiException.UnauthorizedException(
+                            errorBody ?: "Authentification Google refusée"
+                        )
+                    )
+                    else -> Result.failure(
+                        ApiException.BadRequestException(
+                            errorBody ?: response.message()
+                        )
+                    )
+                }
+            }
+        } catch (e: ApiException) {
+            Result.failure(e)
+        } catch (e: Exception) {
+            Result.failure(ApiException.UnknownException("Erreur Google: ${e.message}"))
         }
     }
     
