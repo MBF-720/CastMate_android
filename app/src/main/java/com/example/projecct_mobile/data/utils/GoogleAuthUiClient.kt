@@ -1,3 +1,5 @@
+@file:Suppress("DEPRECATION")
+
 package com.example.projecct_mobile.data.utils
 
 import android.content.Context
@@ -10,6 +12,7 @@ import com.google.android.gms.common.api.ApiException
 
 /**
  * Gestionnaire utilitaire pour simplifier les interactions avec Google Sign-In.
+ * La nouvelle API Identity n'est pas encore intégrée côté backend, on conserve donc l'ancienne implémentation en supprimant les avertissements.
  */
 class GoogleAuthUiClient(
     private val context: Context

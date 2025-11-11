@@ -10,6 +10,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.draw.shadow
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
@@ -42,20 +45,30 @@ fun ActorHomeScreen(
     onAgendaClick: () -> Unit = {},
     onFilterClick: () -> Unit = {},
     onHistoryClick: () -> Unit = {},
-    onLogoutClick: () -> Unit = {}
+    onLogoutClick: () -> Unit = {},
+    loadData: Boolean = true,
+    initialCastings: List<CastingItem> = emptyList(),
+    initialUserName: String = "",
+    initialUserEmail: String = "",
+    initialUserPrenom: String = "",
+    initialUserNom: String = ""
 ) {
     var searchQuery by remember { mutableStateOf("") }
-    var castings by remember { mutableStateOf<List<CastingItem>>(emptyList()) }
+    var castings by remember { mutableStateOf(initialCastings) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showComingSoon by remember { mutableStateOf<String?>(null) }
-    var userName by remember { mutableStateOf("") }
-    var userEmail by remember { mutableStateOf("") }
-    var userPrenom by remember { mutableStateOf("") }
-    var userNom by remember { mutableStateOf("") }
+    var userName by remember { mutableStateOf(initialUserName) }
+    var userEmail by remember { mutableStateOf(initialUserEmail) }
+    var userPrenom by remember { mutableStateOf(initialUserPrenom) }
+    var userNom by remember { mutableStateOf(initialUserNom) }
     
-    val castingRepository = remember { CastingRepository() }
-    val acteurRepository = remember { ActeurRepository() }
+    val castingRepository = remember(loadData) {
+        if (loadData) CastingRepository() else null
+    }
+    val acteurRepository = remember(loadData) {
+        if (loadData) ActeurRepository() else null
+    }
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
     
@@ -63,15 +76,16 @@ fun ActorHomeScreen(
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     
     // Charger les informations utilisateur
-    LaunchedEffect(Unit) {
-        val acteurResult = acteurRepository.getCurrentActeur()
-        acteurResult.onSuccess { acteur ->
+    LaunchedEffect(Unit, loadData) {
+        if (!loadData) return@LaunchedEffect
+        val acteurResult = acteurRepository?.getCurrentActeur()
+        acteurResult?.onSuccess { acteur ->
             userPrenom = acteur.prenom
             userNom = acteur.nom
             userName = "${acteur.prenom} ${acteur.nom}".trim().ifEmpty { "Utilisateur" }
             userEmail = acteur.email
         }
-        acteurResult.onFailure { exception ->
+        acteurResult?.onFailure { exception ->
             // Si on ne peut pas charger le profil acteur, utiliser l'email depuis TokenManager
             android.util.Log.w("ActorHomeScreen", "Impossible de charger le profil acteur: ${exception.message}")
             try {
@@ -91,19 +105,24 @@ fun ActorHomeScreen(
     }
     
     // Charger les castings
-    LaunchedEffect(Unit) {
+    LaunchedEffect(Unit, loadData) {
+        if (!loadData) {
+            isLoading = false
+            errorMessage = null
+            return@LaunchedEffect
+        }
         isLoading = true
         errorMessage = null
         
         try {
-            val result = castingRepository.getAllCastings()
+            val result = castingRepository?.getAllCastings()
             
-            result.onSuccess { apiCastings ->
+            result?.onSuccess { apiCastings ->
                 castings = apiCastings.map { it.toCastingItem() }
                 isLoading = false
             }
             
-            result.onFailure { exception ->
+            result?.onFailure { exception ->
                 errorMessage = getErrorMessage(exception)
                 isLoading = false
             }
@@ -218,12 +237,12 @@ fun ActorHomeScreen(
                         .fillMaxWidth()
                         .padding(vertical = 8.dp)
                 ) {
-                    Divider(
+                    HorizontalDivider(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                         color = GrayBorder.copy(alpha = 0.3f)
                     )
                     DrawerMenuItem(
-                        icon = Icons.Default.Logout,
+                        icon = Icons.AutoMirrored.Filled.Logout,
                         text = "Déconnexion",
                         onClick = {
                             scope.launch { drawerState.close() }
@@ -340,6 +359,7 @@ fun ActorHomeScreen(
                             message = errorMessage ?: "Erreur",
                             onRetry = {
                                 scope.launch {
+                                    if (castingRepository == null) return@launch
                                     isLoading = true
                                     errorMessage = null
                                     try {
@@ -523,7 +543,7 @@ private fun BottomNavigationBar(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.SpaceAround,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Home
@@ -558,9 +578,6 @@ private fun BottomNavigationBar(
                     onClick = onProfileClick,
                     isSelected = false
                 )
-                
-                // Espace pour équilibrer (remplace Historique)
-                Spacer(modifier = Modifier.width(48.dp))
             }
         }
     }
@@ -621,6 +638,49 @@ private fun DrawerMenuItem(
             fontSize = 17.sp,
             fontWeight = FontWeight.SemiBold,
             color = textColor
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ActorHomeScreenPreview() {
+    val sampleCastings = listOf(
+        CastingItem(
+            id = "1",
+            title = "Casting Film A",
+            date = "12/12/2025",
+            description = "Rôle principal pour un film d'action.",
+            role = "Héros",
+            age = "25-35 ans",
+            compensation = "500 €", 
+            isFavorite = true
+        ),
+        CastingItem(
+            id = "2",
+            title = "Publicité Mode",
+            date = "05/01/2026",
+            description = "Shooting photo pour une marque de vêtements.",
+            role = "Mannequin",
+            age = "18-28 ans",
+            compensation = "300 €"
+        )
+    )
+
+    Projecct_MobileTheme {
+        ActorHomeScreen(
+            onCastingClick = {},
+            onProfileClick = {},
+            onAgendaClick = {},
+            onFilterClick = {},
+            onHistoryClick = {},
+            onLogoutClick = {},
+            loadData = false,
+            initialCastings = sampleCastings,
+            initialUserName = "Sarah Doe",
+            initialUserEmail = "sarah.doe@example.com",
+            initialUserPrenom = "Sarah",
+            initialUserNom = "Doe"
         )
     }
 }

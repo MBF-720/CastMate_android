@@ -1,44 +1,81 @@
-package com.example.projecct_mobile.ui.screens.auth
+package com.example.projecct_mobile.ui.screens.agence.auth
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Business
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.graphics.Color
-import com.example.projecct_mobile.data.model.ApiException
 import com.example.projecct_mobile.data.repository.AuthRepository
 import com.example.projecct_mobile.ui.components.getErrorMessage
-import com.example.projecct_mobile.ui.theme.*
+import com.example.projecct_mobile.ui.theme.AccentBlue
+import com.example.projecct_mobile.ui.theme.Black
+import com.example.projecct_mobile.ui.theme.DarkBlue
+import com.example.projecct_mobile.ui.theme.DarkBlueLight
+import com.example.projecct_mobile.ui.theme.GrayBorder
+import com.example.projecct_mobile.ui.theme.Projecct_MobileTheme
+import com.example.projecct_mobile.ui.theme.Red
+import com.example.projecct_mobile.ui.theme.White
 import kotlinx.coroutines.launch
 
 @Composable
-fun SignInScreen(
-    onSignInClick: () -> Unit = {}, 
-    onSignUpClick: () -> Unit = {}, 
+fun SignInAgencyScreen(
+    onSignInClick: () -> Unit = {},
+    onSignUpClick: () -> Unit = {},
     onForgotPasswordClick: () -> Unit = {},
     onGoogleSignInClick: () -> Unit = {},
-    isGoogleLoading: Boolean = false,
-    role: String = "actor"
+    onBackClick: () -> Unit = {}
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -47,69 +84,113 @@ fun SignInScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var emailError by remember { mutableStateOf<String?>(null) }
     var passwordError by remember { mutableStateOf<String?>(null) }
-    val authRepository = remember { AuthRepository() }
     val scope = rememberCoroutineScope()
+    val authRepository = remember { AuthRepository() }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(White)
-    ) {
-        // Section bleue simplifiée en haut
+    Box(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(200.dp)
+                .height(240.dp)
                 .background(
-                    brush = androidx.compose.ui.graphics.Brush.verticalGradient(
-                        colors = listOf(DarkBlue, DarkBlue.copy(alpha = 0.8f))
+                    brush = Brush.verticalGradient(
+                        colors = listOf(DarkBlue, DarkBlueLight)
                     )
                 )
-        )
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onBackClick) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = White
+                        )
+                    }
+                }
 
-        // Contenu blanc principal avec effet flottant
+                Spacer(modifier = Modifier.weight(1f))
+
+                Card(
+                    modifier = Modifier
+                        .size(100.dp)
+                        .shadow(
+                            elevation = 12.dp,
+                            shape = CircleShape,
+                            spotColor = White.copy(alpha = 0.3f)
+                        ),
+                    shape = CircleShape,
+                    colors = CardDefaults.cardColors(
+                        containerColor = White.copy(alpha = 0.2f)
+                    )
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Business,
+                            contentDescription = "Agency",
+                            tint = White,
+                            modifier = Modifier.size(56.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+            }
+        }
+
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(top = 140.dp)
+                .padding(top = 160.dp)
                 .shadow(
-                    elevation = 8.dp,
-                    shape = RoundedCornerShape(24.dp),
-                    spotColor = DarkBlue.copy(alpha = 0.2f)
-                ),
-            shape = RoundedCornerShape(24.dp),
+                    elevation = 20.dp,
+                    shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+                    spotColor = DarkBlue.copy(alpha = 0.3f)
+                )
+                .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)),
+            shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
             colors = CardDefaults.cardColors(containerColor = White),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(28.dp),
+                    .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                // Titre avec style moderne
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Spacer(modifier = Modifier.height(32.dp))
+
                 Text(
-                    text = "Bienvenue",
-                    fontSize = 36.sp,
+                    text = "Connexion Agence",
+                    fontSize = 32.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = DarkBlue,
                     letterSpacing = 0.5.sp
                 )
-                
+
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Connectez-vous pour continuer",
-                    fontSize = 15.sp,
+                    text = "Connectez-vous à votre compte agence",
+                    fontSize = 14.sp,
                     color = GrayBorder,
-                    fontWeight = FontWeight.Normal
+                    fontWeight = FontWeight.Medium
                 )
-                
-                Spacer(modifier = Modifier.height(40.dp))
-                
-                // Champ Email avec style moderne
+
+                Spacer(modifier = Modifier.height(32.dp))
+
                 OutlinedTextField(
                     value = email,
                     onValueChange = { 
@@ -118,25 +199,24 @@ fun SignInScreen(
                         errorMessage = null
                     },
                     label = { Text("Email", fontWeight = FontWeight.Medium) },
-                    placeholder = { Text("ex: john.doe@example.com", color = GrayBorder.copy(alpha = 0.6f)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
+                    placeholder = { Text("ex: agence@example.com", color = GrayBorder) },
+                    modifier = Modifier
+                        .fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = if (emailError != null) Red else DarkBlue,
-                        unfocusedBorderColor = if (emailError != null) Red else GrayBorder.copy(alpha = 0.3f),
+                        unfocusedBorderColor = if (emailError != null) Red else GrayBorder.copy(alpha = 0.4f),
                         focusedContainerColor = White,
                         unfocusedContainerColor = White,
                         focusedLabelColor = if (emailError != null) Red else DarkBlue,
-                        unfocusedLabelColor = if (emailError != null) Red else GrayBorder,
-                        focusedTextColor = Black,
-                        unfocusedTextColor = Black
+                        unfocusedLabelColor = if (emailError != null) Red else GrayBorder
                     ),
                     singleLine = true,
                     leadingIcon = {
                         Icon(
-                            imageVector = Icons.Default.Email,
+                            imageVector = Icons.Filled.Email,
                             contentDescription = null,
-                            tint = if (emailError != null) Red else DarkBlue.copy(alpha = 0.8f)
+                            tint = if (emailError != null) Red else DarkBlue.copy(alpha = 0.6f)
                         )
                     },
                     isError = emailError != null,
@@ -144,10 +224,9 @@ fun SignInScreen(
                         { Text(it, color = Red, fontSize = 12.sp) }
                     }
                 )
-                
-                Spacer(modifier = Modifier.height(24.dp))
-                
-                // Champ Password avec style moderne
+
+                Spacer(modifier = Modifier.height(20.dp))
+
                 OutlinedTextField(
                     value = password,
                     onValueChange = { 
@@ -156,26 +235,25 @@ fun SignInScreen(
                         errorMessage = null
                     },
                     label = { Text("Mot de passe", fontWeight = FontWeight.Medium) },
-                    placeholder = { Text("Entrez votre mot de passe", color = GrayBorder.copy(alpha = 0.6f)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
+                    placeholder = { Text("Entrez votre mot de passe", color = GrayBorder) },
+                    modifier = Modifier
+                        .fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = if (passwordError != null) Red else DarkBlue,
-                        unfocusedBorderColor = if (passwordError != null) Red else GrayBorder.copy(alpha = 0.3f),
+                        unfocusedBorderColor = if (passwordError != null) Red else GrayBorder.copy(alpha = 0.4f),
                         focusedContainerColor = White,
                         unfocusedContainerColor = White,
                         focusedLabelColor = if (passwordError != null) Red else DarkBlue,
-                        unfocusedLabelColor = if (passwordError != null) Red else GrayBorder,
-                        focusedTextColor = Black,
-                        unfocusedTextColor = Black
+                        unfocusedLabelColor = if (passwordError != null) Red else GrayBorder
                     ),
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true,
                     leadingIcon = {
                         Icon(
-                            imageVector = Icons.Default.Lock,
+                            imageVector = Icons.Filled.Lock,
                             contentDescription = null,
-                            tint = if (passwordError != null) Red else DarkBlue.copy(alpha = 0.8f)
+                            tint = if (passwordError != null) Red else DarkBlue.copy(alpha = 0.6f)
                         )
                     },
                     isError = passwordError != null,
@@ -183,10 +261,9 @@ fun SignInScreen(
                         { Text(it, color = Red, fontSize = 12.sp) }
                     }
                 )
-                
+
                 Spacer(modifier = Modifier.height(8.dp))
-                
-                // Remember Me checkbox et Forgot Password
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -210,7 +287,7 @@ fun SignInScreen(
                             modifier = Modifier.padding(start = 4.dp)
                         )
                     }
-                    
+
                     TextButton(
                         onClick = onForgotPasswordClick
                     ) {
@@ -221,10 +298,9 @@ fun SignInScreen(
                         )
                     }
                 }
-                
+
                 Spacer(modifier = Modifier.height(16.dp))
-                
-                // Message d'erreur
+
                 errorMessage?.let { error ->
                     Text(
                         text = error,
@@ -233,8 +309,7 @@ fun SignInScreen(
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
                 }
-                
-                // Bouton Sign in avec API
+
                 Button(
                     onClick = {
                         // Réinitialiser les erreurs
@@ -247,7 +322,7 @@ fun SignInScreen(
                             emailError = "L'email est requis"
                             return@Button
                         }
-                        
+
                         if (!email.contains("@") || !email.contains(".")) {
                             emailError = "Format d'email invalide"
                             return@Button
@@ -263,13 +338,12 @@ fun SignInScreen(
                             passwordError = "Le mot de passe doit contenir au moins 6 caractères"
                             return@Button
                         }
-                        
+
                         isLoading = true
-                        
+
                         scope.launch {
                             try {
-                                val expectedRole = if (role.equals("agency", ignoreCase = true)) "RECRUTEUR" else "ACTEUR"
-                                val result = authRepository.login(email.trim(), password, expectedRole = expectedRole)
+                                val result = authRepository.login(email.trim(), password, expectedRole = "RECRUTEUR")
                                 
                                 result.onSuccess {
                                     isLoading = false
@@ -286,15 +360,17 @@ fun SignInScreen(
                                         errorMsg.contains("identifiants incorrect", ignoreCase = true) ||
                                         errorMsg.contains("utilisateur non trouvé", ignoreCase = true) ||
                                         errorMsg.contains("user not found", ignoreCase = true) ||
+                                        errorMsg.contains("agence non trouvée", ignoreCase = true) ||
                                         errorMsg.contains("compte inexistant", ignoreCase = true) -> {
-                                            // Les deux sont incorrects ou utilisateur non trouvé
+                                            // Les deux sont incorrects ou agence non trouvée
                                             emailError = "Email ou mot de passe incorrect"
                                             passwordError = "Email ou mot de passe incorrect"
                                         }
                                         errorMsg.contains("email", ignoreCase = true) || 
                                         errorMsg.contains("utilisateur", ignoreCase = true) ||
-                                        errorMsg.contains("compte", ignoreCase = true) -> {
-                                            emailError = "Email incorrect ou compte inexistant"
+                                        errorMsg.contains("compte", ignoreCase = true) ||
+                                        errorMsg.contains("agence", ignoreCase = true) -> {
+                                            emailError = "Email incorrect ou compte agence inexistant"
                                         }
                                         errorMsg.contains("mot de passe", ignoreCase = true) ||
                                         errorMsg.contains("password", ignoreCase = true) -> {
@@ -318,16 +394,17 @@ fun SignInScreen(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(58.dp),
+                        .height(56.dp)
+                        .shadow(
+                            elevation = 8.dp,
+                            shape = RoundedCornerShape(16.dp),
+                            spotColor = DarkBlue.copy(alpha = 0.4f)
+                        ),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = DarkBlue
                     ),
-                    enabled = !isLoading,
-                    elevation = ButtonDefaults.buttonElevation(
-                        defaultElevation = 4.dp,
-                        pressedElevation = 2.dp
-                    )
+                    enabled = !isLoading
                 ) {
                     if (isLoading) {
                         CircularProgressIndicator(
@@ -343,10 +420,9 @@ fun SignInScreen(
                         )
                     }
                 }
-                
+
                 Spacer(modifier = Modifier.height(24.dp))
-                
-                // Séparateur "Or"
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -370,16 +446,16 @@ fun SignInScreen(
                             .background(GrayBorder)
                     )
                 }
-                
+
                 Spacer(modifier = Modifier.height(24.dp))
-                
-                // Bouton "Continuer avec Google" sans ombre
+
                 OutlinedButton(
                     onClick = onGoogleSignInClick,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(56.dp),
-                    shape = RoundedCornerShape(14.dp),
+                        .height(56.dp)
+                        .shadow(2.dp, RoundedCornerShape(16.dp)),
+                    shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.outlinedButtonColors(
                         contentColor = Black,
                         containerColor = White
@@ -388,47 +464,41 @@ fun SignInScreen(
                         1.5.dp,
                         GrayBorder.copy(alpha = 0.8f)
                     ),
-                    enabled = !isGoogleLoading
+                    enabled = !isLoading
                 ) {
-                    if (isGoogleLoading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            color = DarkBlue,
-                            strokeWidth = 2.dp
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            "G+",
+                            color = Black,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
+                            modifier = Modifier.padding(end = 12.dp)
                         )
-                    } else {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Text(
-                                "G+",
-                                color = Black,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 18.sp,
-                                modifier = Modifier.padding(end = 12.dp)
-                            )
-                            Text(
-                                "Continuer avec Google",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Black
-                            )
-                        }
+                        Text(
+                            "Continuer avec Google",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Black
+                        )
                     }
                 }
-                
+
                 Spacer(modifier = Modifier.height(32.dp))
-                
-                // Lien "Don't Have an Account, Sign Up"
+
                 Text(
                     text = buildAnnotatedString {
-                        append("Don't Have an Account, ")
-                        withStyle(style = SpanStyle(
-                            textDecoration = TextDecoration.Underline,
-                            color = AccentBlue
-                        )) {
-                            append("Sign Up")
+                        append("Vous n'avez pas de compte ? ")
+                        withStyle(
+                            style = SpanStyle(
+                                textDecoration = TextDecoration.Underline,
+                                color = AccentBlue,
+                                fontWeight = FontWeight.Bold
+                            )
+                        ) {
+                            append("S'inscrire")
                         }
                     },
                     modifier = Modifier
@@ -438,37 +508,17 @@ fun SignInScreen(
                         textAlign = TextAlign.Center
                     )
                 )
-                
+
                 Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }
 }
 
-@Composable
-fun SocialButton(
-    modifier: Modifier = Modifier,
-    backgroundColor: Color,
-    borderColor: Color,
-    content: @Composable () -> Unit
-) {
-    Box(
-        modifier = modifier
-            .height(50.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .border(1.dp, borderColor, RoundedCornerShape(8.dp))
-            .background(backgroundColor),
-        contentAlignment = Alignment.Center
-    ) {
-        content()
-    }
-}
-
 @Preview(showBackground = true)
 @Composable
-fun SignInScreenPreview() {
+fun SignInAgencyScreenPreview() {
     Projecct_MobileTheme {
-        SignInScreen()
+        SignInAgencyScreen()
     }
 }
-

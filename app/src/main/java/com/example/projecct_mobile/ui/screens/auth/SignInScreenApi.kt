@@ -34,9 +34,11 @@ import kotlinx.coroutines.launch
  */
 @Composable
 fun SignInScreenApi(
-    onSignInClick: () -> Unit = {}, 
-    onSignUpClick: () -> Unit = {}, 
-    onForgotPasswordClick: () -> Unit = {}
+    modifier: Modifier = Modifier,
+    onSignInClick: () -> Unit = {},
+    onSignUpClick: () -> Unit = {},
+    onForgotPasswordClick: () -> Unit = {},
+    role: String = "actor"
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -179,7 +181,8 @@ fun SignInScreenApi(
                         errorMessage = null
                         
                         scope.launch {
-                            val result = authRepository.login(email.trim(), password)
+                            val expectedRole = if (role.equals("agency", ignoreCase = true)) "RECRUTEUR" else "ACTEUR"
+                            val result = authRepository.login(email.trim(), password, expectedRole = expectedRole)
                             
                             result.onSuccess { authResponse ->
                                 isLoading = false

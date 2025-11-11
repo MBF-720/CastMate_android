@@ -6,9 +6,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -46,11 +49,11 @@ fun SignUpActorStep3Screen(
     var localError by remember { mutableStateOf<String?>(null) }
     
     Column(modifier = Modifier.fillMaxSize()) {
-        // En-tête
+        // En-tête moderne
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(180.dp)
+                .height(200.dp)
                 .background(
                     brush = androidx.compose.ui.graphics.Brush.verticalGradient(
                         colors = listOf(DarkBlue, DarkBlueLight)
@@ -61,11 +64,16 @@ fun SignUpActorStep3Screen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = onBackClick) {
+                    IconButton(
+                        onClick = onBackClick,
+                        modifier = Modifier
+                            .size(44.dp)
+                            .background(White.copy(alpha = 0.15f), CircleShape)
+                    ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
@@ -73,40 +81,64 @@ fun SignUpActorStep3Screen(
                         )
                     }
                     
-                    Text(
-                        text = "Étape 3/3",
-                        fontSize = 16.sp,
-                        color = White,
-                        fontWeight = FontWeight.Medium
-                    )
+                    Card(
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = White.copy(alpha = 0.2f)
+                        )
+                    ) {
+                        Text(
+                            text = "Étape 3/3",
+                            fontSize = 14.sp,
+                            color = White,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
                 }
                 
                 Spacer(modifier = Modifier.weight(1f))
                 
-                Text(
-                    text = "Centres d'intérêt",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = White,
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
-                )
+                Column(
+                    modifier = Modifier.padding(horizontal = 28.dp, vertical = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Dernière étape !",
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = White,
+                        letterSpacing = 0.5.sp
+                    )
+                    Text(
+                        text = "Vos centres d'intérêt",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = White.copy(alpha = 0.9f)
+                    )
+                }
             }
         }
         
-        // Contenu
+        // Contenu moderne
         Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .clip(RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp)),
-            shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp),
-            colors = CardDefaults.cardColors(containerColor = White)
+                .shadow(
+                    elevation = 24.dp,
+                    shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+                    spotColor = DarkBlue.copy(alpha = 0.15f)
+                )
+                .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)),
+            shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+            colors = CardDefaults.cardColors(containerColor = androidx.compose.ui.graphics.Color(0xFFFAFAFA))
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
                 Text(
                     text = "Sélectionnez vos centres d'intérêt",
@@ -243,7 +275,7 @@ fun SignUpActorStep3Screen(
                     )
                 }
                 
-                // Bouton Terminer
+                // Bouton Terminer moderne
                 Button(
                     onClick = {
                         if (selectedInterests.isEmpty()) {
@@ -255,24 +287,32 @@ fun SignUpActorStep3Screen(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(56.dp),
-                    shape = RoundedCornerShape(14.dp),
+                        .height(56.dp)
+                        .shadow(
+                            elevation = 12.dp,
+                            shape = RoundedCornerShape(16.dp),
+                            spotColor = DarkBlue.copy(alpha = 0.5f)
+                        ),
+                    shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = DarkBlue
+                        containerColor = DarkBlue,
+                        disabledContainerColor = GrayBorder.copy(alpha = 0.5f)
                     ),
                     enabled = !isLoading
                 ) {
                     if (isLoading) {
                         CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            color = com.example.projecct_mobile.ui.theme.White
+                            modifier = Modifier.size(28.dp),
+                            color = com.example.projecct_mobile.ui.theme.White,
+                            strokeWidth = 3.dp
                         )
                     } else {
                         Text(
-                            text = "Terminer",
+                            text = "Créer mon profil",
                             fontSize = 17.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = com.example.projecct_mobile.ui.theme.White
+                            fontWeight = FontWeight.ExtraBold,
+                            color = com.example.projecct_mobile.ui.theme.White,
+                            letterSpacing = 0.8.sp
                         )
                     }
                 }

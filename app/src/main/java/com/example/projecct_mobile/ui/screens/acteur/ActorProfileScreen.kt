@@ -19,6 +19,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.projecct_mobile.data.local.TokenManager
@@ -39,7 +40,18 @@ fun ActorProfileScreen(
     onLogoutClick: () -> Unit = {},
     onHomeClick: () -> Unit = {},
     onAgendaClick: () -> Unit = {},
-    onHistoryClick: () -> Unit = {}
+    onHistoryClick: () -> Unit = {},
+    loadData: Boolean = true,
+    initialNom: String = "",
+    initialPrenom: String = "",
+    initialEmail: String = "",
+    initialTelephone: String = "",
+    initialAge: String = "",
+    initialGouvernorat: String = "",
+    initialExperience: String = "",
+    initialInstagram: String = "",
+    initialYoutube: String = "",
+    initialTiktok: String = ""
 ) {
     var isEditing by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
@@ -47,32 +59,33 @@ fun ActorProfileScreen(
     var successMessage by remember { mutableStateOf<String?>(null) }
     var showComingSoon by remember { mutableStateOf<String?>(null) }
     
-    // Données utilisateur
-    var nom by remember { mutableStateOf("") }
-    var prenom by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
-    var telephone by remember { mutableStateOf("") }
-    var age by remember { mutableStateOf("") }
-    var gouvernorat by remember { mutableStateOf("") }
-    var experience by remember { mutableStateOf("") }
-    var instagram by remember { mutableStateOf("") }
-    var youtube by remember { mutableStateOf("") }
-    var tiktok by remember { mutableStateOf("") }
+    var nom by remember { mutableStateOf(initialNom) }
+    var prenom by remember { mutableStateOf(initialPrenom) }
+    var email by remember { mutableStateOf(initialEmail) }
+    var telephone by remember { mutableStateOf(initialTelephone) }
+    var age by remember { mutableStateOf(initialAge) }
+    var gouvernorat by remember { mutableStateOf(initialGouvernorat) }
+    var experience by remember { mutableStateOf(initialExperience) }
+    var instagram by remember { mutableStateOf(initialInstagram) }
+    var youtube by remember { mutableStateOf(initialYoutube) }
+    var tiktok by remember { mutableStateOf(initialTiktok) }
     
-    val acteurRepository = remember { ActeurRepository() }
+    val acteurRepository = remember(loadData) {
+        if (loadData) ActeurRepository() else null
+    }
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
     
-    // Charger les données acteur - seulement au premier chargement, pas quand on édite
-    LaunchedEffect(Unit) {
+    LaunchedEffect(Unit, loadData) {
+        if (!loadData) return@LaunchedEffect
         if (!isEditing) {
             isLoading = true
             errorMessage = null
             
             try {
-                val result = acteurRepository.getCurrentActeur()
+                val result = acteurRepository?.getCurrentActeur()
                 
-                result.onSuccess { acteur ->
+                result?.onSuccess { acteur ->
                     nom = acteur.nom
                     prenom = acteur.prenom
                     email = acteur.email
@@ -86,8 +99,7 @@ fun ActorProfileScreen(
                     isLoading = false
                 }
                 
-                result.onFailure { exception ->
-                    // Si on ne peut pas charger le profil acteur, charger au moins l'email depuis TokenManager
+                result?.onFailure { exception ->
                     android.util.Log.w("ActorProfileScreen", "Impossible de charger le profil acteur: ${exception.message}")
                     try {
                         val tokenManager = TokenManager(context)
@@ -95,17 +107,14 @@ fun ActorProfileScreen(
                         if (emailValue != null) {
                             email = emailValue
                         }
-                        // Ne pas afficher d'erreur bloquante - permettre à l'utilisateur de remplir les champs
                         errorMessage = null
                     } catch (e: Exception) {
-                        // Ne pas afficher d'erreur non plus
                         errorMessage = null
                     }
                     isLoading = false
                 }
             } catch (e: Exception) {
                 android.util.Log.e("ActorProfileScreen", "Erreur lors du chargement: ${e.message}", e)
-                // Essayer de charger au moins l'email
                 try {
                     val tokenManager = TokenManager(context)
                     val emailValue = tokenManager.getUserEmailSync()
@@ -115,7 +124,6 @@ fun ActorProfileScreen(
                 } catch (ex: Exception) {
                     // Ignorer
                 }
-                // Ne pas afficher d'erreur - permettre à l'utilisateur de remplir les champs
                 errorMessage = null
                 isLoading = false
             }
@@ -174,6 +182,7 @@ fun ActorProfileScreen(
                                 }
                                 
                                 scope.launch {
+                                    if (acteurRepository == null) return@launch
                                     isLoading = true
                                     errorMessage = null
                                     successMessage = null
@@ -194,20 +203,19 @@ fun ActorProfileScreen(
                                             )
                                         )
                                         
-                                        val result = acteurRepository.updateCurrentActeur(updateRequest)
+                                        val result = acteurRepository?.updateCurrentActeur(updateRequest)
                                         
-                                        result.onSuccess {
+                                        result?.onSuccess {
                                             successMessage = "Profil mis à jour avec succès"
                                             isLoading = false
                                             isEditing = false
                                             android.util.Log.d("ActorProfileScreen", "Profil mis à jour avec succès")
                                         }
                                         
-                                        result.onFailure { exception ->
+                                        result?.onFailure { exception ->
                                             errorMessage = getErrorMessage(exception)
                                             isLoading = false
                                             android.util.Log.e("ActorProfileScreen", "Erreur lors de la sauvegarde: ${exception.message}")
-                                            // Ne pas désactiver le mode édition en cas d'erreur
                                         }
                                     } catch (e: Exception) {
                                         errorMessage = getErrorMessage(e)
@@ -254,6 +262,7 @@ fun ActorProfileScreen(
                     message = errorMessage ?: "Erreur",
                     onRetry = {
                         scope.launch {
+                            if (acteurRepository == null) return@launch
                             isLoading = true
                             errorMessage = null
                             try {
@@ -657,6 +666,59 @@ fun ActorProfileScreen(
     }
 }
 
+@Preview(showBackground = true)
+@Composable
+fun ActorProfileScreenPreview() {
+    Projecct_MobileTheme {
+        ActorProfileScreen(
+            onBackClick = {},
+            onLogoutClick = {},
+            onHomeClick = {},
+            onAgendaClick = {},
+            onHistoryClick = {},
+            loadData = false,
+            initialNom = "Doe",
+            initialPrenom = "Jane",
+            initialEmail = "jane.doe@example.com",
+            initialTelephone = "+33 6 12 34 56 78",
+            initialAge = "28",
+            initialGouvernorat = "Tunis",
+            initialExperience = "5",
+            initialInstagram = "@janedoe",
+            initialYoutube = "youtube.com/janedoe",
+            initialTiktok = "tiktok.com/@janedoe"
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ProfileBottomNavigationBarPreview() {
+    Projecct_MobileTheme {
+        ProfileBottomNavigationBar(
+            onHomeClick = {},
+            onAgendaClick = {},
+            onHistoryClick = {},
+            onProfileClick = {},
+            onAdvancedClick = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ProfileNavigationItemPreview() {
+    Projecct_MobileTheme {
+        ProfileNavigationItem(
+            icon = Icons.Default.Home,
+            label = "Accueil",
+            onClick = {},
+            isSelected = false
+        )
+    }
+}
+
+
 @Composable
 private fun ProfileBottomNavigationBar(
     onHomeClick: () -> Unit,
@@ -691,7 +753,7 @@ private fun ProfileBottomNavigationBar(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.SpaceAround,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Home
@@ -726,9 +788,6 @@ private fun ProfileBottomNavigationBar(
                     onClick = onProfileClick,
                     isSelected = true
                 )
-                
-                // Espace pour équilibrer (remplace Historique)
-                Spacer(modifier = Modifier.width(48.dp))
             }
         }
     }

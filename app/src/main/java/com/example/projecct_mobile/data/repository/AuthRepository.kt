@@ -9,7 +9,6 @@ import com.example.projecct_mobile.data.model.AuthResponse
 import com.example.projecct_mobile.data.model.ApiException
 import com.example.projecct_mobile.data.model.SocialLinks
 import com.example.projecct_mobile.data.model.GoogleLoginRequest
-import com.example.projecct_mobile.data.utils.JwtDecoder
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -90,19 +89,24 @@ class AuthRepository {
                 val accessToken = authResponse.accessToken
                 
                 if (accessToken.isNullOrBlank()) {
-                    // Certains backends ne renvoient pas le token à l'inscription.
-                    // On tente alors une connexion immédiate avec les mêmes identifiants.
-                    val loginResult = login(request.email, request.motDePasse)
+                    val loginResult = login(request.email, request.motDePasse, expectedRole = "ACTEUR")
                     return loginResult
                 }
                 
-                // Sauvegarde du token JWT
                 tokenManager.saveToken(accessToken)
                 
-                // Sauvegarde des informations utilisateur (fallback avec décodage du token si nécessaire)
-                val fallbackUserId = authResponse.user?.id ?: JwtDecoder.getUserIdFromToken(accessToken)
+                val fallbackUserId = authResponse.user?.actualId ?: tokenManager.getUserIdSync()
                 val fallbackEmail = authResponse.user?.email ?: request.email
-                tokenManager.saveUserInfo(fallbackUserId, fallbackEmail)
+                val fallbackRole = authResponse.user?.role?.name ?: "ACTEUR"
+                tokenManager.saveUserInfo(
+                    fallbackUserId,
+                    fallbackEmail,
+                    fallbackRole,
+                    authResponse.user?.nom ?: nom,
+                    authResponse.user?.prenom ?: prenom,
+                    tel,
+                    authResponse.user?.bio
+                )
                 
                 Result.success(authResponse)
             } else {
@@ -163,6 +167,7 @@ class AuthRepository {
                 documents = documents
             )
             
+            // Appel HTTP vers l'API NestJS (POST /agence/signup)
             val response = authService.signupAgence(request)
             
             if (response.isSuccessful && response.body() != null) {
@@ -170,17 +175,25 @@ class AuthRepository {
                 val accessToken = authResponse.accessToken
                 
                 if (accessToken.isNullOrBlank()) {
-                    // Tentative de connexion si le token n'est pas présent dans la réponse d'inscription
-                    val loginResult = login(email, motDePasse)
+                    // Si le backend ne renvoie pas de token, on relance un login classique agence
+                    val loginResult = login(email, motDePasse, expectedRole = "RECRUTEUR")
                     return loginResult
                 }
                 
-                // Sauvegarde du token JWT
                 tokenManager.saveToken(accessToken)
                 
-                val fallbackUserId = authResponse.user?.id ?: JwtDecoder.getUserIdFromToken(accessToken)
+                val fallbackUserId = authResponse.user?.actualId ?: tokenManager.getUserIdSync()
                 val fallbackEmail = authResponse.user?.email ?: email
-                tokenManager.saveUserInfo(fallbackUserId, fallbackEmail)
+                val fallbackRole = authResponse.user?.role?.name ?: "RECRUTEUR"
+                tokenManager.saveUserInfo(
+                    fallbackUserId,
+                    fallbackEmail,
+                    fallbackRole,
+                    authResponse.user?.nom ?: nomAgence,
+                    authResponse.user?.prenom ?: responsable,
+                    tel,
+                    authResponse.user?.bio ?: description
+                )
                 
                 Result.success(authResponse)
             } else {
@@ -220,9 +233,18 @@ class AuthRepository {
                 
                 tokenManager.saveToken(accessToken)
                 
-                val fallbackUserId = authResponse.user?.id ?: JwtDecoder.getUserIdFromToken(accessToken)
+                val fallbackUserId = authResponse.user?.actualId ?: tokenManager.getUserIdSync()
                 val fallbackEmail = authResponse.user?.email
-                tokenManager.saveUserInfo(fallbackUserId, fallbackEmail)
+                val fallbackRole = authResponse.user?.role?.name
+                tokenManager.saveUserInfo(
+                    fallbackUserId,
+                    fallbackEmail,
+                    fallbackRole,
+                    authResponse.user?.nom,
+                    authResponse.user?.prenom,
+                    null,
+                    authResponse.user?.bio
+                )
                 
                 Result.success(authResponse)
             } else {
@@ -275,7 +297,8 @@ class AuthRepository {
      */
     suspend fun login(
         email: String,
-        password: String
+        password: String,
+        expectedRole: String? = null
     ): Result<AuthResponse> {
         return try {
             val request = LoginRequest(
@@ -283,6 +306,7 @@ class AuthRepository {
                 password = password
             )
             
+            // Appel HTTP vers POST /auth/login
             val response = authService.login(request)
             
             if (response.isSuccessful && response.body() != null) {
@@ -295,26 +319,48 @@ class AuthRepository {
                     )
                 }
                 
-                // Sauvegarde du token JWT
                 tokenManager.saveToken(accessToken)
                 
-                // Sauvegarde des informations utilisateur
-                val fallbackUserId = authResponse.user?.id ?: JwtDecoder.getUserIdFromToken(accessToken)
+                val fallbackUserId = authResponse.user?.actualId ?: tokenManager.getUserIdSync()
                 val fallbackEmail = authResponse.user?.email ?: email
-                tokenManager.saveUserInfo(fallbackUserId, fallbackEmail)
+                val fallbackRole = authResponse.user?.role?.name ?: expectedRole
+                tokenManager.saveUserInfo(
+                    fallbackUserId,
+                    fallbackEmail,
+                    fallbackRole,
+                    authResponse.user?.nom,
+                    authResponse.user?.prenom,
+                    null,
+                    authResponse.user?.bio
+                )
                 
                 Result.success(authResponse)
             } else {
+                // Gérer les erreurs HTTP
                 val errorBody = response.errorBody()?.string()
-                Result.failure(
-                    ApiException.UnauthorizedException(
-                        "Email ou mot de passe incorrect: ${errorBody ?: response.message()}"
-                    )
-                )
+                val errorMessage = when (response.code()) {
+                    401 -> "Email ou mot de passe incorrect"
+                    404 -> "Utilisateur non trouvé dans la base de données"
+                    400 -> errorBody ?: "Vérifiez vos informations"
+                    else -> errorBody ?: response.message() ?: "Erreur de connexion"
+                }
+                
+                Result.failure(ApiException.UnauthorizedException(errorMessage))
             }
+        } catch (e: ApiException.UnauthorizedException) {
+            // Erreur 401 : identifiants invalides ou utilisateur non trouvé
+            Result.failure(e)
+        } catch (e: ApiException.NotFoundException) {
+            // Erreur 404 : utilisateur non trouvé
+            Result.failure(ApiException.UnauthorizedException("Utilisateur non trouvé dans la base de données"))
+        } catch (e: ApiException.NetworkException) {
+            // Erreur réseau
+            Result.failure(e)
         } catch (e: ApiException) {
+            // Autres erreurs API
             Result.failure(e)
         } catch (e: Exception) {
+            // Erreur inconnue
             Result.failure(ApiException.UnknownException("Erreur inconnue: ${e.message}"))
         }
     }

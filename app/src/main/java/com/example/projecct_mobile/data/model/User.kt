@@ -9,6 +9,9 @@ import com.google.gson.annotations.SerializedName
 data class User(
     @SerializedName("_id")
     val id: String? = null,
+
+    @SerializedName("id")
+    val idAlt: String? = null,
     
     @SerializedName("nom")
     val nom: String? = null,
@@ -36,7 +39,10 @@ data class User(
     
     @SerializedName("updatedAt")
     val updatedAt: String? = null
-)
+) {
+    val actualId: String?
+        get() = id ?: idAlt
+}
 
 enum class UserRole {
     @SerializedName("ACTEUR")

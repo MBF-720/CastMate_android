@@ -2,12 +2,10 @@ package com.example.projecct_mobile.data.repository
 
 import com.example.projecct_mobile.data.api.ApiClient
 import com.example.projecct_mobile.data.api.ActeurApiService
-import com.example.projecct_mobile.data.api.UserApiService
 import com.example.projecct_mobile.data.model.ActeurSignupRequest
 import com.example.projecct_mobile.data.model.ApiException
 import com.example.projecct_mobile.data.model.UpdateActeurRequest
 import com.example.projecct_mobile.data.local.TokenManager
-import com.example.projecct_mobile.data.utils.JwtDecoder
 
 /**
  * Repository pour gérer les acteurs
@@ -15,18 +13,15 @@ import com.example.projecct_mobile.data.utils.JwtDecoder
 class ActeurRepository {
     
     private val acteurService: ActeurApiService = ApiClient.getActeurService()
-    private val userService: UserApiService = ApiClient.getUserService()
     private val tokenManager: TokenManager = ApiClient.getTokenManager()
     
     /**
      * Récupère le profil de l'acteur connecté
-     * Utilise l'ID depuis le token JWT ou /users/me pour appeler /acteur/:id
+     * Utilise l'ID depuis le token JWT pour appeler /acteur/:id
      */
     suspend fun getCurrentActeur(): Result<ActeurSignupRequest> {
         return try {
-            // Ne pas appeler /acteur/me car il n'existe pas
-            // Utiliser directement l'ID depuis le token ou /users/me
-            val userId = getActeurIdFromToken()
+            val userId = getStoredActeurId()
             
             if (userId != null) {
                 // Essayer d'obtenir le profil avec l'ID
@@ -50,34 +45,13 @@ class ActeurRepository {
     
     /**
      * Extrait l'ID de l'acteur depuis le token JWT
-     * Essaie plusieurs méthodes: JWT, TokenManager, ou /users/me
      */
-    private suspend fun getActeurIdFromToken(): String? {
-        val token = tokenManager.getTokenSync() ?: return null
-        
-        // 1. Essayer d'extraire l'ID depuis le token JWT
-        val userIdFromToken = JwtDecoder.getUserIdFromToken(token)
-        if (userIdFromToken != null) {
-            return userIdFromToken
+    private suspend fun getStoredActeurId(): String? {
+        val storedId = tokenManager.getUserIdSync()
+        if (!storedId.isNullOrBlank()) {
+            return storedId
         }
-        
-        // 2. Utiliser l'ID stocké dans TokenManager
-        val userIdFromStorage = tokenManager.getUserIdSync()
-        if (userIdFromStorage != null) {
-            return userIdFromStorage
-        }
-        
-        // 3. Dernier recours: utiliser /users/me pour obtenir l'ID
-        return try {
-            val response = userService.getCurrentUser()
-            if (response.isSuccessful && response.body() != null) {
-                response.body()!!.id
-            } else {
-                null
-            }
-        } catch (e: Exception) {
-            null
-        }
+        return null
     }
     
     /**
@@ -127,7 +101,7 @@ class ActeurRepository {
         return try {
             // Ne pas appeler /acteur/me car il n'existe pas
             // Utiliser directement l'ID depuis le token
-            val userId = getActeurIdFromToken()
+            val userId = getStoredActeurId()
             
             if (userId != null) {
                 // Mettre à jour le profil avec l'ID

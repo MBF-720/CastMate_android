@@ -7,6 +7,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -68,18 +71,27 @@ fun SignUpActorStep1Screen(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(100.dp)
-                .background(DarkBlue)
+                .height(180.dp)
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(DarkBlue, DarkBlueLight)
+                    )
+                )
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = onBackClick) {
+                    IconButton(
+                        onClick = onBackClick,
+                        modifier = Modifier
+                            .size(44.dp)
+                            .background(White.copy(alpha = 0.15f), CircleShape)
+                    ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
@@ -87,41 +99,66 @@ fun SignUpActorStep1Screen(
                         )
                     }
                     
-                    Text(
-                        text = "Étape 1/3",
-                        fontSize = 16.sp,
-                        color = White,
-                        fontWeight = FontWeight.Medium
-                    )
+                    Card(
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = White.copy(alpha = 0.2f)
+                        )
+                    ) {
+                        Text(
+                            text = "Étape 1/3",
+                            fontSize = 14.sp,
+                            color = White,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
                 }
                 
                 Spacer(modifier = Modifier.weight(1f))
                 
-                Text(
-                    text = "Informations personnelles",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = White,
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-                )
+                Column(
+                    modifier = Modifier.padding(horizontal = 28.dp, vertical = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Créer votre profil",
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = White,
+                        letterSpacing = 0.5.sp
+                    )
+                    Text(
+                        text = "Informations personnelles",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = White.copy(alpha = 0.9f)
+                    )
+                }
             }
         }
         
-        // Contenu sans ombre excessive
+        // Contenu moderne
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f),
-            shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp),
-            colors = CardDefaults.cardColors(containerColor = White),
+                .weight(1f)
+                .shadow(
+                    elevation = 24.dp,
+                    shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+                    spotColor = DarkBlue.copy(alpha = 0.15f)
+                )
+                .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)),
+            shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFFAFAFA)),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(scrollState)
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(horizontal = 24.dp, vertical = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 // Photo de profil simplifiée
                 Column(
@@ -408,7 +445,7 @@ fun SignUpActorStep1Screen(
                         },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .menuAnchor(),
+                            .menuAnchor(MenuAnchorType.PrimaryNotEditable),
                         shape = RoundedCornerShape(12.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = DarkBlue,
@@ -458,7 +495,7 @@ fun SignUpActorStep1Screen(
                     )
                 }
 
-                // Bouton Suivant sans ombre excessive
+                // Bouton Suivant moderne
                 Button(
                     onClick = {
                         if (nom.isBlank() || prenom.isBlank() || ageInt <= 0
@@ -500,10 +537,16 @@ fun SignUpActorStep1Screen(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp),
-                    shape = RoundedCornerShape(14.dp),
+                        .height(56.dp)
+                        .shadow(
+                            elevation = 12.dp,
+                            shape = RoundedCornerShape(16.dp),
+                            spotColor = DarkBlue.copy(alpha = 0.5f)
+                        ),
+                    shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = DarkBlue
+                        containerColor = DarkBlue,
+                        disabledContainerColor = GrayBorder.copy(alpha = 0.5f)
                     ),
                     enabled = nom.isNotBlank() && prenom.isNotBlank() && ageInt > 0 
                         && email.isNotBlank() && motDePasse.isNotBlank() 
@@ -511,11 +554,11 @@ fun SignUpActorStep1Screen(
                         && Patterns.EMAIL_ADDRESS.matcher(email).matches()
                 ) {
                     Text(
-                        text = "Suivant",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
+                        text = "Continuer",
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.ExtraBold,
                         color = White,
-                        letterSpacing = 0.5.sp
+                        letterSpacing = 0.8.sp
                     )
                 }
             }

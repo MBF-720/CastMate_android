@@ -22,11 +22,11 @@ fun getErrorMessage(exception: Throwable): String {
         is ApiException.NetworkException -> 
             "Pas de connexion internet. Vérifiez votre connexion et réessayez."
         is ApiException.UnauthorizedException -> 
-            "Session expirée. Veuillez vous reconnecter."
+            exception.message ?: "Session expirée. Veuillez vous reconnecter."
         is ApiException.BadRequestException -> 
             exception.message ?: "Vérifiez vos informations et réessayez."
         is ApiException.NotFoundException -> 
-            "Ressource non trouvée."
+            exception.message ?: "Ressource non trouvée."
         is ApiException.ServerException -> 
             "Erreur serveur. Veuillez réessayer plus tard."
         is ApiException.ForbiddenException -> 

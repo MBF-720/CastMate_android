@@ -1,6 +1,7 @@
 package com.example.projecct_mobile.ui.screens.profile
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -14,9 +15,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -60,12 +64,12 @@ fun ProfileScreen(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize()) {
         // En-tête bleu avec gradient
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(250.dp)
+                .height(280.dp)
                 .background(
                     brush = Brush.verticalGradient(
                         colors = listOf(DarkBlue, DarkBlueLight)
@@ -81,26 +85,45 @@ fun ProfileScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = onBackClick) {
+                    IconButton(
+                        onClick = onBackClick,
+                        modifier = Modifier
+                            .size(42.dp)
+                            .background(
+                                White.copy(alpha = 0.15f),
+                                CircleShape
+                            )
+                    ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
-                            tint = White
+                            tint = White,
+                            modifier = Modifier.size(24.dp)
                         )
                     }
 
                     Text(
-                        text = "Profil",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = White
+                        text = "Mon Profil",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = White,
+                        letterSpacing = 0.5.sp
                     )
 
-                    IconButton(onClick = onEditProfileClick) {
+                    IconButton(
+                        onClick = onEditProfileClick,
+                        modifier = Modifier
+                            .size(42.dp)
+                            .background(
+                                White.copy(alpha = 0.15f),
+                                CircleShape
+                            )
+                    ) {
                         Icon(
                             imageVector = Icons.Default.Edit,
                             contentDescription = "Edit",
-                            tint = White
+                            tint = White,
+                            modifier = Modifier.size(22.dp)
                         )
                     }
                 }
@@ -112,96 +135,137 @@ fun ProfileScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Photo de profil
+                    // Photo de profil avec shadow
                     Box(
                         modifier = Modifier
-                            .size(100.dp)
+                            .size(110.dp)
+                            .shadow(
+                                elevation = 12.dp,
+                                shape = CircleShape,
+                                spotColor = White.copy(alpha = 0.3f)
+                            )
                             .clip(CircleShape)
-                            .background(White),
+                            .background(White)
+                            .border(4.dp, White.copy(alpha = 0.3f), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         if (user?.photoProfil != null && user?.photoProfil?.isNotEmpty() == true) {
                             // TODO: Charger l'image depuis l'URL
-                            Text("📷", fontSize = 48.sp)
+                            Text("📷", fontSize = 52.sp)
                         } else {
                             Icon(
                                 imageVector = Icons.Default.Person,
                                 contentDescription = "Profile",
                                 tint = DarkBlue,
-                                modifier = Modifier.size(60.dp)
+                                modifier = Modifier.size(64.dp)
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     // Nom complet
                     Text(
                         text = "${user?.prenom ?: ""} ${user?.nom ?: ""}".trim().ifEmpty { "Utilisateur" },
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = White
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = White,
+                        letterSpacing = 0.3.sp
                     )
 
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
 
-                    // Rôle
-                    Text(
-                        text = user?.role?.name ?: "Non spécifié",
-                        fontSize = 16.sp,
-                        color = White.copy(alpha = 0.9f)
-                    )
+                    // Rôle avec badge
+                    Card(
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = White.copy(alpha = 0.2f)
+                        )
+                    ) {
+                        Text(
+                            text = user?.role?.name ?: "Non spécifié",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = White,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                        )
+                    }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(24.dp))
             }
         }
 
-        // Contenu du profil
-        Box(
+        // Contenu du profil - Card avec shadow
+        Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f)
-                .background(White)
-                .clip(RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp))
+                .padding(top = 200.dp)
+                .shadow(
+                    elevation = 20.dp,
+                    shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+                    spotColor = DarkBlue.copy(alpha = 0.15f)
+                )
+                .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)),
+            shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFFAFAFA)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
         ) {
+            Spacer(modifier = Modifier.height(90.dp))
+            
             if (isLoading) {
                 Box(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = 40.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator(color = DarkBlue)
+                    CircularProgressIndicator(color = DarkBlue, strokeWidth = 3.dp)
                 }
             } else if (errorMessage != null) {
                 Box(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = 40.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier.padding(24.dp)
                     ) {
+                        Icon(
+                            imageVector = Icons.Default.ErrorOutline,
+                            contentDescription = "Error",
+                            tint = Red,
+                            modifier = Modifier.size(56.dp)
+                        )
                         Text(
                             text = errorMessage ?: "Erreur",
                             color = Red,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(16.dp)
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium,
+                            textAlign = TextAlign.Center
                         )
-                        Button(onClick = {
-                            scope.launch {
-                                isLoading = true
-                                errorMessage = null
-                                val result = userRepository.getCurrentUser()
-                                isLoading = false
-                                result.onSuccess { userProfile ->
-                                    user = userProfile
+                        Button(
+                            onClick = {
+                                scope.launch {
+                                    isLoading = true
+                                    errorMessage = null
+                                    val result = userRepository.getCurrentUser()
+                                    isLoading = false
+                                    result.onSuccess { userProfile ->
+                                        user = userProfile
+                                    }
+                                    result.onFailure { exception ->
+                                        errorMessage = "Erreur: ${exception.message}"
+                                    }
                                 }
-                                result.onFailure { exception ->
-                                    errorMessage = "Erreur: ${exception.message}"
-                                }
-                            }
-                        }) {
-                            Text("Réessayer")
+                            },
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = DarkBlue)
+                        ) {
+                            Text("Réessayer", fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
@@ -209,8 +273,8 @@ fun ProfileScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                        .padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
                     // Informations personnelles
                     ProfileSection(
@@ -221,41 +285,69 @@ fun ProfileScreen(
                         )
                     )
 
-                    // CV
+                    // CV avec design moderne
                     if (user?.cvUrl != null && user?.cvUrl?.isNotEmpty() == true) {
                         Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(containerColor = LightBlue),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .shadow(
+                                    elevation = 4.dp,
+                                    shape = RoundedCornerShape(16.dp),
+                                    spotColor = DarkBlue.copy(alpha = 0.1f)
+                                ),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = White
+                            ),
                             onClick = { /* Ouvrir le CV */ }
                         ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(16.dp),
+                                    .padding(18.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Row(
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(14.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Description,
-                                        contentDescription = "CV",
-                                        tint = DarkBlue
-                                    )
-                                    Text(
-                                        text = "Voir mon CV",
-                                        fontSize = 16.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = DarkBlue
-                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .size(48.dp)
+                                            .background(
+                                                DarkBlue.copy(alpha = 0.1f),
+                                                RoundedCornerShape(12.dp)
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Description,
+                                            contentDescription = "CV",
+                                            tint = DarkBlue,
+                                            modifier = Modifier.size(26.dp)
+                                        )
+                                    }
+                                    Column {
+                                        Text(
+                                            text = "Mon CV",
+                                            fontSize = 17.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Black
+                                        )
+                                        Text(
+                                            text = "Cliquer pour voir",
+                                            fontSize = 13.sp,
+                                            color = GrayBorder,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
                                 }
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                                     contentDescription = "Open",
-                                    tint = DarkBlue
+                                    tint = DarkBlue,
+                                    modifier = Modifier.size(22.dp)
                                 )
                             }
                         }
@@ -263,13 +355,18 @@ fun ProfileScreen(
 
                     Spacer(modifier = Modifier.weight(1f))
 
-                    // Bouton de déconnexion
+                    // Bouton de déconnexion avec design moderne
                     Button(
                         onClick = onLogoutClick,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(56.dp),
-                        shape = RoundedCornerShape(14.dp),
+                            .height(58.dp)
+                            .shadow(
+                                elevation = 6.dp,
+                                shape = RoundedCornerShape(16.dp),
+                                spotColor = Red.copy(alpha = 0.3f)
+                            ),
+                        shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Red
                         )
@@ -277,14 +374,16 @@ fun ProfileScreen(
                         Icon(
                             imageVector = Icons.Default.PowerSettingsNew,
                             contentDescription = "Logout",
-                            tint = White
+                            tint = White,
+                            modifier = Modifier.size(24.dp)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
                         Text(
                             text = "Déconnexion",
-                            fontSize = 17.sp,
+                            fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
-                            color = White
+                            color = White,
+                            letterSpacing = 0.5.sp
                         )
                     }
                 }
@@ -299,14 +398,15 @@ fun ProfileSection(
     items: List<ProfileItem>
 ) {
     Column(
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Text(
             text = title,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
-            color = Black,
-            modifier = Modifier.padding(bottom = 4.dp)
+            fontSize = 19.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = DarkBlue,
+            letterSpacing = 0.3.sp,
+            modifier = Modifier.padding(bottom = 2.dp)
         )
 
         items.forEach { item ->
@@ -324,34 +424,57 @@ data class ProfileItem(
 @Composable
 fun ProfileItemRow(item: ProfileItem) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = LightGray)
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = 3.dp,
+                shape = RoundedCornerShape(16.dp),
+                spotColor = DarkBlue.copy(alpha = 0.08f)
+            ),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = White)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(18.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = item.icon,
-                contentDescription = item.label,
-                tint = DarkBlue
-            )
+            // Icône avec background circulaire
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .background(
+                        DarkBlue.copy(alpha = 0.1f),
+                        CircleShape
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = item.icon,
+                    contentDescription = item.label,
+                    tint = DarkBlue,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+            
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = item.label,
-                    fontSize = 12.sp,
+                    fontSize = 13.sp,
                     color = GrayBorder,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.2.sp
                 )
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = item.value,
                     fontSize = 16.sp,
                     color = Black,
-                    fontWeight = FontWeight.Normal
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }

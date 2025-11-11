@@ -9,8 +9,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.shadow
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -23,6 +23,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -69,7 +71,7 @@ fun CastingListScreen(
     onHomeClick: () -> Unit = {},
     onHistoryClick: () -> Unit = {},
     onProfileClick: () -> Unit = {},
-    onAgendaClick: () -> Unit = {},
+    onSettingsClick: () -> Unit = onProfileClick,
     onFilterClick: () -> Unit = {},
     onNavigateToProfile: (() -> Unit)? = null
 ) {
@@ -128,123 +130,172 @@ fun CastingListScreen(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        // En-tête bleu
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFF3F5FB))
+    ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(180.dp)
-                .background(DarkBlue)
+                .height(220.dp)
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // Barre de navigation
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = White
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(DarkBlue, DarkBlueLight)
                         )
-                    }
-                    
-                    Text(
-                        text = "Casting",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = White
                     )
-                    
-                    Box(
-                        modifier = Modifier
-                            .clickable {
-                                android.util.Log.d("CastingListScreen", "Bouton agenda cliqué")
-                                onAgendaClick()
-                            }
-                            .size(48.dp)
-                            .padding(8.dp),
-                        contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 20.dp, vertical = 18.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.CalendarToday,
-                            contentDescription = "Calendar",
-                            tint = White,
-                            modifier = Modifier.size(24.dp)
+                        Text(
+                            text = "Back",
+                            color = White,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(White.copy(alpha = 0.18f))
+                                .clickable { onBackClick() }
+                                .padding(horizontal = 14.dp, vertical = 10.dp)
                         )
+
+                        Text(
+                            text = "Casting",
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = White,
+                            modifier = Modifier.weight(1f),
+                            textAlign = TextAlign.Center
+                        )
+
+                        IconButton(
+                            onClick = {
+                                android.util.Log.d("CastingListScreen", "Bouton profil cliqué")
+                                onSettingsClick()
+                            },
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(White.copy(alpha = 0.18f))
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = "Profil",
+                                tint = White
+                            )
+                        }
                     }
+
+                    Spacer(modifier = Modifier.height(18.dp))
+
+                    Text(
+                        text = "Découvrez les meilleurs castings du moment",
+                        fontSize = 15.sp,
+                        color = White.copy(alpha = 0.85f),
+                        fontWeight = FontWeight.Medium
+                    )
                 }
-                
-                // Barre de recherche et filtre
+            }
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .align(Alignment.BottomCenter)
+                    .offset(y = 28.dp),
+                shape = RoundedCornerShape(28.dp),
+                colors = CardDefaults.cardColors(containerColor = White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
+            ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        .padding(horizontal = 20.dp, vertical = 18.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     OutlinedTextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
-                        placeholder = { Text("Search casting.", color = LightGray) },
                         modifier = Modifier.weight(1f),
+                        placeholder = { Text("Rechercher un casting...", color = GrayBorder) },
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Default.Search,
                                 contentDescription = "Search",
-                                tint = LightGray
+                                tint = DarkBlue.copy(alpha = 0.7f)
                             )
                         },
-                        shape = RoundedCornerShape(25.dp),
+                        shape = RoundedCornerShape(20.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = White,
-                            unfocusedBorderColor = LightGray,
-                            focusedContainerColor = White,
-                            unfocusedContainerColor = White
+                            focusedBorderColor = Color.Transparent,
+                            unfocusedBorderColor = Color.Transparent,
+                            focusedContainerColor = Color(0xFFF3F6FF),
+                            unfocusedContainerColor = Color(0xFFF3F6FF),
+                            cursorColor = DarkBlue,
+                            focusedTextColor = Black,
+                            unfocusedTextColor = Black,
+                            focusedPlaceholderColor = GrayBorder,
+                            unfocusedPlaceholderColor = GrayBorder
                         ),
                         singleLine = true
                     )
-                    
-                    IconButton(
-                        onClick = { showComingSoon = "Filtres" },
+
+                    Box(
                         modifier = Modifier
-                            .size(50.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(White)
+                            .size(52.dp)
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(DarkBlue)
+                            .clickable { showComingSoon = "Filtres" },
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Tune,
-                            contentDescription = "Filter",
-                            tint = DarkBlue
+                            contentDescription = "Filtres",
+                            tint = White
                         )
                     }
                 }
-                
-                Spacer(modifier = Modifier.weight(1f))
             }
         }
-        
-        // Liste des castings
-        Box(
+
+        Spacer(modifier = Modifier.height(36.dp))
+
+        Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .background(White)
-                .clip(RoundedCornerShape(topStart = 25.dp, topEnd = 25.dp))
+                .padding(horizontal = 16.dp),
+            shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+            colors = CardDefaults.cardColors(containerColor = White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
         ) {
             if (isLoading) {
                 Box(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = 24.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator(color = DarkBlue)
                 }
             } else if (errorMessage != null) {
                 Box(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = 24.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     ErrorMessage(
@@ -273,9 +324,11 @@ fun CastingListScreen(
                 }
             } else {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 4.dp, vertical = 6.dp),
+                    contentPadding = PaddingValues(vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     if (filteredCastings.isEmpty()) {
                         item {
@@ -349,73 +402,98 @@ fun CastingItemCard(
                     android.util.Log.d("CastingItemCard", "Carte cliquée pour: ${casting.id}")
                     onItemClick(casting)
                 }
+            )
+            .shadow(
+                elevation = 6.dp,
+                shape = RoundedCornerShape(18.dp),
+                spotColor = DarkBlue.copy(alpha = 0.08f)
             ),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = White)
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Image placeholder
+            // Image placeholder moderne
             Box(
                 modifier = Modifier
-                    .width(80.dp)
-                    .height(100.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(LightGray)
+                    .width(90.dp)
+                    .height(110.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(
+                        androidx.compose.ui.graphics.Brush.verticalGradient(
+                            colors = listOf(
+                                DarkBlue.copy(alpha = 0.1f),
+                                DarkBlue.copy(alpha = 0.05f)
+                            )
+                        )
+                    )
+                    .border(1.dp, DarkBlue.copy(alpha = 0.1f), RoundedCornerShape(14.dp))
                     .clickable { onItemClick(casting) },
                 contentAlignment = Alignment.Center
             ) {
-                Text("📷", fontSize = 32.sp)
+                Text("📷", fontSize = 36.sp)
             }
             
             // Informations du casting
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // Titre et date
+                // Titre
+                Text(
+                    text = casting.title,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = DarkBlue,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    letterSpacing = 0.3.sp
+                )
+                
+                // Date
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = casting.title,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Black,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                    Icon(
+                        imageVector = Icons.Default.CalendarToday,
+                        contentDescription = null,
+                        tint = GrayBorder,
+                        modifier = Modifier.size(12.dp)
                     )
-                    
                     Text(
                         text = casting.date,
                         fontSize = 12.sp,
-                        color = GrayBorder
+                        color = GrayBorder,
+                        fontWeight = FontWeight.Medium
                     )
                 }
                 
                 // Description
                 Text(
                     text = casting.description,
-                    fontSize = 12.sp,
-                    color = GrayBorder,
+                    fontSize = 13.sp,
+                    color = Black.copy(alpha = 0.6f),
                     maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    lineHeight = 18.sp
                 )
                 
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(2.dp))
                 
                 // Rôle et âge
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     InfoBadge(label = "rôle", value = casting.role)
-                    InfoBadge(label = "age", value = casting.age)
+                    if (casting.age.isNotEmpty()) {
+                        InfoBadge(label = "âge", value = casting.age)
+                    }
                 }
                 
                 Spacer(modifier = Modifier.weight(1f))
@@ -429,19 +507,25 @@ fun CastingItemCard(
                     Text(
                         text = casting.compensation,
                         fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Red
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Red,
+                        letterSpacing = 0.3.sp
                     )
                     
                     IconButton(
                         onClick = onFavoriteClick,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(
+                                if (casting.isFavorite) RedHeart.copy(alpha = 0.1f) else Color.Transparent,
+                                CircleShape
+                            )
                     ) {
                         Icon(
                             imageVector = if (casting.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                             contentDescription = "Favorite",
                             tint = RedHeart,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }

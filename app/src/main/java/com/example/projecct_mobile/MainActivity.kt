@@ -33,8 +33,6 @@ import com.example.projecct_mobile.data.repository.CastingRepository
 import com.example.projecct_mobile.data.model.ApiException
 import com.example.projecct_mobile.data.utils.GoogleAuthUiClient
 import com.google.android.gms.common.api.ApiException as GoogleApiException
-import com.example.projecct_mobile.ui.components.getErrorMessage
-import com.example.projecct_mobile.ui.theme.Projecct_MobileTheme
 import com.example.projecct_mobile.ui.screens.auth.*
 import com.example.projecct_mobile.ui.screens.auth.signup.*
 import com.example.projecct_mobile.ui.screens.casting.*
@@ -42,6 +40,12 @@ import com.example.projecct_mobile.ui.screens.agenda.*
 import com.example.projecct_mobile.ui.screens.map.*
 import com.example.projecct_mobile.ui.screens.profile.*
 import com.example.projecct_mobile.ui.screens.acteur.*
+import com.example.projecct_mobile.ui.screens.agence.auth.*
+import com.example.projecct_mobile.ui.screens.agence.casting.*
+import com.example.projecct_mobile.ui.screens.agence.profile.AgencyProfileScreen
+import com.example.projecct_mobile.ui.screens.settings.SettingsScreen
+import com.example.projecct_mobile.ui.components.getErrorMessage
+import com.example.projecct_mobile.ui.theme.Projecct_MobileTheme
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -79,15 +83,26 @@ fun NavigationScreen() {
     var actorSignupData by remember {
         mutableStateOf<ActorSignupData?>(null)
     }
+
+    var agencySignupData by remember {
+        mutableStateOf<AgencySignupData?>(null)
+    }
     
     // Vérifier si l'utilisateur est déjà connecté (Remember Me)
     LaunchedEffect(Unit) {
         val tokenManager = TokenManager(context)
         val hasToken = tokenManager.hasToken()
         if (hasToken) {
-            // Rediriger vers la page d'accueil acteur si un token existe
-            navController.navigate("actorHome") {
-                popUpTo("welcome") { inclusive = true }
+            val role = tokenManager.getUserRoleSync()
+
+            if (!role.isNullOrBlank() && role.equals("RECRUTEUR", ignoreCase = true)) {
+                navController.navigate("agencyCastingList") {
+                    popUpTo("welcome") { inclusive = true }
+                }
+            } else {
+                navController.navigate("actorHome") {
+                    popUpTo("welcome") { inclusive = true }
+                }
             }
         }
     }
@@ -184,12 +199,230 @@ fun NavigationScreen() {
         composable("home") {
             HomeScreen(
                 onActorClick = {
-                    // Naviguer vers SignIn avec indication que c'est un acteur
+                    // Mode acteur : redirection vers l'écran de connexion générique
                     navController.navigate("signIn?role=actor")
                 },
                 onAgencyClick = {
-                    // Naviguer vers SignIn avec indication que c'est une agence
-                    navController.navigate("signIn?role=agency")
+                    // Mode agence : écran de connexion spécifique
+                    navController.navigate("agencySignIn")
+                }
+            )
+        }
+        
+        composable("agencySignIn") {
+            SignInAgencyScreen(
+                onSignInClick = {
+                    // Après login agence (POST /auth/login), on arrive sur la liste des castings agence
+                    navController.navigate("agencyCastingList") {
+                        popUpTo("home") { inclusive = true }
+                    }
+                },
+                onSignUpClick = {
+                    agencySignupData = null
+                    navController.navigate("signUpAgencyStep1")
+                },
+                onForgotPasswordClick = {
+                    navController.navigate("forgotPassword")
+                },
+                onGoogleSignInClick = {
+                    // TODO: Implémenter Google Sign-In pour les agences si nécessaire
+                },
+                onBackClick = {
+                    navController.popBackStack()
+                }
+            )
+        }
+        
+        composable("signUpAgencyStep1") {
+            SignUpAgencyStep1Screen(
+                initialNomAgence = agencySignupData?.nomAgence ?: "",
+                initialNomResponsable = agencySignupData?.nomResponsable ?: "",
+                initialEmail = agencySignupData?.email ?: "",
+                onBackClick = {
+                    navController.popBackStack()
+                },
+                onNextClick = { nomAgence, nomResponsable, email, telephone, gouvernorat, motDePasse ->
+                    // On mémorise les données de l'étape 1 avant de passer à l'étape 2
+                    agencySignupData = AgencySignupData(
+                        nomAgence = nomAgence,
+                        nomResponsable = nomResponsable,
+                        email = email,
+                        telephone = telephone,
+                        gouvernorat = gouvernorat,
+                        motDePasse = motDePasse
+                    )
+                    navController.navigate("signUpAgencyStep2")
+                }
+            )
+        }
+        
+        composable("signUpAgencyStep2") {
+            val hasData = agencySignupData != null
+            LaunchedEffect(hasData) {
+                if (!hasData) {
+                    navController.popBackStack("signUpAgencyStep1", inclusive = false)
+                }
+            }
+            var isLoading by remember { mutableStateOf(false) }
+            var errorMessage by remember { mutableStateOf<String?>(null) }
+            SignUpAgencyStep2Screen(
+                onBackClick = {
+                    navController.popBackStack()
+                },
+                isLoading = isLoading,
+                errorMessage = errorMessage,
+                onFinishClick = { siteWeb, description, logoUrl, documentUrl ->
+                    val currentData = agencySignupData
+                    if (currentData == null) {
+                        navController.popBackStack("signUpAgencyStep1", inclusive = false)
+                    } else {
+                        isLoading = true
+                        errorMessage = null
+                        scope.launch {
+                            // Appel AuthRepository.signupAgence -> POST /agence/signup
+                            val result = sharedAuthRepository.signupAgence(
+                                nomAgence = currentData.nomAgence,
+                                responsable = currentData.nomResponsable,
+                                email = currentData.email,
+                                motDePasse = currentData.motDePasse,
+                                tel = currentData.telephone,
+                                gouvernorat = currentData.gouvernorat,
+                                siteWeb = siteWeb.takeIf { it.isNotBlank() },
+                                description = description,
+                                logoUrl = logoUrl,
+                                documents = documentUrl
+                            )
+                            result.onSuccess {
+                                isLoading = false
+                                agencySignupData = currentData.copy(
+                                    siteWeb = siteWeb.takeIf { it.isNotBlank() },
+                                    description = description,
+                                    logoUrl = logoUrl,
+                                    documentUrl = documentUrl
+                                )
+                                // Après succès, on enchaîne sur l'écran de confirmation
+                                navController.navigate("agencyConfirmation") {
+                                    popUpTo("signUpAgencyStep1") { inclusive = true }
+                                }
+                            }
+                            result.onFailure { exception ->
+                                isLoading = false
+                                errorMessage = getErrorMessage(exception)
+                            }
+                        }
+                    }
+                }
+            )
+        }
+        
+        composable("agencyConfirmation") {
+            ConfirmationScreen(
+                userRole = "agency",
+                onNavigateToDestination = {
+                    agencySignupData = null
+                    navController.navigate("agencyCastingList") {
+                        popUpTo("home") { inclusive = true }
+                    }
+                }
+            )
+        }
+        
+        composable("agencyCastingList") {
+            CastingListAgencyScreen(
+                onBackClick = {
+                    navController.popBackStack()
+                },
+                onItemClick = { casting ->
+                    navController.navigate("castingDetail/${casting.id}")
+                },
+                onFilterClick = {
+                    navController.navigate("filter")
+                },
+                onCreateCastingClick = {
+                    navController.navigate("agencyCreateCasting")
+                },
+                onProfileClick = {
+                    navController.navigate("agencyProfile")
+                },
+                onSettingsClick = {
+                    navController.navigate("settings/agency")
+                },
+                onAgendaClick = {
+                    navController.navigate("agenda")
+                },
+                onLogoutClick = {
+                    // Déconnexion agence : on efface token + infos locales
+                    scope.launch { sharedAuthRepository.logout() }
+                    navController.navigate("home") {
+                        popUpTo("welcome") { inclusive = false }
+                    }
+                }
+            )
+        }
+        
+        composable("agencyCreateCasting") {
+            CreateCastingScreen(
+                onBackClick = {
+                    navController.popBackStack()
+                },
+                onSaveCastingClick = { _, _, _, _, _, _, _ ->
+                    navController.popBackStack()
+                }
+            )
+        }
+        
+        composable("agencyProfile") {
+            AgencyProfileScreen(
+                onBackClick = {
+                    navController.popBackStack()
+                },
+                onNavigateToCastings = {
+                    navController.navigate("agencyCastingList") {
+                        popUpTo("agencyCastingList") { inclusive = false }
+                    }
+                },
+                onNavigateToCreateCasting = {
+                    navController.navigate("agencyCreateCasting")
+                },
+                onLogoutClick = {
+                    scope.launch {
+                        sharedAuthRepository.logout()
+                    }
+                    navController.navigate("home") {
+                        popUpTo("welcome") { inclusive = false }
+                    }
+                }
+            )
+        }
+
+        composable(
+            route = "settings/{role}",
+            arguments = listOf(
+                navArgument("role") {
+                    type = NavType.StringType
+                    defaultValue = "actor"
+                }
+            )
+        ) { backStackEntry ->
+            val role = backStackEntry.arguments?.getString("role") ?: "actor"
+
+            SettingsScreen(
+                role = role,
+                onBackClick = { navController.popBackStack() },
+                onMyProfileClick = {
+                    if (role.equals("agency", ignoreCase = true)) {
+                        navController.navigate("agencyProfile")
+                    } else {
+                        navController.navigate("actorProfile")
+                    }
+                },
+                onLogoutClick = {
+                    scope.launch {
+                        sharedAuthRepository.logout()
+                    }
+                    navController.navigate("home") {
+                        popUpTo("welcome") { inclusive = false }
+                    }
                 }
             )
         }
@@ -207,9 +440,14 @@ fun NavigationScreen() {
             
             SignInScreen(
                 onSignInClick = {
-                    // Navigation vers la page d'accueil acteur après connexion
-                    navController.navigate("actorHome") {
-                        popUpTo("home") { inclusive = true }
+                    if (role == "agency") {
+                        navController.navigate("agencyCastingList") {
+                            popUpTo("home") { inclusive = true }
+                        }
+                    } else {
+                        navController.navigate("actorHome") {
+                            popUpTo("home") { inclusive = true }
+                        }
                     }
                 },
                 onSignUpClick = {
@@ -217,7 +455,7 @@ fun NavigationScreen() {
                     if (role == "actor") {
                         navController.navigate("signUpActorStep1")
                     } else {
-                        navController.navigate("signUp")
+                        navController.navigate("signUpAgencyStep1")
                     }
                 },
                 onForgotPasswordClick = {
@@ -231,7 +469,8 @@ fun NavigationScreen() {
                         googleSignInLauncher.launch(googleAuthClient.getSignInIntent())
                     }
                 },
-                isGoogleLoading = googleSignInLoading
+                isGoogleLoading = googleSignInLoading,
+                role = role
             )
         }
         
@@ -391,7 +630,7 @@ fun NavigationScreen() {
                     navController.navigate("actorProfile")
                 },
                 onAgendaClick = {
-                    navController.navigate("agenda")
+                    navController.navigate("settings/actor")
                 },
                 onFilterClick = {
                     navController.navigate("filter")
@@ -401,10 +640,9 @@ fun NavigationScreen() {
                 },
                 onLogoutClick = {
                     scope.launch {
-                        val tokenManager = TokenManager(context)
-                        tokenManager.clearToken()
+                        sharedAuthRepository.logout()
                     }
-                    navController.navigate("signIn") {
+                    navController.navigate("home") {
                         popUpTo("welcome") { inclusive = false }
                     }
                 }
@@ -430,8 +668,8 @@ fun NavigationScreen() {
                 onProfileClick = {
                     navController.navigate("actorProfile")
                 },
-                onAgendaClick = {
-                    navController.navigate("agenda")
+                onSettingsClick = {
+                    navController.navigate("settings/actor")
                 },
                 onFilterClick = {
                     // Géré par l'alerte "coming soon" dans CastingListScreen
@@ -710,17 +948,15 @@ fun NavigationScreen() {
         }
         
         composable("actorProfile") {
-            val context = LocalContext.current
             ActorProfileScreen(
                 onBackClick = {
                     navController.popBackStack()
                 },
                 onLogoutClick = {
                     scope.launch {
-                        val tokenManager = TokenManager(context)
-                        tokenManager.clearToken()
+                        sharedAuthRepository.logout()
                     }
-                    navController.navigate("signIn") {
+                    navController.navigate("home") {
                         popUpTo("welcome") { inclusive = false }
                     }
                 },
@@ -739,7 +975,6 @@ fun NavigationScreen() {
         }
         
         composable("profile") {
-            val context = LocalContext.current
             val scope = rememberCoroutineScope()
             
             ProfileScreen(
@@ -751,10 +986,9 @@ fun NavigationScreen() {
                 },
                 onLogoutClick = {
                     scope.launch {
-                        val tokenManager = TokenManager(context)
-                        tokenManager.clearToken()
+                        sharedAuthRepository.logout()
                     }
-                    navController.navigate("signIn") {
+                    navController.navigate("home") {
                         popUpTo("welcome") { inclusive = false }
                     }
                 }
@@ -780,4 +1014,17 @@ private data class ActorSignupData(
     val instagram: String? = null,
     val youtube: String? = null,
     val tiktok: String? = null
+)
+
+private data class AgencySignupData(
+    val nomAgence: String,
+    val nomResponsable: String,
+    val email: String,
+    val telephone: String,
+    val gouvernorat: String,
+    val motDePasse: String,
+    val siteWeb: String? = null,
+    val description: String = "",
+    val logoUrl: String? = null,
+    val documentUrl: String? = null
 )
