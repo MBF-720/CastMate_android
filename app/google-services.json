@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "395785329499",
+    "project_id": "castmate-95c8a",
+    "storage_bucket": "castmate-95c8a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:395785329499:android:e330d09877fec4f052d87e",
+        "android_client_info": {
+          "package_name": "com.example.projecct_mobile"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "395785329499-7k24ntovvl8sc70r099h79sdklila4i4.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.projecct_mobile",
+            "certificate_hash": "fcaaa3adf42e391b4c53c9d415202006111bb805"
+          }
+        },
+        {
+          "client_id": "395785329499-1115qjtbcsncs4fke25ih418is4vq1aj.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCLjYJLM4qKUShwtttvoSDjjFJHA2JxAKA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "395785329499-1115qjtbcsncs4fke25ih418is4vq1aj.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
