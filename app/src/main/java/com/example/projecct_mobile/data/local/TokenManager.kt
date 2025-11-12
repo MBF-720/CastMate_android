@@ -1,6 +1,7 @@
 package com.example.projecct_mobile.data.local
 
 import android.content.Context
+import android.util.Base64
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
@@ -185,6 +186,63 @@ class TokenManager(private val context: Context) {
 
     suspend fun getUserDescriptionSync(): String? {
         return context.dataStore.data.first()[USER_DESCRIPTION_KEY]
+    }
+    
+    /**
+     * Décode le token JWT et extrait l'ID utilisateur depuis le payload
+     */
+    suspend fun getUserIdFromToken(): String? {
+        return try {
+            val token = getTokenSync() ?: return null
+            
+            // Un token JWT a 3 parties séparées par des points: header.payload.signature
+            val parts = token.split(".")
+            if (parts.size != 3) {
+                android.util.Log.e("TokenManager", "❌ Token JWT invalide: nombre de parties incorrect")
+                return null
+            }
+            
+            // Décoder le payload (2ème partie)
+            val payload = parts[1]
+            val decodedBytes = Base64.decode(payload, Base64.URL_SAFE or Base64.NO_WRAP)
+            val decodedString = String(decodedBytes, Charsets.UTF_8)
+            
+            // Logger le payload décodé pour le débogage
+            android.util.Log.d("TokenManager", "📋 Payload JWT décodé: $decodedString")
+            
+            // Parser le JSON pour extraire l'ID
+            val jsonObject = JSONObject(decodedString)
+            
+            // Logger toutes les clés du payload pour le débogage
+            val keys = jsonObject.keys()
+            android.util.Log.d("TokenManager", "📋 Clés dans le payload JWT:")
+            while (keys.hasNext()) {
+                val key = keys.next()
+                val value = jsonObject.opt(key)
+                android.util.Log.d("TokenManager", "  - $key: $value")
+            }
+            
+            // Le backend peut stocker l'ID sous différents noms: "id", "userId", "sub", "_id", "actorId", etc.
+            val userId = jsonObject.optString("id", null)
+                ?: jsonObject.optString("userId", null)
+                ?: jsonObject.optString("sub", null)
+                ?: jsonObject.optString("_id", null)
+                ?: jsonObject.optString("actorId", null)
+                ?: jsonObject.optString("user_id", null)
+                ?: jsonObject.optString("actor_id", null)
+            
+            if (userId.isNullOrBlank()) {
+                android.util.Log.e("TokenManager", "❌ ID utilisateur introuvable dans le token JWT")
+                android.util.Log.e("TokenManager", "❌ Payload décodé: $decodedString")
+            } else {
+                android.util.Log.d("TokenManager", "✅ ID utilisateur extrait du token JWT: $userId")
+            }
+            
+            userId
+        } catch (e: Exception) {
+            android.util.Log.e("TokenManager", "❌ Erreur lors du décodage du token JWT: ${e.message}", e)
+            null
+        }
     }
 }
 

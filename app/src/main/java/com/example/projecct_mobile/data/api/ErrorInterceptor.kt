@@ -51,8 +51,17 @@ class ErrorInterceptor(
             }
             
             403 -> {
+                // IMPORTANT: Ne pas lancer l'exception ici pour éviter le crash
+                // Laisser la réponse être retournée avec le code 403
+                // L'erreur sera gérée dans le repository (updateActeur)
                 val error = parseError(response)
-                throw ApiException.ForbiddenException(error?.message ?: "Accès refusé")
+                val errorMessage = error?.message ?: "Accès refusé"
+                android.util.Log.e("ErrorInterceptor", "❌❌❌ ERREUR 403: $errorMessage ❌❌❌")
+                android.util.Log.e("ErrorInterceptor", "❌ URL de la requête: ${request.url}")
+                android.util.Log.e("ErrorInterceptor", "❌ Méthode: ${request.method}")
+                // Ne pas lancer l'exception - laisser la réponse être retournée
+                // L'erreur sera gérée dans updateActeur
+                return response
             }
             
             404 -> {

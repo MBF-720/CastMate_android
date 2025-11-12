@@ -27,6 +27,11 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import android.graphics.BitmapFactory
+import android.net.Uri
+import android.content.Context
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
 import com.example.projecct_mobile.data.local.TokenManager
 import com.example.projecct_mobile.data.model.ActeurProfile
 import com.example.projecct_mobile.data.model.ApiException
@@ -39,6 +44,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
+import java.io.File
+import java.io.FileOutputStream
+import java.io.InputStream
 
 /**
  * Page de profil éditable pour les acteurs
@@ -82,12 +90,32 @@ fun ActorProfileScreen(
     // État pour stocker le profil acteur complet et la photo
     var acteurProfile by remember { mutableStateOf<ActeurProfile?>(null) }
     var profileImage by remember { mutableStateOf<ImageBitmap?>(null) }
+    var selectedPhotoFile by remember { mutableStateOf<File?>(null) }
+    var isUploadingPhoto by remember { mutableStateOf(false) }
     
     val acteurRepository = remember(loadData) {
         if (loadData) ActeurRepository() else null
     }
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
+    
+    // File picker pour choisir une nouvelle photo
+    val photoPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri ?: return@rememberLauncherForActivityResult
+        
+        val copiedFile = copyUriToCache(context, uri, "profile_photo")
+        if (copiedFile != null) {
+            selectedPhotoFile = copiedFile
+            // Prévisualiser la nouvelle photo
+            val bitmap = BitmapFactory.decodeFile(copiedFile.absolutePath)
+            if (bitmap != null) {
+                profileImage = bitmap.asImageBitmap()
+                android.util.Log.e("ActorProfileScreen", "✅ Nouvelle photo sélectionnée: ${copiedFile.name}")
+            }
+        }
+    }
     
     LaunchedEffect(Unit, loadData) {
         if (!loadData) return@LaunchedEffect
@@ -152,11 +180,15 @@ fun ActorProfileScreen(
     }
     
     // Télécharger la photo quand acteurProfile est disponible
+    // Utiliser un état pour suivre le dernier photoFileId téléchargé
+    var lastDownloadedPhotoFileId by remember { mutableStateOf<String?>(null) }
+    
     LaunchedEffect(acteurProfile?.media?.photoFileId) {
         val photoFileId = acteurProfile?.media?.photoFileId
-        android.util.Log.e("ActorProfileScreen", "🔵 LaunchedEffect(photoFileId) déclenché: '$photoFileId'")
+        android.util.Log.e("ActorProfileScreen", "🔵 LaunchedEffect(photoFileId) déclenché: '$photoFileId', dernier téléchargé: '$lastDownloadedPhotoFileId'")
         
-        if (!photoFileId.isNullOrBlank() && profileImage == null) {
+        // Télécharger la photo si elle n'a pas encore été téléchargée ou si le photoFileId a changé
+        if (!photoFileId.isNullOrBlank() && photoFileId != lastDownloadedPhotoFileId && selectedPhotoFile == null) {
             try {
                 android.util.Log.e("ActorProfileScreen", "🚀🚀🚀 Téléchargement de la photo: $photoFileId 🚀🚀🚀")
                 val mediaResult = acteurRepository?.downloadMedia(photoFileId)
@@ -174,6 +206,7 @@ fun ActorProfileScreen(
                         if (bitmap != null) {
                             android.util.Log.e("ActorProfileScreen", "🖼️ Bitmap décodé: ${bitmap.width}x${bitmap.height}")
                             profileImage = bitmap.asImageBitmap()
+                            lastDownloadedPhotoFileId = photoFileId
                             android.util.Log.e("ActorProfileScreen", "✅✅✅ Photo chargée avec succès! ✅✅✅")
                         } else {
                             android.util.Log.e("ActorProfileScreen", "❌ Bitmap est null après décodage")
@@ -267,13 +300,99 @@ fun ActorProfileScreen(
                                             )
                                         )
                                         
-                                        val result = acteurRepository?.updateCurrentActeur(updateRequest)
+                                        // IMPORTANT: Ne pas passer l'ID de l'acteur depuis le profil chargé
+                                        // Le backend vérifie que l'ID dans le token (sub) correspond à l'ID de l'acteur dans l'URL
+                                        // Utiliser null pour que updateCurrentActeur utilise l'ID du token (sub) directement
+                                        // Cela garantit que l'ID utilisé correspond exactement à celui dans le token
+                                        android.util.Log.e("ActorProfileScreen", "📞 Mise à jour du profil (utilisation de l'ID du token)")
                                         
-                                        result?.onSuccess {
-                                            successMessage = "Profil mis à jour avec succès"
-                                            isLoading = false
-                                            isEditing = false
-                                            android.util.Log.d("ActorProfileScreen", "Profil mis à jour avec succès")
+                                        // 1. Mettre à jour les informations du profil
+                                        // Passer null pour utiliser l'ID du token (sub) directement
+                                        val result = acteurRepository?.updateCurrentActeur(updateRequest, null)
+                                        
+                                        result?.onSuccess { updatedProfile ->
+                                            android.util.Log.e("ActorProfileScreen", "✅ Profil mis à jour avec succès")
+                                            android.util.Log.e("ActorProfileScreen", "✅ Profil mis à jour - ID depuis réponse: ${updatedProfile.actualId}")
+                                            android.util.Log.e("ActorProfileScreen", "✅ Profil mis à jour - ID depuis id: ${updatedProfile.id}")
+                                            android.util.Log.e("ActorProfileScreen", "✅ Profil mis à jour - ID depuis idAlt: ${updatedProfile.idAlt}")
+                                            
+                                            // Mettre à jour le profil avec la réponse
+                                            acteurProfile = updatedProfile
+                                            
+                                            // IMPORTANT: Utiliser l'ID de l'acteur depuis le profil mis à jour
+                                            // Utiliser le même ID que celui utilisé pour la mise à jour du profil
+                                            // Le backend vérifie que l'ID dans le token (sub) correspond à l'ID de l'acteur dans l'URL
+                                            val uploadId = updatedProfile.actualId
+                                            android.util.Log.e("ActorProfileScreen", "✅✅✅ ID pour l'upload photo depuis le profil: $uploadId ✅✅✅")
+                                            android.util.Log.e("ActorProfileScreen", "📤 ID depuis updatedProfile.actualId: ${updatedProfile.actualId}")
+                                            android.util.Log.e("ActorProfileScreen", "📤 ID depuis updatedProfile.id: ${updatedProfile.id}")
+                                            android.util.Log.e("ActorProfileScreen", "📤 ID depuis updatedProfile.idAlt: ${updatedProfile.idAlt}")
+                                            
+                                            // 2. Si une nouvelle photo a été sélectionnée, l'uploader
+                                            val photoFile = selectedPhotoFile
+                                            if (photoFile != null && uploadId != null && uploadId.isNotBlank()) {
+                                                isUploadingPhoto = true
+                                                try {
+                                                    android.util.Log.e("ActorProfileScreen", "📤📤📤 Upload de la nouvelle photo avec l'ID depuis le profil: $uploadId 📤📤📤")
+                                                    android.util.Log.e("ActorProfileScreen", "📤 ID utilisé pour l'upload: $uploadId")
+                                                    android.util.Log.e("ActorProfileScreen", "📤 Fichier photo: ${photoFile.absolutePath}")
+                                                    android.util.Log.e("ActorProfileScreen", "📤 Taille du fichier: ${photoFile.length()} bytes")
+                                                    android.util.Log.e("ActorProfileScreen", "📤 Fichier existe: ${photoFile.exists()}")
+                                                    
+                                                    if (!photoFile.exists()) {
+                                                        android.util.Log.e("ActorProfileScreen", "❌❌❌ Le fichier photo n'existe pas! ❌❌❌")
+                                                        errorMessage = "Le fichier photo n'existe plus. Veuillez sélectionner une nouvelle photo."
+                                                        isUploadingPhoto = false
+                                                        isLoading = false
+                                                        return@launch
+                                                    }
+                                                    
+                                                    // Utiliser l'ID de l'acteur depuis le profil mis à jour
+                                                    // Ce doit être le même ID que celui utilisé pour la mise à jour du profil
+                                                    android.util.Log.e("ActorProfileScreen", "🚀🚀🚀 Upload avec l'ID depuis le profil: $uploadId 🚀🚀🚀")
+                                                    
+                                                    val photoResult = acteurRepository?.updateProfileMedia(
+                                                        id = uploadId,
+                                                        photoFile = photoFile,
+                                                        documentFile = null
+                                                    )
+                                                    
+                                                    photoResult?.onSuccess { profileWithPhoto ->
+                                                        android.util.Log.e("ActorProfileScreen", "✅✅✅ Photo uploadée avec succès! ✅✅✅")
+                                                        // Mettre à jour le profil avec la nouvelle photo
+                                                        // Cela déclenchera automatiquement le LaunchedEffect pour recharger la photo
+                                                        acteurProfile = profileWithPhoto
+                                                        selectedPhotoFile = null
+                                                        lastDownloadedPhotoFileId = null // Forcer le rechargement
+                                                        isUploadingPhoto = false
+                                                        
+                                                        successMessage = "Profil et photo mis à jour avec succès"
+                                                        isLoading = false
+                                                        isEditing = false
+                                                    }
+                                                    
+                                                    photoResult?.onFailure { photoException ->
+                                                        android.util.Log.e("ActorProfileScreen", "❌ Erreur upload photo: ${photoException.message}")
+                                                        isUploadingPhoto = false
+                                                        // Le profil a été mis à jour, mais la photo n'a pas pu être uploadée
+                                                        successMessage = "Profil mis à jour, mais erreur lors de l'upload de la photo: ${getErrorMessage(photoException)}"
+                                                        isLoading = false
+                                                        isEditing = false
+                                                    }
+                                                } catch (e: Exception) {
+                                                    android.util.Log.e("ActorProfileScreen", "❌ Exception upload photo: ${e.message}", e)
+                                                    isUploadingPhoto = false
+                                                    successMessage = "Profil mis à jour, mais erreur lors de l'upload de la photo: ${e.message}"
+                                                    isLoading = false
+                                                    isEditing = false
+                                                }
+                                            } else {
+                                                // Pas de nouvelle photo, juste mettre à jour le profil
+                                                acteurProfile = updatedProfile
+                                                successMessage = "Profil mis à jour avec succès"
+                                                isLoading = false
+                                                isEditing = false
+                                            }
                                         }
                                         
                                         result?.onFailure { exception ->
@@ -419,7 +538,16 @@ fun ActorProfileScreen(
                         modifier = Modifier
                             .size(100.dp)
                             .clip(CircleShape)
-                            .background(LightGray),
+                            .background(LightGray)
+                            .then(
+                                if (isEditing) {
+                                    Modifier.clickable {
+                                        photoPicker.launch("image/*")
+                                    }
+                                } else {
+                                    Modifier
+                                }
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
                         when {
@@ -432,16 +560,43 @@ fun ActorProfileScreen(
                                         .clip(CircleShape),
                                     contentScale = ContentScale.Crop
                                 )
+                                // Badge pour indiquer qu'on peut changer la photo en mode édition
+                                if (isEditing) {
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.BottomEnd)
+                                            .size(32.dp)
+                                            .clip(CircleShape)
+                                            .background(DarkBlue)
+                                            .padding(4.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.CameraAlt,
+                                            contentDescription = "Changer la photo",
+                                            tint = White,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
                             }
                             else -> {
                                 Icon(
-                                    imageVector = Icons.Default.Person,
+                                    imageVector = if (isEditing) Icons.Default.CameraAlt else Icons.Default.Person,
                                     contentDescription = "Photo de profil",
                                     tint = DarkBlue,
                                     modifier = Modifier.size(60.dp)
                                 )
                             }
                         }
+                    }
+                    if (isEditing && selectedPhotoFile != null) {
+                        Text(
+                            text = "Nouvelle photo sélectionnée",
+                            fontSize = 12.sp,
+                            color = DarkBlue,
+                            modifier = Modifier.padding(top = 108.dp)
+                        )
                     }
                 }
                 
@@ -741,6 +896,46 @@ fun ActorProfileScreen(
             onDismiss = { showComingSoon = null },
             featureName = feature
         )
+    }
+}
+
+/**
+ * Copie un URI vers le cache de l'application
+ */
+private fun copyUriToCache(context: Context, uri: Uri, prefix: String, forcedExtension: String? = null): File? {
+    return try {
+        val resolver = context.contentResolver
+        val mimeType = resolver.getType(uri)
+        val extension = forcedExtension ?: when {
+            mimeType?.contains("png") == true -> ".png"
+            mimeType?.contains("jpg") == true -> ".jpg"
+            mimeType?.contains("jpeg") == true -> ".jpg"
+            else -> ".tmp"
+        }
+
+        val inputStream: InputStream = resolver.openInputStream(uri) ?: return null
+        val file = File(context.cacheDir, "$prefix-${System.currentTimeMillis()}$extension")
+        FileOutputStream(file).use { output ->
+            inputStream.use { input -> input.copyTo(output) }
+        }
+        file
+    } catch (e: Exception) {
+        android.util.Log.e("ActorProfileScreen", "Erreur lors de la copie du fichier: ${e.message}", e)
+        null
+    }
+}
+
+/**
+ * Résout le nom de fichier depuis un URI
+ */
+private fun resolveFileName(context: Context, uri: Uri): String? {
+    return context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+        val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+        if (nameIndex != -1 && cursor.moveToFirst()) {
+            cursor.getString(nameIndex)
+        } else {
+            null
+        }
     }
 }
 
