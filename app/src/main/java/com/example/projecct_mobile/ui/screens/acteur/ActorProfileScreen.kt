@@ -93,6 +93,12 @@ fun ActorProfileScreen(
     var selectedPhotoFile by remember { mutableStateOf<File?>(null) }
     var isUploadingPhoto by remember { mutableStateOf(false) }
     
+    // État pour le CV PDF
+    var selectedDocumentFile by remember { mutableStateOf<File?>(null) }
+    var isUploadingDocument by remember { mutableStateOf(false) }
+    var isDownloadingDocument by remember { mutableStateOf(false) }
+    var lastDownloadedDocumentFileId by remember { mutableStateOf<String?>(null) }
+    
     val acteurRepository = remember(loadData) {
         if (loadData) ActeurRepository() else null
     }
@@ -114,6 +120,23 @@ fun ActorProfileScreen(
                 profileImage = bitmap.asImageBitmap()
                 android.util.Log.e("ActorProfileScreen", "✅ Nouvelle photo sélectionnée: ${copiedFile.name}")
             }
+        }
+    }
+    
+    // File picker pour choisir un nouveau CV PDF
+    val pdfPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri ?: return@rememberLauncherForActivityResult
+        
+        val copiedFile = copyUriToCache(context, uri, "cv_document", ".pdf")
+        if (copiedFile != null) {
+            selectedDocumentFile = copiedFile
+            android.util.Log.e("ActorProfileScreen", "✅ Nouveau CV PDF sélectionné: ${copiedFile.name}")
+            android.util.Log.e("ActorProfileScreen", "📄 Taille du fichier: ${copiedFile.length()} bytes")
+        } else {
+            android.util.Log.e("ActorProfileScreen", "❌ Impossible de copier le fichier PDF")
+            errorMessage = "Impossible de copier le fichier PDF. Veuillez réessayer."
         }
     }
     
@@ -328,66 +351,100 @@ fun ActorProfileScreen(
                                             android.util.Log.e("ActorProfileScreen", "📤 ID depuis updatedProfile.id: ${updatedProfile.id}")
                                             android.util.Log.e("ActorProfileScreen", "📤 ID depuis updatedProfile.idAlt: ${updatedProfile.idAlt}")
                                             
-                                            // 2. Si une nouvelle photo a été sélectionnée, l'uploader
+                                            // 2. Si une nouvelle photo ou un nouveau document PDF a été sélectionné, les uploader
                                             val photoFile = selectedPhotoFile
-                                            if (photoFile != null && uploadId != null && uploadId.isNotBlank()) {
-                                                isUploadingPhoto = true
+                                            val documentFile = selectedDocumentFile
+                                            
+                                            // Vérifier si au moins un fichier a été sélectionné
+                                            if ((photoFile != null || documentFile != null) && uploadId != null && uploadId.isNotBlank()) {
+                                                // Uploader les fichiers
+                                                if (photoFile != null) isUploadingPhoto = true
+                                                if (documentFile != null) isUploadingDocument = true
+                                                
                                                 try {
-                                                    android.util.Log.e("ActorProfileScreen", "📤📤📤 Upload de la nouvelle photo avec l'ID depuis le profil: $uploadId 📤📤📤")
-                                                    android.util.Log.e("ActorProfileScreen", "📤 ID utilisé pour l'upload: $uploadId")
-                                                    android.util.Log.e("ActorProfileScreen", "📤 Fichier photo: ${photoFile.absolutePath}")
-                                                    android.util.Log.e("ActorProfileScreen", "📤 Taille du fichier: ${photoFile.length()} bytes")
-                                                    android.util.Log.e("ActorProfileScreen", "📤 Fichier existe: ${photoFile.exists()}")
-                                                    
-                                                    if (!photoFile.exists()) {
+                                                    // Vérifier que les fichiers existent
+                                                    if (photoFile != null && !photoFile.exists()) {
                                                         android.util.Log.e("ActorProfileScreen", "❌❌❌ Le fichier photo n'existe pas! ❌❌❌")
                                                         errorMessage = "Le fichier photo n'existe plus. Veuillez sélectionner une nouvelle photo."
                                                         isUploadingPhoto = false
+                                                        isUploadingDocument = false
                                                         isLoading = false
                                                         return@launch
                                                     }
                                                     
-                                                    // Utiliser l'ID de l'acteur depuis le profil mis à jour
-                                                    // Ce doit être le même ID que celui utilisé pour la mise à jour du profil
-                                                    android.util.Log.e("ActorProfileScreen", "🚀🚀🚀 Upload avec l'ID depuis le profil: $uploadId 🚀🚀🚀")
+                                                    if (documentFile != null && !documentFile.exists()) {
+                                                        android.util.Log.e("ActorProfileScreen", "❌❌❌ Le fichier PDF n'existe pas! ❌❌❌")
+                                                        errorMessage = "Le fichier PDF n'existe plus. Veuillez sélectionner un nouveau fichier."
+                                                        isUploadingPhoto = false
+                                                        isUploadingDocument = false
+                                                        isLoading = false
+                                                        return@launch
+                                                    }
                                                     
-                                                    val photoResult = acteurRepository?.updateProfileMedia(
+                                                    android.util.Log.e("ActorProfileScreen", "📤📤📤 Upload des médias avec l'ID: $uploadId 📤📤📤")
+                                                    android.util.Log.e("ActorProfileScreen", "📤 Photo: ${photoFile != null}")
+                                                    android.util.Log.e("ActorProfileScreen", "📤 Document: ${documentFile != null}")
+                                                    
+                                                    // Uploader la photo et/ou le document en une seule requête
+                                                    val mediaResult = acteurRepository?.updateProfileMedia(
                                                         id = uploadId,
                                                         photoFile = photoFile,
-                                                        documentFile = null
+                                                        documentFile = documentFile
                                                     )
                                                     
-                                                    photoResult?.onSuccess { profileWithPhoto ->
-                                                        android.util.Log.e("ActorProfileScreen", "✅✅✅ Photo uploadée avec succès! ✅✅✅")
-                                                        // Mettre à jour le profil avec la nouvelle photo
-                                                        // Cela déclenchera automatiquement le LaunchedEffect pour recharger la photo
-                                                        acteurProfile = profileWithPhoto
-                                                        selectedPhotoFile = null
-                                                        lastDownloadedPhotoFileId = null // Forcer le rechargement
-                                                        isUploadingPhoto = false
+                                                    mediaResult?.onSuccess { profileWithMedia ->
+                                                        android.util.Log.e("ActorProfileScreen", "✅✅✅ Médias uploadés avec succès! ✅✅✅")
                                                         
-                                                        successMessage = "Profil et photo mis à jour avec succès"
+                                                        // Mettre à jour le profil avec les nouveaux médias
+                                                        acteurProfile = profileWithMedia
+                                                        
+                                                        // Réinitialiser les états
+                                                        selectedPhotoFile = null
+                                                        selectedDocumentFile = null
+                                                        lastDownloadedPhotoFileId = null // Forcer le rechargement de la photo
+                                                        lastDownloadedDocumentFileId = null // Forcer le rechargement du document
+                                                        isUploadingPhoto = false
+                                                        isUploadingDocument = false
+                                                        
+                                                        // Message de succès
+                                                        val filesUpdated = mutableListOf<String>()
+                                                        if (photoFile != null) filesUpdated.add("photo")
+                                                        if (documentFile != null) filesUpdated.add("CV PDF")
+                                                        successMessage = "Profil et ${filesUpdated.joinToString(", ")} mis à jour avec succès"
+                                                        
                                                         isLoading = false
                                                         isEditing = false
                                                     }
                                                     
-                                                    photoResult?.onFailure { photoException ->
-                                                        android.util.Log.e("ActorProfileScreen", "❌ Erreur upload photo: ${photoException.message}")
+                                                    mediaResult?.onFailure { mediaException ->
+                                                        android.util.Log.e("ActorProfileScreen", "❌ Erreur upload médias: ${mediaException.message}")
                                                         isUploadingPhoto = false
-                                                        // Le profil a été mis à jour, mais la photo n'a pas pu être uploadée
-                                                        successMessage = "Profil mis à jour, mais erreur lors de l'upload de la photo: ${getErrorMessage(photoException)}"
+                                                        isUploadingDocument = false
+                                                        
+                                                        // Message d'erreur
+                                                        val filesAttempted = mutableListOf<String>()
+                                                        if (photoFile != null) filesAttempted.add("photo")
+                                                        if (documentFile != null) filesAttempted.add("CV PDF")
+                                                        successMessage = "Profil mis à jour, mais erreur lors de l'upload du/de la ${filesAttempted.joinToString("/")}: ${getErrorMessage(mediaException)}"
+                                                        
                                                         isLoading = false
                                                         isEditing = false
                                                     }
                                                 } catch (e: Exception) {
-                                                    android.util.Log.e("ActorProfileScreen", "❌ Exception upload photo: ${e.message}", e)
+                                                    android.util.Log.e("ActorProfileScreen", "❌ Exception upload médias: ${e.message}", e)
                                                     isUploadingPhoto = false
-                                                    successMessage = "Profil mis à jour, mais erreur lors de l'upload de la photo: ${e.message}"
+                                                    isUploadingDocument = false
+                                                    
+                                                    val filesAttempted = mutableListOf<String>()
+                                                    if (photoFile != null) filesAttempted.add("photo")
+                                                    if (documentFile != null) filesAttempted.add("CV PDF")
+                                                    successMessage = "Profil mis à jour, mais erreur lors de l'upload du/de la ${filesAttempted.joinToString("/")}: ${e.message}"
+                                                    
                                                     isLoading = false
                                                     isEditing = false
                                                 }
                                             } else {
-                                                // Pas de nouvelle photo, juste mettre à jour le profil
+                                                // Pas de nouveaux fichiers, juste mettre à jour le profil
                                                 acteurProfile = updatedProfile
                                                 successMessage = "Profil mis à jour avec succès"
                                                 isLoading = false
@@ -848,6 +905,176 @@ fun ActorProfileScreen(
                     )
                 )
                 
+                // Section CV PDF
+                Text(
+                    text = "CV PDF",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = DarkBlue,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+                
+                val documentFileId = acteurProfile?.media?.documentFileId
+                val hasDocument = !documentFileId.isNullOrBlank()
+                
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (isEditing) {
+                                Modifier.clickable {
+                                    pdfPicker.launch("application/pdf")
+                                }
+                            } else if (hasDocument) {
+                                Modifier.clickable {
+                                    // Télécharger et ouvrir le PDF
+                                    scope.launch {
+                                        if (acteurRepository == null) return@launch
+                                        isDownloadingDocument = true
+                                        try {
+                                            val documentResult = acteurRepository.downloadMedia(documentFileId!!)
+                                            documentResult.onSuccess { bytes ->
+                                                if (bytes != null && bytes.isNotEmpty()) {
+                                                    // Sauvegarder le PDF temporairement et l'ouvrir
+                                                    val pdfFile = File(context.cacheDir, "cv_${System.currentTimeMillis()}.pdf")
+                                                    FileOutputStream(pdfFile).use { output ->
+                                                        output.write(bytes)
+                                                    }
+                                                    
+                                                    // Ouvrir le PDF avec un Intent
+                                                    // Utiliser FileProvider pour partager le fichier de manière sécurisée
+                                                    try {
+                                                        // Utiliser FileProvider (obligatoire pour Android 7+)
+                                                        val uri = androidx.core.content.FileProvider.getUriForFile(
+                                                            context,
+                                                            "${context.packageName}.fileprovider",
+                                                            pdfFile
+                                                        )
+                                                        
+                                                        android.util.Log.d("ActorProfileScreen", "✅ URI FileProvider créé: $uri")
+                                                        
+                                                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                                                            setDataAndType(uri, "application/pdf")
+                                                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                        }
+                                                        
+                                                        // Créer un chooser pour permettre à l'utilisateur de choisir l'application
+                                                        val chooserIntent = android.content.Intent.createChooser(intent, "Ouvrir le CV avec")
+                                                        chooserIntent.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                        
+                                                        // Accorder les permissions de lecture à toutes les applications qui peuvent gérer l'Intent
+                                                        // Cela est nécessaire pour que FileProvider fonctionne correctement avec createChooser
+                                                        val resInfoList = context.packageManager.queryIntentActivities(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+                                                        for (resolveInfo in resInfoList) {
+                                                            val packageName = resolveInfo.activityInfo.packageName
+                                                            context.grantUriPermission(
+                                                                packageName,
+                                                                uri,
+                                                                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                                            )
+                                                        }
+                                                        
+                                                        context.startActivity(chooserIntent)
+                                                        android.util.Log.d("ActorProfileScreen", "✅ PDF ouvert avec succès")
+                                                    } catch (e: android.content.ActivityNotFoundException) {
+                                                        android.util.Log.e("ActorProfileScreen", "❌ Aucune application pour ouvrir le PDF: ${e.message}")
+                                                        errorMessage = "Aucune application pour ouvrir le PDF. Veuillez installer un lecteur PDF."
+                                                    } catch (e: Exception) {
+                                                        android.util.Log.e("ActorProfileScreen", "❌ Impossible d'ouvrir le PDF: ${e.message}", e)
+                                                        errorMessage = "Impossible d'ouvrir le PDF: ${e.message}"
+                                                    }
+                                                } else {
+                                                    errorMessage = "Le fichier PDF est vide ou introuvable."
+                                                }
+                                                isDownloadingDocument = false
+                                            }
+                                            documentResult.onFailure { exception ->
+                                                android.util.Log.e("ActorProfileScreen", "❌ Erreur téléchargement PDF: ${exception.message}")
+                                                errorMessage = "Erreur lors du téléchargement du CV: ${getErrorMessage(exception)}"
+                                                isDownloadingDocument = false
+                                            }
+                                        } catch (e: Exception) {
+                                            android.util.Log.e("ActorProfileScreen", "❌ Exception téléchargement PDF: ${e.message}", e)
+                                            errorMessage = "Erreur lors du téléchargement du CV: ${e.message}"
+                                            isDownloadingDocument = false
+                                        }
+                                    }
+                                }
+                            } else {
+                                Modifier
+                            }
+                        ),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (hasDocument) LightBlue else LightGray
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (hasDocument) Icons.Default.Description else Icons.Default.UploadFile,
+                                contentDescription = "CV PDF",
+                                tint = DarkBlue
+                            )
+                            Column {
+                                Text(
+                                    text = if (hasDocument) "CV téléchargé" else if (isEditing) "Télécharger votre CV (PDF)" else "Aucun CV",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = DarkBlue
+                                )
+                                if (hasDocument) {
+                                    Text(
+                                        text = "Fichier PDF disponible",
+                                        fontSize = 12.sp,
+                                        color = GrayBorder,
+                                        modifier = Modifier.padding(top = 4.dp)
+                                    )
+                                }
+                            }
+                        }
+                        
+                        if (isDownloadingDocument) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                color = DarkBlue,
+                                strokeWidth = 2.dp
+                            )
+                        } else if (hasDocument && !isEditing) {
+                            Icon(
+                                imageVector = Icons.Default.Visibility,
+                                contentDescription = "Voir le CV",
+                                tint = DarkBlue
+                            )
+                        } else if (isEditing) {
+                            Icon(
+                                imageVector = if (hasDocument) Icons.Default.Edit else Icons.Default.Add,
+                                contentDescription = if (hasDocument) "Modifier le CV" else "Ajouter un CV",
+                                tint = DarkBlue
+                            )
+                        }
+                        
+                        if (selectedDocumentFile != null) {
+                            Text(
+                                text = "Nouveau fichier sélectionné",
+                                fontSize = 12.sp,
+                                color = DarkBlue,
+                                modifier = Modifier.padding(start = 8.dp)
+                            )
+                        }
+                    }
+                }
+                
                 // Bouton de déconnexion
                 Button(
                     onClick = onLogoutClick,
@@ -910,6 +1137,8 @@ private fun copyUriToCache(context: Context, uri: Uri, prefix: String, forcedExt
             mimeType?.contains("png") == true -> ".png"
             mimeType?.contains("jpg") == true -> ".jpg"
             mimeType?.contains("jpeg") == true -> ".jpg"
+            mimeType?.contains("pdf") == true -> ".pdf"
+            mimeType?.contains("application/pdf") == true -> ".pdf"
             else -> ".tmp"
         }
 
@@ -918,6 +1147,7 @@ private fun copyUriToCache(context: Context, uri: Uri, prefix: String, forcedExt
         FileOutputStream(file).use { output ->
             inputStream.use { input -> input.copyTo(output) }
         }
+        android.util.Log.d("ActorProfileScreen", "✅ Fichier copié vers: ${file.absolutePath}, taille: ${file.length()} bytes")
         file
     } catch (e: Exception) {
         android.util.Log.e("ActorProfileScreen", "Erreur lors de la copie du fichier: ${e.message}", e)
