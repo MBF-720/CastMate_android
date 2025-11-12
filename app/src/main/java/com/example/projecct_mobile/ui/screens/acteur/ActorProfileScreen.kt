@@ -1,5 +1,6 @@
 package com.example.projecct_mobile.ui.screens.acteur
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -16,13 +17,18 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.graphics.BitmapFactory
 import com.example.projecct_mobile.data.local.TokenManager
+import com.example.projecct_mobile.data.model.ActeurProfile
 import com.example.projecct_mobile.data.model.ApiException
 import com.example.projecct_mobile.data.repository.ActeurRepository
 import com.example.projecct_mobile.ui.components.ComingSoonAlert
@@ -30,6 +36,9 @@ import com.example.projecct_mobile.ui.components.ErrorMessage
 import com.example.projecct_mobile.ui.components.getErrorMessage
 import com.example.projecct_mobile.ui.theme.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 
 /**
  * Page de profil éditable pour les acteurs
@@ -70,6 +79,10 @@ fun ActorProfileScreen(
     var youtube by remember { mutableStateOf(initialYoutube) }
     var tiktok by remember { mutableStateOf(initialTiktok) }
     
+    // État pour stocker le profil acteur complet et la photo
+    var acteurProfile by remember { mutableStateOf<ActeurProfile?>(null) }
+    var profileImage by remember { mutableStateOf<ImageBitmap?>(null) }
+    
     val acteurRepository = remember(loadData) {
         if (loadData) ActeurRepository() else null
     }
@@ -83,16 +96,24 @@ fun ActorProfileScreen(
             errorMessage = null
             
             try {
+                android.util.Log.e("ActorProfileScreen", "=== Début du chargement du profil acteur ===")
                 val result = acteurRepository?.getCurrentActeur()
                 
                 result?.onSuccess { acteur ->
-                    nom = acteur.nom
-                    prenom = acteur.prenom
-                    email = acteur.email
-                    telephone = acteur.tel
-                    age = acteur.age.toString()
-                    gouvernorat = acteur.gouvernorat
-                    experience = acteur.experience.toString()
+                    android.util.Log.e("ActorProfileScreen", "✅ Profil acteur chargé: ${acteur.nom} ${acteur.prenom}")
+                    android.util.Log.e("ActorProfileScreen", "✅ photoFileId: '${acteur.media?.photoFileId}'")
+                    
+                    // Stocker le profil acteur complet
+                    acteurProfile = acteur
+                    
+                    // Mettre à jour les champs individuels
+                    nom = acteur.nom ?: ""
+                    prenom = acteur.prenom ?: ""
+                    email = acteur.email ?: ""
+                    telephone = acteur.tel ?: ""
+                    age = acteur.age?.toString() ?: ""
+                    gouvernorat = acteur.gouvernorat ?: ""
+                    experience = acteur.experience?.toString() ?: ""
                     instagram = acteur.socialLinks?.instagram ?: ""
                     youtube = acteur.socialLinks?.youtube ?: ""
                     tiktok = acteur.socialLinks?.tiktok ?: ""
@@ -100,7 +121,7 @@ fun ActorProfileScreen(
                 }
                 
                 result?.onFailure { exception ->
-                    android.util.Log.w("ActorProfileScreen", "Impossible de charger le profil acteur: ${exception.message}")
+                    android.util.Log.e("ActorProfileScreen", "❌ Impossible de charger le profil acteur: ${exception.message}")
                     try {
                         val tokenManager = TokenManager(context)
                         val emailValue = tokenManager.getUserEmailSync()
@@ -114,7 +135,7 @@ fun ActorProfileScreen(
                     isLoading = false
                 }
             } catch (e: Exception) {
-                android.util.Log.e("ActorProfileScreen", "Erreur lors du chargement: ${e.message}", e)
+                android.util.Log.e("ActorProfileScreen", "❌ Erreur lors du chargement: ${e.message}", e)
                 try {
                     val tokenManager = TokenManager(context)
                     val emailValue = tokenManager.getUserEmailSync()
@@ -126,6 +147,49 @@ fun ActorProfileScreen(
                 }
                 errorMessage = null
                 isLoading = false
+            }
+        }
+    }
+    
+    // Télécharger la photo quand acteurProfile est disponible
+    LaunchedEffect(acteurProfile?.media?.photoFileId) {
+        val photoFileId = acteurProfile?.media?.photoFileId
+        android.util.Log.e("ActorProfileScreen", "🔵 LaunchedEffect(photoFileId) déclenché: '$photoFileId'")
+        
+        if (!photoFileId.isNullOrBlank() && profileImage == null) {
+            try {
+                android.util.Log.e("ActorProfileScreen", "🚀🚀🚀 Téléchargement de la photo: $photoFileId 🚀🚀🚀")
+                val mediaResult = acteurRepository?.downloadMedia(photoFileId)
+                android.util.Log.e("ActorProfileScreen", "📥 Résultat téléchargement: ${mediaResult?.isSuccess}")
+                
+                if (mediaResult?.isSuccess == true) {
+                    val bytes = mediaResult.getOrNull()
+                    android.util.Log.e("ActorProfileScreen", "📦 Bytes reçus: ${bytes?.size ?: 0} bytes")
+                    
+                    if (bytes != null && bytes.isNotEmpty()) {
+                        val bitmap = withContext(Dispatchers.IO) {
+                            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                        }
+                        
+                        if (bitmap != null) {
+                            android.util.Log.e("ActorProfileScreen", "🖼️ Bitmap décodé: ${bitmap.width}x${bitmap.height}")
+                            profileImage = bitmap.asImageBitmap()
+                            android.util.Log.e("ActorProfileScreen", "✅✅✅ Photo chargée avec succès! ✅✅✅")
+                        } else {
+                            android.util.Log.e("ActorProfileScreen", "❌ Bitmap est null après décodage")
+                        }
+                    } else {
+                        android.util.Log.e("ActorProfileScreen", "⚠️ Bytes vides ou null")
+                    }
+                } else {
+                    val exception = mediaResult?.exceptionOrNull()
+                    android.util.Log.e("ActorProfileScreen", "❌ Erreur téléchargement: ${exception?.message}", exception)
+                }
+            } catch (e: CancellationException) {
+                android.util.Log.e("ActorProfileScreen", "⚠️ Téléchargement annulé")
+            } catch (e: Exception) {
+                android.util.Log.e("ActorProfileScreen", "❌ Exception téléchargement: ${e.message}", e)
+                e.printStackTrace()
             }
         }
     }
@@ -268,13 +332,13 @@ fun ActorProfileScreen(
                             try {
                                 val result = acteurRepository.getCurrentActeur()
                                 result.onSuccess { acteur ->
-                                    nom = acteur.nom
-                                    prenom = acteur.prenom
-                                    email = acteur.email
-                                    telephone = acteur.tel
-                                    age = acteur.age.toString()
-                                    gouvernorat = acteur.gouvernorat
-                                    experience = acteur.experience.toString()
+                                    nom = acteur.nom ?: ""
+                                    prenom = acteur.prenom ?: ""
+                                    email = acteur.email ?: ""
+                                    telephone = acteur.tel ?: ""
+                                    age = acteur.age?.toString() ?: ""
+                                    gouvernorat = acteur.gouvernorat ?: ""
+                                    experience = acteur.experience?.toString() ?: ""
                                     instagram = acteur.socialLinks?.instagram ?: ""
                                     youtube = acteur.socialLinks?.youtube ?: ""
                                     tiktok = acteur.socialLinks?.tiktok ?: ""
@@ -358,12 +422,26 @@ fun ActorProfileScreen(
                             .background(LightGray),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Person,
-                            contentDescription = "Photo de profil",
-                            tint = DarkBlue,
-                            modifier = Modifier.size(60.dp)
-                        )
+                        when {
+                            profileImage != null -> {
+                                Image(
+                                    bitmap = profileImage!!,
+                                    contentDescription = "Photo de profil",
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(CircleShape),
+                                    contentScale = ContentScale.Crop
+                                )
+                            }
+                            else -> {
+                                Icon(
+                                    imageVector = Icons.Default.Person,
+                                    contentDescription = "Photo de profil",
+                                    tint = DarkBlue,
+                                    modifier = Modifier.size(60.dp)
+                                )
+                            }
+                        }
                     }
                 }
                 

@@ -201,6 +201,19 @@ tokenManager.clearToken()          // Supprimer
 4. **Profil utilisateur** : Créer un écran de profil utilisateur
 5. **Gestion des favoris** : Implémenter la fonctionnalité de favoris côté API
 
+## Gestion des médias GridFS (Android)
+
+- Les routes multipart exigent toujours un champ `payload` (JSON sérialisé) et des fichiers optionnels (`photo`, `document`, `photos`…).
+- `AuthRepository.signupActeur()` sérialise automatiquement le payload et ajoute `photoFile` / `documentFile`.
+- `ActeurRepository` offre :
+  - `updateProfileMedia()` pour mettre à jour photo de profil et CV,
+  - `addGalleryPhotos()` / `deleteGalleryPhoto()` pour la galerie,
+  - `downloadMedia()` pour récupérer un fichier GridFS sous forme de `ByteArray`.
+- `ProfileScreen` consomme `media.photoFileId` et affiche la photo via `downloadMedia()`.
+- `CastingRepository.createCasting()` et `updateCasting()` acceptent un fichier `affiche` optionnel ainsi qu’un champ `prix`.
+
+> Pensez à fournir un `File` local valide pour chaque pièce jointe afin que Retrofit puisse créer les `MultipartBody.Part`.
+
 ## Fichiers de référence
 
 - **Guide d'utilisation complet** : `API_USAGE_GUIDE.md`

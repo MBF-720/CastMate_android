@@ -6,6 +6,7 @@ import com.example.projecct_mobile.data.repository.CastingRepository
 import com.example.projecct_mobile.data.repository.UserRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import java.io.File
 
 /**
  * Fichier d'exemples d'utilisation de l'API
@@ -27,6 +28,9 @@ fun exampleSignupActeur(scope: CoroutineScope) {
     val authRepository = AuthRepository()
     
     scope.launch {
+        val photo = File("/storage/emulated/0/Pictures/photo-profil.jpg")
+        val document = File("/storage/emulated/0/Download/cv.pdf")
+
         val result = authRepository.signupActeur(
             nom = "Dupont",
             prenom = "Jean",
@@ -36,9 +40,9 @@ fun exampleSignupActeur(scope: CoroutineScope) {
             age = 25,
             gouvernorat = "Tunis",
             experience = 5,
-            cvPdf = "https://example.com/cv.pdf",
             centresInteret = listOf("Théâtre", "Cinéma", "Télévision"),
-            photoProfil = "https://example.com/photo.jpg",
+            photoFile = photo.takeIf { it.exists() },
+            documentFile = document.takeIf { it.exists() },
             instagram = "https://instagram.com/acteur",
             youtube = "https://youtube.com/@acteur",
             tiktok = "https://tiktok.com/@acteur"

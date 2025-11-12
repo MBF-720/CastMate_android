@@ -9,7 +9,15 @@ import com.example.projecct_mobile.data.model.AuthResponse
 import com.example.projecct_mobile.data.model.ApiException
 import com.example.projecct_mobile.data.model.SocialLinks
 import com.example.projecct_mobile.data.model.GoogleLoginRequest
+import com.google.gson.Gson
 import kotlinx.coroutines.flow.Flow
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.File
+import java.net.URLConnection
 
 /**
  * Repository pour gérer l'authentification
@@ -19,26 +27,13 @@ class AuthRepository {
     private val authService: AuthApiService = ApiClient.getAuthService()
     private val tokenManager = ApiClient.getTokenManager()
     
+    private val gson: Gson = Gson()
+
     /**
-     * Inscription d'un nouvel acteur
-     * POST /acteur/signup
-     * 
-     * @param nom Nom de famille (obligatoire)
-     * @param prenom Prénom (obligatoire)
-     * @param email Email (obligatoire)
-     * @param motDePasse Mot de passe (obligatoire)
-     * @param tel Numéro de téléphone (obligatoire)
-     * @param age Âge (obligatoire)
-     * @param gouvernorat Gouvernorat (obligatoire)
-     * @param experience Années d'expérience (obligatoire)
-     * @param cvPdf URL du CV PDF (optionnel)
-     * @param centresInteret Liste des centres d'intérêt (optionnel)
-     * @param photoProfil URL de la photo de profil (optionnel)
-     * @param instagram URL Instagram (optionnel)
-     * @param youtube URL YouTube (optionnel)
-     * @param tiktok URL TikTok (optionnel)
-     * 
-     * @return Result<AuthResponse> avec le token JWT et les informations utilisateur
+     * Inscription d'un nouvel acteur via multipart.
+     *
+     * @param photoFile Fichier image JPEG/PNG optionnel pour la photo de profil.
+     * @param documentFile Fichier PDF optionnel pour le CV.
      */
     suspend fun signupActeur(
         nom: String,
@@ -49,9 +44,9 @@ class AuthRepository {
         age: Int,
         gouvernorat: String,
         experience: Int,
-        cvPdf: String? = null,
         centresInteret: List<String>? = null,
-        photoProfil: String? = null,
+        photoFile: File? = null,
+        documentFile: File? = null,
         instagram: String? = null,
         youtube: String? = null,
         tiktok: String? = null
@@ -76,13 +71,16 @@ class AuthRepository {
                 age = age,
                 gouvernorat = gouvernorat,
                 experience = experience,
-                cvPdf = cvPdf,
                 centresInteret = centresInteret,
-                photoProfil = photoProfil,
                 socialLinks = socialLinks
             )
-            
-            val response = authService.signupActeur(request)
+
+            val payloadJson = gson.toJson(request)
+            val payloadBody = payloadJson.toRequestBody("application/json; charset=utf-8".toMediaType())
+            val photoPart = photoFile?.let { createFilePart("photo", it) }
+            val documentPart = documentFile?.let { createFilePart("document", it, "application/pdf") }
+
+            val response = authService.signupActeur(payloadBody, photoPart, documentPart)
             
             if (response.isSuccessful && response.body() != null) {
                 val authResponse = response.body()!!
@@ -385,6 +383,20 @@ class AuthRepository {
      */
     fun getToken(): Flow<String?> {
         return tokenManager.token
+    }
+
+    private fun createFilePart(
+        fieldName: String,
+        file: File,
+        forcedMimeType: String? = null
+    ): MultipartBody.Part {
+        val mimeType = forcedMimeType ?: guessMimeType(file) ?: "application/octet-stream"
+        val body = file.asRequestBody(mimeType.toMediaTypeOrNull())
+        return MultipartBody.Part.createFormData(fieldName, file.name, body)
+    }
+
+    private fun guessMimeType(file: File): String? {
+        return URLConnection.guessContentTypeFromName(file.name)
     }
 }
 

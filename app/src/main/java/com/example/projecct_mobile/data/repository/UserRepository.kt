@@ -40,6 +40,8 @@ class UserRepository {
     
     /**
      * Récupère le profil de l'utilisateur connecté sans dépendre d'une route /users/me absente.
+     * Pour les acteurs, retourne un profil local construit à partir du token (pas d'appel API).
+     * Pour les recruteurs, retourne un profil local également.
      */
     suspend fun getCurrentUser(): Result<User> {
         val tokenManager = ApiClient.getTokenManager()
@@ -74,38 +76,16 @@ class UserRepository {
             )
         }
 
-        buildLocalProfile()?.let { local ->
-            if (roleEnum == UserRole.RECRUTEUR) {
-                return Result.success(local)
-            }
+        // Pour les acteurs et recruteurs, retourner directement le profil local
+        // construit à partir du token (pas besoin d'appeler /users/{id} qui n'existe pas)
+        val localProfile = buildLocalProfile()
+        if (localProfile != null) {
+            // Pour les acteurs, on va récupérer les détails via /acteur/{id} de toute façon
+            // Pour les recruteurs, on a déjà toutes les informations nécessaires dans le token
+            return Result.success(localProfile)
         }
 
-        if (!storedId.isNullOrBlank()) {
-            val result = getUserById(storedId)
-            if (result.isSuccess) {
-                result.getOrNull()?.let { user ->
-                    tokenManager.saveUserInfo(
-                        user.actualId,
-                        user.email,
-                        user.role?.name,
-                        user.nom,
-                        user.prenom,
-                        storedPhone,
-                        user.bio
-                    )
-                }
-                return result
-            } else {
-                val local = buildLocalProfile()
-                if (local != null) {
-                    return Result.success(local)
-                }
-                return result
-            }
-        }
-
-        buildLocalProfile()?.let { return Result.success(it) }
-
+        // Si on ne peut pas construire un profil local, retourner une erreur
         return Result.failure(
             ApiException.NotFoundException("Profil utilisateur indisponible")
         )

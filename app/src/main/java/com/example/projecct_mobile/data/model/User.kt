@@ -33,7 +33,10 @@ data class User(
     
     @SerializedName("photoProfil")
     val photoProfil: String? = null,
-    
+
+    @SerializedName("media")
+    val media: UserMedia? = null,
+
     @SerializedName("createdAt")
     val createdAt: String? = null,
     

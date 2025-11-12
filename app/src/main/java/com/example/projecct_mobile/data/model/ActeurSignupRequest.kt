@@ -30,16 +30,10 @@ data class ActeurSignupRequest(
     
     @SerializedName("experience")
     val experience: Int,
-    
-    @SerializedName("cvPdf")
-    val cvPdf: String? = null,
-    
+
     @SerializedName("centresInteret")
     val centresInteret: List<String>? = null,
-    
-    @SerializedName("photoProfil")
-    val photoProfil: String? = null,
-    
+
     @SerializedName("socialLinks")
     val socialLinks: SocialLinks? = null
 )

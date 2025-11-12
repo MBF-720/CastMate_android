@@ -34,6 +34,12 @@ data class Casting(
     @SerializedName("remuneration")
     val remuneration: String? = null, // Ex: "1000€/jour"
     
+    @SerializedName("prix")
+    val prix: Double? = null,
+
+    @SerializedName("afficheFileId")
+    val afficheFileId: String? = null,
+
     @SerializedName("conditions")
     val conditions: String? = null,
     
@@ -76,7 +82,10 @@ data class CreateCastingRequest(
     
     @SerializedName("remuneration")
     val remuneration: String? = null,
-    
+ 
+    @SerializedName("prix")
+    val prix: Double? = null,
+
     @SerializedName("conditions")
     val conditions: String? = null
 )

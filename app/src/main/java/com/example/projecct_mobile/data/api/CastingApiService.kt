@@ -1,7 +1,8 @@
 package com.example.projecct_mobile.data.api
 
 import com.example.projecct_mobile.data.model.Casting
-import com.example.projecct_mobile.data.model.CreateCastingRequest
+import okhttp3.MultipartBody
+import okhttp3.RequestBody
 import retrofit2.Response
 import retrofit2.http.*
 
@@ -43,9 +44,11 @@ interface CastingApiService {
      *   "conditions": "Disponibilité totale requise"
      * }
      */
+    @Multipart
     @POST("castings")
     suspend fun createCasting(
-        @Body request: CreateCastingRequest
+        @Part("payload") payload: RequestBody,
+        @Part affiche: MultipartBody.Part? = null
     ): Response<Casting>
     
     /**
@@ -53,10 +56,12 @@ interface CastingApiService {
      * PATCH /castings/:id
      * Nécessite un token JWT
      */
+    @Multipart
     @PATCH("castings/{id}")
     suspend fun updateCasting(
         @Path("id") id: String,
-        @Body request: CreateCastingRequest
+        @Part("payload") payload: RequestBody,
+        @Part affiche: MultipartBody.Part? = null
     ): Response<Casting>
     
     /**

@@ -1,25 +1,65 @@
 package com.example.projecct_mobile.ui.screens.auth.signup
 
+import android.content.Context
+import android.net.Uri
 import android.util.Patterns
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.UploadFile
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.projecct_mobile.ui.theme.*
+import androidx.compose.ui.text.input.KeyboardType
+import com.example.projecct_mobile.ui.theme.Black
+import com.example.projecct_mobile.ui.theme.DarkBlue
+import com.example.projecct_mobile.ui.theme.DarkBlueLight
+import com.example.projecct_mobile.ui.theme.GrayBorder
+import com.example.projecct_mobile.ui.theme.LightBlue
+import com.example.projecct_mobile.ui.theme.LightGray
+import com.example.projecct_mobile.ui.theme.Projecct_MobileTheme
+import com.example.projecct_mobile.ui.theme.Red
+import com.example.projecct_mobile.ui.theme.White
+import java.io.File
+import java.io.FileOutputStream
+import java.io.InputStream
 
 /**
  * Étape 2 - Informations professionnelles pour l'inscription ACTEUR
@@ -29,13 +69,28 @@ fun SignUpActorStep2Screen(
     onBackClick: () -> Unit = {},
     onNextClick: (anneesExperience: String, cvUrl: String?, instagram: String, youtube: String, tiktok: String) -> Unit = { _, _, _, _, _ -> }
 ) {
+    val context = LocalContext.current
+
     var anneesExperience by remember { mutableStateOf("") }
     var cvUrl by remember { mutableStateOf<String?>(null) }
+    var cvFileName by remember { mutableStateOf<String?>(null) }
     var instagram by remember { mutableStateOf("") }
     var youtube by remember { mutableStateOf("") }
     var tiktok by remember { mutableStateOf("") }
     var formError by remember { mutableStateOf<String?>(null) }
-    
+
+    val pdfPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri ?: return@rememberLauncherForActivityResult
+
+        val copiedFile = copyUriToCache(context, uri, "cv_document", ".pdf")
+        if (copiedFile != null) {
+            cvUrl = copiedFile.absolutePath
+            cvFileName = resolveFileName(context, uri) ?: copiedFile.name
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         // En-tête moderne
         Box(
@@ -43,7 +98,7 @@ fun SignUpActorStep2Screen(
                 .fillMaxWidth()
                 .height(200.dp)
                 .background(
-                    brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                    brush = Brush.verticalGradient(
                         colors = listOf(DarkBlue, DarkBlueLight)
                     )
                 )
@@ -54,7 +109,7 @@ fun SignUpActorStep2Screen(
                         .fillMaxWidth()
                         .padding(horizontal = 20.dp, vertical = 16.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                 ) {
                     IconButton(
                         onClick = onBackClick,
@@ -68,7 +123,7 @@ fun SignUpActorStep2Screen(
                             tint = White
                         )
                     }
-                    
+
                     Card(
                         shape = RoundedCornerShape(20.dp),
                         colors = CardDefaults.cardColors(
@@ -84,9 +139,9 @@ fun SignUpActorStep2Screen(
                         )
                     }
                 }
-                
+
                 Spacer(modifier = Modifier.weight(1f))
-                
+
                 Column(
                     modifier = Modifier.padding(horizontal = 28.dp, vertical = 20.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -107,7 +162,7 @@ fun SignUpActorStep2Screen(
                 }
             }
         }
-        
+
         // Contenu moderne
         Card(
             modifier = Modifier
@@ -120,7 +175,7 @@ fun SignUpActorStep2Screen(
                 )
                 .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)),
             shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
-            colors = CardDefaults.cardColors(containerColor = androidx.compose.ui.graphics.Color(0xFFFAFAFA))
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFFAFAFA))
         ) {
             Column(
                 modifier = Modifier
@@ -140,14 +195,14 @@ fun SignUpActorStep2Screen(
                         unfocusedBorderColor = GrayBorder
                     ),
                     singleLine = true,
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
-                
+
                 // CV Upload
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { /* TODO: Ouvrir sélecteur de fichier PDF */ },
+                        .clickable { pdfPicker.launch("application/pdf") },
                     shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = if (cvUrl != null) LightBlue else LightGray
@@ -158,10 +213,10 @@ fun SignUpActorStep2Screen(
                             .fillMaxWidth()
                             .padding(16.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                     ) {
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Icon(
@@ -182,14 +237,22 @@ fun SignUpActorStep2Screen(
                                         fontSize = 12.sp,
                                         color = GrayBorder
                                     )
+                                } else {
+                                    cvFileName?.let { name ->
+                                        Text(
+                                            text = name,
+                                            fontSize = 12.sp,
+                                            color = DarkBlue.copy(alpha = 0.8f)
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                 }
-                
+
                 Spacer(modifier = Modifier.height(8.dp))
-                
+
                 Text(
                     text = "Réseaux sociaux (optionnels)",
                     fontSize = 16.sp,
@@ -197,7 +260,7 @@ fun SignUpActorStep2Screen(
                     color = Black,
                     modifier = Modifier.padding(vertical = 8.dp)
                 )
-                
+
                 // Instagram
                 OutlinedTextField(
                     value = instagram,
@@ -215,7 +278,7 @@ fun SignUpActorStep2Screen(
                         Text("📷", fontSize = 20.sp)
                     }
                 )
-                
+
                 // YouTube
                 OutlinedTextField(
                     value = youtube,
@@ -233,7 +296,7 @@ fun SignUpActorStep2Screen(
                         Text("▶️", fontSize = 20.sp)
                     }
                 )
-                
+
                 // TikTok
                 OutlinedTextField(
                     value = tiktok,
@@ -251,9 +314,9 @@ fun SignUpActorStep2Screen(
                         Text("🎵", fontSize = 20.sp)
                     }
                 )
-                
+
                 Spacer(modifier = Modifier.weight(1f))
-                
+
                 formError?.let { message ->
                     Text(
                         text = message,
@@ -262,11 +325,10 @@ fun SignUpActorStep2Screen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(bottom = 8.dp),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        textAlign = TextAlign.Center
                     )
                 }
-                
-                // Bouton Suivant moderne
+
                 Button(
                     onClick = {
                         val experienceValue = anneesExperience.toIntOrNull()
@@ -278,13 +340,13 @@ fun SignUpActorStep2Screen(
                             formError = "L'expérience doit être comprise entre 0 et 60 ans"
                             return@Button
                         }
-                        
+
                         val urlFields = listOf(
                             youtube to "YouTube",
                             instagram to "Instagram",
                             tiktok to "TikTok"
                         )
-                        
+
                         urlFields.forEach { (value, label) ->
                             if (value.isNotBlank()) {
                                 val sanitized = value.trim()
@@ -297,17 +359,15 @@ fun SignUpActorStep2Screen(
                                 }
                             }
                         }
-                        
-                        if (cvUrl != null) {
-                            val isPdf = cvUrl?.endsWith(".pdf", ignoreCase = true) == true
-                            if (!isPdf) {
-                                formError = "Le CV doit être un fichier PDF"
-                                return@Button
-                            }
-                        }
-                        
+
                         formError = null
-                        onNextClick(experienceValue.toString(), cvUrl, instagram.trim(), youtube.trim(), tiktok.trim())
+                        onNextClick(
+                            experienceValue.toString(),
+                            cvUrl,
+                            instagram.trim(),
+                            youtube.trim(),
+                            tiktok.trim()
+                        )
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -342,6 +402,32 @@ fun SignUpActorStep2Screen(
 fun SignUpActorStep2ScreenPreview() {
     Projecct_MobileTheme {
         SignUpActorStep2Screen()
+    }
+}
+
+private fun copyUriToCache(context: Context, uri: Uri, prefix: String, forcedExtension: String): File? {
+    return try {
+        val resolver = context.contentResolver
+        val inputStream: InputStream = resolver.openInputStream(uri) ?: return null
+        val file = File(context.cacheDir, "$prefix-${'$'}{System.currentTimeMillis()}$forcedExtension")
+        FileOutputStream(file).use { output ->
+            inputStream.use { input -> input.copyTo(output) }
+        }
+        file
+    } catch (e: Exception) {
+        e.printStackTrace()
+        null
+    }
+}
+
+private fun resolveFileName(context: Context, uri: Uri): String? {
+    return context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+        val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+        if (nameIndex != -1 && cursor.moveToFirst()) {
+            cursor.getString(nameIndex)
+        } else {
+            null
+        }
     }
 }
 

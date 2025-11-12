@@ -80,10 +80,12 @@ fun ActorHomeScreen(
         if (!loadData) return@LaunchedEffect
         val acteurResult = acteurRepository?.getCurrentActeur()
         acteurResult?.onSuccess { acteur ->
-            userPrenom = acteur.prenom
-            userNom = acteur.nom
-            userName = "${acteur.prenom} ${acteur.nom}".trim().ifEmpty { "Utilisateur" }
-            userEmail = acteur.email
+            userPrenom = acteur.prenom ?: ""
+            userNom = acteur.nom ?: ""
+            userName = listOfNotNull(acteur.prenom, acteur.nom)
+                .joinToString(" ")
+                .ifBlank { "Utilisateur" }
+            userEmail = acteur.email ?: userEmail
         }
         acteurResult?.onFailure { exception ->
             // Si on ne peut pas charger le profil acteur, utiliser l'email depuis TokenManager

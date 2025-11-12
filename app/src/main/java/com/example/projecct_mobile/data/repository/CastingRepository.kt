@@ -5,6 +5,13 @@ import com.example.projecct_mobile.data.api.CastingApiService
 import com.example.projecct_mobile.data.model.ApiException
 import com.example.projecct_mobile.data.model.Casting
 import com.example.projecct_mobile.data.model.CreateCastingRequest
+import com.google.gson.Gson
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.File
+import java.net.URLConnection
 
 /**
  * Repository pour gérer les castings
@@ -12,6 +19,7 @@ import com.example.projecct_mobile.data.model.CreateCastingRequest
 class CastingRepository {
     
     private val castingService: CastingApiService = ApiClient.getCastingService()
+    private val gson = Gson()
     
     /**
      * Récupère tous les castings (route publique)
@@ -110,7 +118,9 @@ class CastingRepository {
         dateDebut: String? = null,
         dateFin: String? = null,
         remuneration: String? = null,
-        conditions: String? = null
+        conditions: String? = null,
+        prix: Double? = null,
+        afficheFile: File? = null
     ): Result<Casting> {
         return try {
             val request = CreateCastingRequest(
@@ -121,10 +131,15 @@ class CastingRepository {
                 dateDebut = dateDebut,
                 dateFin = dateFin,
                 remuneration = remuneration,
+                prix = prix,
                 conditions = conditions
             )
             
-            val response = castingService.createCasting(request)
+            val payloadJson = gson.toJson(request)
+            val payloadBody = payloadJson.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
+            val affichePart = afficheFile?.let { createFilePart("affiche", it) }
+
+            val response = castingService.createCasting(payloadBody, affichePart)
             
             if (response.isSuccessful && response.body() != null) {
                 Result.success(response.body()!!)
@@ -152,7 +167,9 @@ class CastingRepository {
         dateDebut: String? = null,
         dateFin: String? = null,
         remuneration: String? = null,
-        conditions: String? = null
+        conditions: String? = null,
+        prix: Double? = null,
+        afficheFile: File? = null
     ): Result<Casting> {
         return try {
             val request = CreateCastingRequest(
@@ -163,10 +180,15 @@ class CastingRepository {
                 dateDebut = dateDebut,
                 dateFin = dateFin,
                 remuneration = remuneration,
+                prix = prix,
                 conditions = conditions
             )
             
-            val response = castingService.updateCasting(id, request)
+            val payloadJson = gson.toJson(request)
+            val payloadBody = payloadJson.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
+            val affichePart = afficheFile?.let { createFilePart("affiche", it) }
+
+            val response = castingService.updateCasting(id, payloadBody, affichePart)
             
             if (response.isSuccessful && response.body() != null) {
                 Result.success(response.body()!!)
@@ -201,6 +223,16 @@ class CastingRepository {
         } catch (e: Exception) {
             Result.failure(ApiException.UnknownException("Erreur inconnue: ${e.message}"))
         }
+    }
+
+    private fun createFilePart(fieldName: String, file: File): MultipartBody.Part {
+        val mimeType = guessMimeType(file) ?: "application/octet-stream"
+        val body = file.asRequestBody(mimeType.toMediaTypeOrNull())
+        return MultipartBody.Part.createFormData(fieldName, file.name, body)
+    }
+
+    private fun guessMimeType(file: File): String? {
+        return URLConnection.guessContentTypeFromName(file.name)
     }
 }
 

@@ -1,12 +1,15 @@
 package com.example.projecct_mobile.data.api
 
 import com.example.projecct_mobile.data.model.LoginRequest
-import com.example.projecct_mobile.data.model.ActeurSignupRequest
 import com.example.projecct_mobile.data.model.AgenceSignupRequest
 import com.example.projecct_mobile.data.model.AuthResponse
 import com.example.projecct_mobile.data.model.GoogleLoginRequest
+import okhttp3.MultipartBody
+import okhttp3.RequestBody
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.Multipart
+import retrofit2.http.Part
 import retrofit2.http.POST
 
 /**
@@ -39,29 +42,17 @@ interface AuthApiService {
      * Inscription d'un nouvel acteur
      * POST /acteur/signup
      * 
-     * Exemple de requête selon l'API :
-     * {
-     *   "nom": "Dupont",
-     *   "prenom": "Jean",
-     *   "email": "jean.dupont@example.com",
-     *   "motDePasse": "password123",
-     *   "tel": "+21612345678",
-     *   "age": 25,
-     *   "gouvernorat": "Tunis",
-     *   "experience": 5,
-     *   "cvPdf": "https://example.com/cv.pdf",
-     *   "centresInteret": ["Théâtre", "Cinéma", "Télévision"],
-     *   "photoProfil": "https://example.com/photo.jpg",
-     *   "socialLinks": {
-     *     "instagram": "https://instagram.com/acteur",
-     *     "youtube": "https://youtube.com/@acteur",
-     *     "tiktok": "https://tiktok.com/@acteur"
-     *   }
-     * }
+     * Multipart attendu :
+     * - Part "payload": JSON sérialisé du CreateActeurDto
+     * - Part "photo": (optionnel) image JPEG/PNG
+     * - Part "document": (optionnel) PDF
      */
+    @Multipart
     @POST("acteur/signup")
     suspend fun signupActeur(
-        @Body request: ActeurSignupRequest
+        @Part("payload") payload: RequestBody,
+        @Part photo: MultipartBody.Part? = null,
+        @Part document: MultipartBody.Part? = null
     ): Response<AuthResponse>
     
     /**

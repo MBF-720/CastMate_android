@@ -47,6 +47,7 @@ import com.example.projecct_mobile.ui.screens.settings.SettingsScreen
 import com.example.projecct_mobile.ui.components.getErrorMessage
 import com.example.projecct_mobile.ui.theme.Projecct_MobileTheme
 import kotlinx.coroutines.launch
+import java.io.File
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -550,6 +551,9 @@ fun NavigationScreen() {
                     
                     scope.launch {
                         try {
+                            val photoFile = data.photoProfil?.let { File(it) }?.takeIf { it.exists() }
+                            val documentFile = data.cvPdf?.let { File(it) }?.takeIf { it.exists() }
+
                             val result = authRepository.signupActeur(
                                 nom = data.nom,
                                 prenom = data.prenom,
@@ -559,9 +563,9 @@ fun NavigationScreen() {
                                 age = data.age,
                                 gouvernorat = data.gouvernorat,
                                 experience = data.experience,
-                                cvPdf = data.cvPdf,
                                 centresInteret = centresInteret.takeIf { it.isNotEmpty() },
-                                photoProfil = data.photoProfil,
+                                photoFile = photoFile,
+                                documentFile = documentFile,
                                 instagram = data.instagram,
                                 youtube = data.youtube,
                                 tiktok = data.tiktok

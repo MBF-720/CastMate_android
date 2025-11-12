@@ -1,5 +1,12 @@
 package com.example.projecct_mobile.ui.screens.auth.signup
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -7,9 +14,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -21,7 +25,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -30,6 +38,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import android.util.Patterns
 import com.example.projecct_mobile.ui.theme.*
+import java.io.File
+import java.io.FileOutputStream
+import java.io.InputStream
+import java.util.Locale
 
 /**
  * Étape 1 - Informations personnelles pour l'inscription ACTEUR
@@ -44,6 +56,8 @@ fun SignUpActorStep1Screen(
     onBackClick: () -> Unit = {},
     onNextClick: (nom: String, prenom: String, age: String, email: String, motDePasse: String, telephone: String, gouvernorat: String, photoUrl: String?) -> Unit = { _, _, _, _, _, _, _, _ -> }
 ) {
+    val context = LocalContext.current
+
     var nom by remember { mutableStateOf(initialNom) }
     var prenom by remember { mutableStateOf(initialPrenom) }
     var ageInt by remember { mutableStateOf(18) }
@@ -53,7 +67,9 @@ fun SignUpActorStep1Screen(
     var telephone by remember { mutableStateOf("") }
     var gouvernorat by remember { mutableStateOf("") }
     var photoUrl by remember { mutableStateOf(initialPhotoUrl) }
-    
+    var selectedPhotoName by remember { mutableStateOf<String?>(initialPhotoUrl?.substringAfterLast("/")) }
+    var photoBitmap by remember { mutableStateOf<Bitmap?>(initialPhotoUrl?.let { BitmapFactory.decodeFile(it) }) }
+
     val scrollState = rememberScrollState()
     var formError by remember { mutableStateOf<String?>(null) }
     val gouvernorats = remember {
@@ -65,6 +81,19 @@ fun SignUpActorStep1Screen(
         )
     }
     var gouvernoratExpanded by remember { mutableStateOf(false) }
+
+    val photoPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri ?: return@rememberLauncherForActivityResult
+
+        val copiedFile = copyUriToCache(context, uri, "profile_photo")
+        if (copiedFile != null) {
+            photoUrl = copiedFile.absolutePath
+            photoBitmap = BitmapFactory.decodeFile(copiedFile.absolutePath)
+            selectedPhotoName = resolveFileName(context, uri) ?: copiedFile.name
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         // En-tête simplifié
@@ -170,19 +199,23 @@ fun SignUpActorStep1Screen(
                     Card(
                         modifier = Modifier
                             .size(90.dp)
-                            .clickable { /* TODO: Ouvrir sélecteur d'image */ },
+                            .clickable { photoPicker.launch("image/*") },
                         shape = CircleShape,
                         colors = CardDefaults.cardColors(
-                            containerColor = if (photoUrl != null) Color.Transparent else LightGray.copy(alpha = 0.5f)
+                            containerColor = if (photoBitmap != null) Color.Transparent else LightGray.copy(alpha = 0.5f)
                         )
                     ) {
                         Box(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
-                            if (photoUrl != null) {
-                                // TODO: Charger l'image depuis l'URL
-                                Text("📷", fontSize = 42.sp)
+                            if (photoBitmap != null) {
+                                Image(
+                                    bitmap = photoBitmap!!.asImageBitmap(),
+                                    contentDescription = "Photo de profil sélectionnée",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
                             } else {
                                 Icon(
                                     imageVector = Icons.Default.CameraAlt,
@@ -199,6 +232,14 @@ fun SignUpActorStep1Screen(
                         color = GrayBorder,
                         modifier = Modifier.padding(top = 4.dp)
                     )
+                    selectedPhotoName?.let { name ->
+                        Text(
+                            text = name,
+                            fontSize = 12.sp,
+                            color = GrayBorder,
+                            modifier = Modifier.padding(top = 6.dp)
+                        )
+                    }
                 }
                 
                 // Nom
@@ -574,3 +615,36 @@ fun SignUpActorStep1ScreenPreview() {
     }
 }
 
+private fun copyUriToCache(context: Context, uri: Uri, prefix: String, forcedExtension: String? = null): File? {
+    return try {
+        val resolver = context.contentResolver
+        val mimeType = resolver.getType(uri)
+        val extension = forcedExtension ?: when {
+            mimeType?.contains("png") == true -> ".png"
+            mimeType?.contains("jpg") == true -> ".jpg"
+            mimeType?.contains("jpeg") == true -> ".jpg"
+            else -> ".tmp"
+        }
+
+        val inputStream: InputStream = resolver.openInputStream(uri) ?: return null
+        val file = File(context.cacheDir, "$prefix-${System.currentTimeMillis()}$extension")
+        FileOutputStream(file).use { output ->
+            inputStream.use { input -> input.copyTo(output) }
+        }
+        file
+    } catch (e: Exception) {
+        e.printStackTrace()
+        null
+    }
+}
+
+private fun resolveFileName(context: Context, uri: Uri): String? {
+    return context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+        val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+        if (nameIndex != -1 && cursor.moveToFirst()) {
+            cursor.getString(nameIndex)
+        } else {
+            null
+        }
+    }
+}
