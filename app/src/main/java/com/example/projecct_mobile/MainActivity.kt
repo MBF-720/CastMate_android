@@ -380,7 +380,7 @@ fun NavigationScreen() {
                     navController.popBackStack()
                 },
                 externalErrorMessage = errorMessage,
-                onSaveCastingClick = { titre, descriptionRole, synopsis, dateDebut, dateFin, prix, types, age, conditions, lieu, afficheFile ->
+                onSaveCastingClick = { titre, descriptionRole, synopsis, dateDebut, dateFin, prix, types, age, ouvert, conditions, lieu, afficheFile ->
                     isLoading = true
                     errorMessage = null
                     scope.launch {
@@ -395,6 +395,7 @@ fun NavigationScreen() {
                                 prix = prix,
                                 types = types,
                                 age = age,
+                                ouvert = ouvert,
                                 conditions = conditions,
                                 afficheFile = afficheFile
                             )

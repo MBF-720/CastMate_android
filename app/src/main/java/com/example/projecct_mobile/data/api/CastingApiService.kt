@@ -1,5 +1,6 @@
 package com.example.projecct_mobile.data.api
 
+import com.example.projecct_mobile.data.model.CandidateStatusResponse
 import com.example.projecct_mobile.data.model.Casting
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
@@ -85,5 +86,37 @@ interface CastingApiService {
     suspend fun applyToCasting(
         @Path("id") id: String
     ): Response<Unit>
+    
+    /**
+     * Accepter un candidat (route protégée - Recruteur/Admin uniquement)
+     * PATCH /castings/:id/candidates/:acteurId/accept
+     * Nécessite un token JWT
+     */
+    @PATCH("castings/{id}/candidates/{acteurId}/accept")
+    suspend fun acceptCandidate(
+        @Path("id") id: String,
+        @Path("acteurId") acteurId: String
+    ): Response<Unit>
+    
+    /**
+     * Refuser un candidat (route protégée - Recruteur/Admin uniquement)
+     * PATCH /castings/:id/candidates/:acteurId/reject
+     * Nécessite un token JWT
+     */
+    @PATCH("castings/{id}/candidates/{acteurId}/reject")
+    suspend fun rejectCandidate(
+        @Path("id") id: String,
+        @Path("acteurId") acteurId: String
+    ): Response<Unit>
+    
+    /**
+     * Obtenir le statut de candidature de l'acteur connecté (route protégée - Acteur uniquement)
+     * GET /castings/:id/my-status
+     * Nécessite un token JWT
+     */
+    @GET("castings/{id}/my-status")
+    suspend fun getMyStatus(
+        @Path("id") id: String
+    ): Response<CandidateStatusResponse>
 }
 

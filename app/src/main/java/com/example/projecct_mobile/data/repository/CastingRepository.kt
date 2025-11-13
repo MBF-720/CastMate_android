@@ -4,6 +4,7 @@ import com.example.projecct_mobile.data.api.ApiClient
 import com.example.projecct_mobile.data.api.CastingApiService
 import com.example.projecct_mobile.data.model.ApiException
 import com.example.projecct_mobile.data.model.Casting
+import com.example.projecct_mobile.data.model.CandidateStatusResponse
 import com.example.projecct_mobile.data.model.CreateCastingRequest
 import com.google.gson.Gson
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -94,6 +95,7 @@ class CastingRepository {
      * @param prix Prix du casting (optionnel)
      * @param types Types de casting (optionnel, ex: ["Cinéma", "Télévision"])
      * @param age Tranche d'âge (optionnel, ex: "25-35 ans")
+     * @param ouvert Indique si le casting accepte des candidatures (optionnel, défaut: true)
      * @param conditions Conditions du casting (optionnel)
      * @param afficheFile Fichier affiche (optionnel)
      * 
@@ -125,6 +127,7 @@ class CastingRepository {
         prix: Double? = null,
         types: List<String>? = null,
         age: String? = null,
+        ouvert: Boolean? = true,
         conditions: String? = null,
         afficheFile: File? = null
     ): Result<Casting> {
@@ -139,6 +142,7 @@ class CastingRepository {
                 prix = prix,
                 types = types?.takeIf { it.isNotEmpty() },
                 age = age?.takeIf { it.isNotBlank() },
+                ouvert = ouvert,
                 conditions = conditions
             )
             
@@ -176,6 +180,7 @@ class CastingRepository {
         prix: Double? = null,
         types: List<String>? = null,
         age: String? = null,
+        ouvert: Boolean? = null,
         conditions: String? = null,
         afficheFile: File? = null
     ): Result<Casting> {
@@ -190,6 +195,7 @@ class CastingRepository {
                 prix = prix,
                 types = types?.takeIf { it.isNotEmpty() },
                 age = age?.takeIf { it.isNotBlank() },
+                ouvert = ouvert,
                 conditions = conditions
             )
             
@@ -238,6 +244,90 @@ class CastingRepository {
         val mimeType = guessMimeType(file) ?: "application/octet-stream"
         val body = file.asRequestBody(mimeType.toMediaTypeOrNull())
         return MultipartBody.Part.createFormData(fieldName, file.name, body)
+    }
+
+    /**
+     * Postuler à un casting (route protégée - Acteur uniquement)
+     */
+    suspend fun applyToCasting(id: String): Result<Unit> {
+        return try {
+            val response = castingService.applyToCasting(id)
+            
+            if (response.isSuccessful) {
+                Result.success(Unit)
+            } else {
+                Result.failure(
+                    ApiException.BadRequestException("Erreur lors de la candidature")
+                )
+            }
+        } catch (e: ApiException) {
+            Result.failure(e)
+        } catch (e: Exception) {
+            Result.failure(ApiException.UnknownException("Erreur inconnue: ${e.message}"))
+        }
+    }
+    
+    /**
+     * Accepter un candidat (route protégée - Recruteur/Admin uniquement)
+     */
+    suspend fun acceptCandidate(castingId: String, acteurId: String): Result<Unit> {
+        return try {
+            val response = castingService.acceptCandidate(castingId, acteurId)
+            
+            if (response.isSuccessful) {
+                Result.success(Unit)
+            } else {
+                Result.failure(
+                    ApiException.BadRequestException("Erreur lors de l'acceptation du candidat")
+                )
+            }
+        } catch (e: ApiException) {
+            Result.failure(e)
+        } catch (e: Exception) {
+            Result.failure(ApiException.UnknownException("Erreur inconnue: ${e.message}"))
+        }
+    }
+    
+    /**
+     * Refuser un candidat (route protégée - Recruteur/Admin uniquement)
+     */
+    suspend fun rejectCandidate(castingId: String, acteurId: String): Result<Unit> {
+        return try {
+            val response = castingService.rejectCandidate(castingId, acteurId)
+            
+            if (response.isSuccessful) {
+                Result.success(Unit)
+            } else {
+                Result.failure(
+                    ApiException.BadRequestException("Erreur lors du refus du candidat")
+                )
+            }
+        } catch (e: ApiException) {
+            Result.failure(e)
+        } catch (e: Exception) {
+            Result.failure(ApiException.UnknownException("Erreur inconnue: ${e.message}"))
+        }
+    }
+    
+    /**
+     * Obtenir le statut de candidature de l'acteur connecté (route protégée - Acteur uniquement)
+     */
+    suspend fun getMyStatus(castingId: String): Result<CandidateStatusResponse> {
+        return try {
+            val response = castingService.getMyStatus(castingId)
+            
+            if (response.isSuccessful && response.body() != null) {
+                Result.success(response.body()!!)
+            } else {
+                Result.failure(
+                    ApiException.NotFoundException("Statut de candidature non trouvé")
+                )
+            }
+        } catch (e: ApiException) {
+            Result.failure(e)
+        } catch (e: Exception) {
+            Result.failure(ApiException.UnknownException("Erreur inconnue: ${e.message}"))
+        }
     }
 
     private fun guessMimeType(file: File): String? {

@@ -3,8 +3,42 @@ package com.example.projecct_mobile.data.model
 import com.google.gson.annotations.SerializedName
 
 /**
+ * Modèle de données pour un acteur (utilisé dans les candidats)
+ */
+data class ActeurInfo(
+    @SerializedName("id")
+    val id: String? = null,
+    
+    @SerializedName("nom")
+    val nom: String? = null,
+    
+    @SerializedName("prenom")
+    val prenom: String? = null,
+    
+    @SerializedName("email")
+    val email: String? = null,
+    
+    @SerializedName("media")
+    val media: UserMedia? = null
+)
+
+/**
+ * Modèle de données pour un candidat à un casting
+ */
+data class Candidat(
+    @SerializedName("acteurId")
+    val acteurId: ActeurInfo? = null,
+    
+    @SerializedName("statut")
+    val statut: String? = null, // "EN_ATTENTE", "ACCEPTE", "REFUSE"
+    
+    @SerializedName("dateCandidature")
+    val dateCandidature: String? = null // Format ISO
+)
+
+/**
  * Modèle de données pour un casting
- * Selon l'API : titre, descriptionRole, synopsis, lieu, dateDebut, dateFin, prix, types, age, conditions
+ * Selon l'API : titre, descriptionRole, synopsis, lieu, dateDebut, dateFin, prix, types, age, ouvert, conditions
  */
 data class Casting(
     @SerializedName("_id")
@@ -39,6 +73,9 @@ data class Casting(
     
     @SerializedName("age")
     val age: String? = null, // ⭐ NOUVEAU - Optionnel, tranche d'âge (ex: "25-35 ans")
+    
+    @SerializedName("ouvert")
+    val ouvert: Boolean = true, // ⭐ NOUVEAU - Indique si le casting accepte des candidatures (défaut: true)
 
     @SerializedName("afficheFileId")
     val afficheFileId: String? = null,
@@ -48,6 +85,9 @@ data class Casting(
     
     @SerializedName("recruteur")
     val recruteur: Any? = null, // Peut être un String (ID) ou un objet (recruteur complet)
+    
+    @SerializedName("candidats")
+    val candidats: List<Candidat>? = null, // ⭐ MODIFIÉ - Nouvelle structure avec statut
     
     @SerializedName("createdAt")
     val createdAt: String? = null,
@@ -62,7 +102,7 @@ data class Casting(
 
 /**
  * Requête pour créer un nouveau casting
- * Selon l'API : titre, descriptionRole, synopsis, lieu, dateDebut, dateFin, prix, types, age, conditions
+ * Selon l'API : titre, descriptionRole, synopsis, lieu, dateDebut, dateFin, prix, types, age, ouvert, conditions
  */
 data class CreateCastingRequest(
     @SerializedName("titre")
@@ -91,8 +131,25 @@ data class CreateCastingRequest(
     
     @SerializedName("age")
     val age: String? = null, // ⭐ NOUVEAU - Optionnel, tranche d'âge (ex: "25-35 ans")
+    
+    @SerializedName("ouvert")
+    val ouvert: Boolean? = true, // ⭐ NOUVEAU - Indique si le casting accepte des candidatures (défaut: true)
 
     @SerializedName("conditions")
     val conditions: String? = null
+)
+
+/**
+ * Réponse pour le statut de candidature d'un acteur
+ */
+data class CandidateStatusResponse(
+    @SerializedName("hasApplied")
+    val hasApplied: Boolean = false,
+    
+    @SerializedName("statut")
+    val statut: String? = null, // "EN_ATTENTE", "ACCEPTE", "REFUSE", ou null
+    
+    @SerializedName("dateCandidature")
+    val dateCandidature: String? = null // Format ISO
 )
 

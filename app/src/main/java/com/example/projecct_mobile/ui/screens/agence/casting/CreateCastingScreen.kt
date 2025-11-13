@@ -97,10 +97,11 @@ fun CreateCastingScreen(
         prix: Double,
         types: List<String>,
         age: String?,
+        ouvert: Boolean?,
         conditions: String,
         lieu: String,
         afficheFile: File?
-    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _ -> },
+    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _ -> },
     externalErrorMessage: String? = null
 ) {
     var titre by remember { mutableStateOf("") }
@@ -808,6 +809,7 @@ fun CreateCastingScreen(
                         prixValue,
                         typesList,
                         ageString,
+                        true, // ouvert par défaut
                         conditions,
                         lieu,
                         selectedAfficheFile
