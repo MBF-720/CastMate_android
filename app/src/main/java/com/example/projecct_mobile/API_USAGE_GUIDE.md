@@ -456,31 +456,92 @@ result.onFailure { exception ->
 
 ### 2. Récupérer un casting par ID (route publique)
 
+**Endpoint :** `GET /castings/:id`
+
+**Caractéristiques :**
+- Route publique : pas d'authentification requise
+- Token JWT optionnel : peut être fourni si disponible
+- Méthode : GET
+- Paramètre : `id` (MongoDB ObjectId)
+
+**Exemple d'utilisation :**
+
 ```kotlin
 val castingRepository = CastingRepository()
 
 val result = castingRepository.getCastingById(castingId = "507f1f77bcf86cd799439011")
 
 result.onSuccess { casting ->
+    // Informations de base
+    val id = casting.actualId // Utilise id ou idAlt selon ce qui est disponible
     val titre = casting.titre
     val descriptionRole = casting.descriptionRole
     val synopsis = casting.synopsis
     val lieu = casting.lieu
-    val dateDebut = casting.dateDebut
-    val dateFin = casting.dateFin
+    val dateDebut = casting.dateDebut // Format ISO: "2024-01-15T00:00:00.000Z"
+    val dateFin = casting.dateFin // Format ISO: "2024-02-15T00:00:00.000Z"
     val prix = casting.prix
     val types = casting.types // List<String>? - ex: ["Cinéma", "Télévision"]
     val age = casting.age // String? - ex: "25-35 ans"
     val ouvert = casting.ouvert // Boolean - Indique si le casting accepte des candidatures
     val conditions = casting.conditions
     
-    // Nouvelle structure des candidats
+    // Informations sur le recruteur (agence)
+    val recruteur = casting.recruteur
+    if (recruteur != null) {
+        val recruteurId = recruteur.id
+        val nomAgence = recruteur.nomAgence
+        val responsable = recruteur.responsable
+        val email = recruteur.email
+        val recruteurPhotoFileId = recruteur.media?.photoFileId
+        val recruteurPhotoMimeType = recruteur.media?.photoMimeType
+    }
+    
+    // Informations sur les candidats
     val candidats = casting.candidats // List<Candidat>?
     candidats?.forEach { candidat ->
         val acteur = candidat.acteurId
+        if (acteur != null) {
+            val acteurId = acteur.id
+            val acteurNom = acteur.nom
+            val acteurPrenom = acteur.prenom
+            val acteurEmail = acteur.email
+            val acteurPhotoFileId = acteur.media?.photoFileId
+            val acteurPhotoMimeType = acteur.media?.photoMimeType
+        }
         val statut = candidat.statut // "EN_ATTENTE", "ACCEPTE", "REFUSE"
-        val dateCandidature = candidat.dateCandidature
+        val dateCandidature = candidat.dateCandidature // Format ISO
     }
+    
+    // Affiche du casting (⭐ Important pour l'affichage)
+    val afficheFileId = casting.actualAfficheFileId // Utilise media.afficheFileId ou afficheFileId
+    val afficheMimeType = casting.media?.afficheMimeType
+    val afficheOriginalName = casting.media?.afficheOriginalName
+    val afficheLength = casting.media?.afficheLength
+    val afficheUploadDate = casting.media?.afficheUploadDate
+    
+    // Télécharger l'affiche si disponible
+    if (afficheFileId != null) {
+        val acteurRepository = ActeurRepository() // Peut être utilisé pour télécharger les médias
+        scope.launch {
+            val mediaResult = acteurRepository.downloadMedia(afficheFileId)
+            mediaResult.onSuccess { bytes ->
+                // Afficher l'image avec BitmapFactory
+                val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                // Utiliser bitmap.asImageBitmap() dans Compose
+            }
+            mediaResult.onFailure { exception ->
+                // Gérer l'erreur (peut être 403 si permissions backend restrictives)
+                if (exception is ApiException.ForbiddenException) {
+                    // Afficher un placeholder
+                }
+            }
+        }
+    }
+    
+    // Dates de création et mise à jour
+    val createdAt = casting.createdAt
+    val updatedAt = casting.updatedAt
 }
 
 result.onFailure { exception ->
@@ -488,12 +549,38 @@ result.onFailure { exception ->
         is ApiException.NotFoundException -> {
             showError("Casting non trouvé")
         }
+        is ApiException.ServerException -> {
+            showError("Erreur serveur: ${exception.message}")
+        }
         else -> {
             showError("Erreur: ${exception.message}")
         }
     }
 }
 ```
+
+**Structure de la réponse (200 OK) :**
+
+Le casting retourné contient :
+- **Informations de base** : `id`, `titre`, `descriptionRole`, `synopsis`, `lieu`, `dateDebut`, `dateFin`, `prix`, `types`, `age`, `ouvert`, `conditions`
+- **Recruteur** : Objet `RecruteurInfo` avec `id`, `nomAgence`, `responsable`, `email`, et `media` (photo de l'agence)
+- **Candidats** : Liste de `Candidat` avec `acteurId` (objet `ActeurInfo`), `statut`, et `dateCandidature`
+- **Media** : Objet `CastingMedia` avec `afficheFileId` (⭐ utiliser pour afficher l'affiche), `afficheMimeType`, `afficheOriginalName`, `afficheLength`, `afficheUploadDate`
+- **Métadonnées** : `createdAt`, `updatedAt`
+
+**Réponse 404 Not Found :**
+
+```json
+{
+  "statusCode": 404,
+  "message": "Casting non trouvé"
+}
+```
+
+**Notes importantes :**
+- L'affiche du casting est accessible via `casting.actualAfficheFileId` qui gère automatiquement `media.afficheFileId` ou `afficheFileId`
+- Pour télécharger l'affiche, utilisez `ActeurRepository.downloadMedia(afficheFileId)`
+- Les requêtes peuvent retourner 403 Forbidden pour les médias si les permissions backend sont restrictives (afficher un placeholder dans ce cas)
 
 ### 3. Créer un casting (route protégée - Recruteur uniquement)
 
