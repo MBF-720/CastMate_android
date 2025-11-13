@@ -35,6 +35,20 @@ data class AgenceSignupRequest(
     val logoUrl: String? = null,
     
     @SerializedName("documents")
-    val documents: String? = null
+    val documents: String? = null,
+    
+    @SerializedName("socialLinks")
+    val socialLinks: AgenceSocialLinks? = null
+)
+
+/**
+ * Modèle pour les liens sociaux des agences
+ */
+data class AgenceSocialLinks(
+    @SerializedName("facebook")
+    val facebook: String? = null,
+    
+    @SerializedName("instagram")
+    val instagram: String? = null
 )
 

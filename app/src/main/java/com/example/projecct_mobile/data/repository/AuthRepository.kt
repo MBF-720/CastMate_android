@@ -133,9 +133,9 @@ class AuthRepository {
      * @param tel Numéro de téléphone (obligatoire)
      * @param gouvernorat Gouvernorat (obligatoire)
      * @param siteWeb Site web (optionnel)
-     * @param description Description (optionnel)
-     * @param logoUrl URL du logo (optionnel)
-     * @param documents URL des documents (optionnel)
+     * @param description Description (obligatoire)
+     * @param logoFile Fichier logo (optionnel)
+     * @param documentFile Fichier document administratif (optionnel)
      * 
      * @return Result<AuthResponse> avec le token JWT et les informations utilisateur
      */
@@ -147,11 +147,22 @@ class AuthRepository {
         tel: String,
         gouvernorat: String,
         siteWeb: String? = null,
-        description: String? = null,
-        logoUrl: String? = null,
-        documents: String? = null
+        description: String,
+        logoFile: File? = null,
+        documentFile: File? = null,
+        facebook: String? = null,
+        instagram: String? = null
     ): Result<AuthResponse> {
         return try {
+            val socialLinks = if (facebook != null || instagram != null) {
+                com.example.projecct_mobile.data.model.AgenceSocialLinks(
+                    facebook = facebook,
+                    instagram = instagram
+                )
+            } else {
+                null
+            }
+            
             val request = AgenceSignupRequest(
                 nomAgence = nomAgence,
                 responsable = responsable,
@@ -161,12 +172,24 @@ class AuthRepository {
                 gouvernorat = gouvernorat,
                 siteWeb = siteWeb,
                 description = description,
-                logoUrl = logoUrl,
-                documents = documents
+                logoUrl = null, // Les fichiers sont envoyés via multipart
+                documents = null, // Les fichiers sont envoyés via multipart
+                socialLinks = socialLinks
             )
             
-            // Appel HTTP vers l'API NestJS (POST /agence/signup)
-            val response = authService.signupAgence(request)
+            // Sérialiser le payload en JSON
+            val payloadJson = gson.toJson(request)
+            val payloadBody = payloadJson.toRequestBody("application/json".toMediaType())
+            
+            // Créer les parts pour les fichiers
+            // Note: Le backend attend "photo" pour le logo (comme pour les acteurs)
+            val logoPart = logoFile?.let { createFilePart("photo", it) }
+            val documentPart = documentFile?.let { createFilePart("document", it, "application/pdf") }
+            
+            android.util.Log.d("AuthRepository", "📤 Inscription agence avec logo: ${logoFile != null}, document: ${documentFile != null}")
+            
+            // Appel HTTP vers l'API NestJS (POST /agence/signup) avec multipart
+            val response = authService.signupAgence(payloadBody, logoPart, documentPart)
             
             if (response.isSuccessful && response.body() != null) {
                 val authResponse = response.body()!!

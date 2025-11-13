@@ -1,5 +1,11 @@
 package com.example.projecct_mobile.ui.screens.agence.auth
 
+import android.content.Context
+import android.graphics.BitmapFactory
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -41,6 +47,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
@@ -53,18 +63,61 @@ import com.example.projecct_mobile.ui.theme.LightGray
 import com.example.projecct_mobile.ui.theme.Projecct_MobileTheme
 import com.example.projecct_mobile.ui.theme.Red
 import com.example.projecct_mobile.ui.theme.White
+import java.io.File
+import java.io.FileOutputStream
+import java.io.InputStream
 
 @Composable
 fun SignUpAgencyStep2Screen(
     onBackClick: () -> Unit = {},
     isLoading: Boolean = false,
     errorMessage: String? = null,
-    onFinishClick: (siteWeb: String, description: String, logoUrl: String?, documentUrl: String?) -> Unit = { _, _, _, _ -> }
+    onFinishClick: (siteWeb: String, description: String, logoFile: File?, documentFile: File?, facebook: String?, instagram: String?) -> Unit = { _, _, _, _, _, _ -> }
 ) {
     var siteWeb by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
-    var logoUrl by remember { mutableStateOf<String?>(null) }
-    var documentUrl by remember { mutableStateOf<String?>(null) }
+    var facebook by remember { mutableStateOf("") }
+    var instagram by remember { mutableStateOf("") }
+    var selectedLogoFile by remember { mutableStateOf<File?>(null) }
+    var selectedDocumentFile by remember { mutableStateOf<File?>(null) }
+    var logoImage by remember { mutableStateOf<ImageBitmap?>(null) }
+    
+    val context = LocalContext.current
+    
+    // File picker pour choisir un logo
+    val logoPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri ?: return@rememberLauncherForActivityResult
+        
+        val copiedFile = copyUriToCache(context, uri, "agency_logo")
+        if (copiedFile != null) {
+            selectedLogoFile = copiedFile
+            // Prévisualiser le logo
+            val bitmap = BitmapFactory.decodeFile(copiedFile.absolutePath)
+            if (bitmap != null) {
+                logoImage = bitmap.asImageBitmap()
+                android.util.Log.d("SignUpAgencyStep2Screen", "✅ Logo sélectionné: ${copiedFile.name}")
+            }
+        } else {
+            android.util.Log.e("SignUpAgencyStep2Screen", "❌ Impossible de copier le fichier logo")
+        }
+    }
+    
+    // File picker pour choisir un document PDF
+    val documentPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri ?: return@rememberLauncherForActivityResult
+        
+        val copiedFile = copyUriToCache(context, uri, "agency_document", ".pdf")
+        if (copiedFile != null) {
+            selectedDocumentFile = copiedFile
+            android.util.Log.d("SignUpAgencyStep2Screen", "✅ Document sélectionné: ${copiedFile.name}, taille: ${copiedFile.length()} bytes")
+        } else {
+            android.util.Log.e("SignUpAgencyStep2Screen", "❌ Impossible de copier le fichier document")
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Box(
@@ -230,10 +283,10 @@ fun SignUpAgencyStep2Screen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(100.dp)
-                            .clickable { /* TODO: Ouvrir sélecteur d'image */ },
+                            .clickable { logoPicker.launch("image/*") },
                         shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = if (logoUrl != null) Color.Transparent else LightGray.copy(alpha = 0.3f)
+                            containerColor = if (selectedLogoFile != null) Color.Transparent else LightGray.copy(alpha = 0.3f)
                         ),
                         border = androidx.compose.foundation.BorderStroke(
                             1.5.dp,
@@ -244,8 +297,15 @@ fun SignUpAgencyStep2Screen(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
-                            if (logoUrl != null) {
-                                Text("🖼️", fontSize = 32.sp)
+                            if (logoImage != null) {
+                                Image(
+                                    bitmap = logoImage!!,
+                                    contentDescription = "Logo sélectionné",
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(RoundedCornerShape(12.dp)),
+                                    contentScale = ContentScale.Crop
+                                )
                             } else {
                                 Column(
                                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -283,10 +343,10 @@ fun SignUpAgencyStep2Screen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(100.dp)
-                            .clickable { /* TODO: Ouvrir sélecteur de fichier PDF */ },
+                            .clickable { documentPicker.launch("application/pdf") },
                         shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = if (documentUrl != null) Color.Transparent else LightGray.copy(alpha = 0.3f)
+                            containerColor = if (selectedDocumentFile != null) Color.Transparent else LightGray.copy(alpha = 0.3f)
                         ),
                         border = androidx.compose.foundation.BorderStroke(
                             1.5.dp,
@@ -297,7 +357,7 @@ fun SignUpAgencyStep2Screen(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
-                            if (documentUrl != null) {
+                            if (selectedDocumentFile != null) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.Center
@@ -339,12 +399,90 @@ fun SignUpAgencyStep2Screen(
                     }
                 }
 
+                // Section Réseaux sociaux
+                Text(
+                    text = "Réseaux sociaux (optionnel)",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF1A1A1A),
+                    modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)
+                )
+
+                OutlinedTextField(
+                    value = facebook,
+                    onValueChange = { facebook = it },
+                    label = {
+                        Text(
+                            "Facebook",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp,
+                            color = Color(0xFF1A1A1A)
+                        )
+                    },
+                    placeholder = {
+                        Text(
+                            "https://facebook.com/votre-page",
+                            color = LightGray
+                        )
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = DarkBlue,
+                        unfocusedBorderColor = GrayBorder.copy(alpha = 0.4f),
+                        focusedContainerColor = White,
+                        unfocusedContainerColor = White
+                    ),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
+                )
+
+                OutlinedTextField(
+                    value = instagram,
+                    onValueChange = { instagram = it },
+                    label = {
+                        Text(
+                            "Instagram",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp,
+                            color = Color(0xFF1A1A1A)
+                        )
+                    },
+                    placeholder = {
+                        Text(
+                            "https://instagram.com/votre-compte",
+                            color = LightGray
+                        )
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = DarkBlue,
+                        unfocusedBorderColor = GrayBorder.copy(alpha = 0.4f),
+                        focusedContainerColor = White,
+                        unfocusedContainerColor = White
+                    ),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
+                )
+
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Button(
                     onClick = {
                         if (description.isNotBlank()) {
-                            onFinishClick(siteWeb, description, logoUrl, documentUrl)
+                            onFinishClick(
+                                siteWeb,
+                                description,
+                                selectedLogoFile,
+                                selectedDocumentFile,
+                                facebook.takeIf { it.isNotBlank() },
+                                instagram.takeIf { it.isNotBlank() }
+                            )
                         }
                     },
                     modifier = Modifier
@@ -380,6 +518,35 @@ fun SignUpAgencyStep2Screen(
                 }
             }
         }
+    }
+}
+
+/**
+ * Copie un URI vers le cache de l'application
+ */
+private fun copyUriToCache(context: Context, uri: Uri, prefix: String, forcedExtension: String? = null): File? {
+    return try {
+        val resolver = context.contentResolver
+        val mimeType = resolver.getType(uri)
+        val extension = forcedExtension ?: when {
+            mimeType?.contains("png") == true -> ".png"
+            mimeType?.contains("jpg") == true -> ".jpg"
+            mimeType?.contains("jpeg") == true -> ".jpg"
+            mimeType?.contains("pdf") == true -> ".pdf"
+            mimeType?.contains("application/pdf") == true -> ".pdf"
+            else -> ".tmp"
+        }
+
+        val inputStream: InputStream = resolver.openInputStream(uri) ?: return null
+        val file = File(context.cacheDir, "$prefix-${System.currentTimeMillis()}$extension")
+        FileOutputStream(file).use { output ->
+            inputStream.use { input -> input.copyTo(output) }
+        }
+        android.util.Log.d("SignUpAgencyStep2Screen", "✅ Fichier copié vers: ${file.absolutePath}, taille: ${file.length()} bytes")
+        file
+    } catch (e: Exception) {
+        android.util.Log.e("SignUpAgencyStep2Screen", "Erreur lors de la copie du fichier: ${e.message}", e)
+        null
     }
 }
 

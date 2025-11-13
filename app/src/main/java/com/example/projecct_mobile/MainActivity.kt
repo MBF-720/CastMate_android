@@ -272,7 +272,7 @@ fun NavigationScreen() {
                 },
                 isLoading = isLoading,
                 errorMessage = errorMessage,
-                onFinishClick = { siteWeb, description, logoUrl, documentUrl ->
+                onFinishClick = { siteWeb, description, logoFile, documentFile, facebook, instagram ->
                     val currentData = agencySignupData
                     if (currentData == null) {
                         navController.popBackStack("signUpAgencyStep1", inclusive = false)
@@ -280,35 +280,44 @@ fun NavigationScreen() {
                         isLoading = true
                         errorMessage = null
                         scope.launch {
-                            // Appel AuthRepository.signupAgence -> POST /agence/signup
-                            val result = sharedAuthRepository.signupAgence(
-                                nomAgence = currentData.nomAgence,
-                                responsable = currentData.nomResponsable,
-                                email = currentData.email,
-                                motDePasse = currentData.motDePasse,
-                                tel = currentData.telephone,
-                                gouvernorat = currentData.gouvernorat,
-                                siteWeb = siteWeb.takeIf { it.isNotBlank() },
-                                description = description,
-                                logoUrl = logoUrl,
-                                documents = documentUrl
-                            )
-                            result.onSuccess {
-                                isLoading = false
-                                agencySignupData = currentData.copy(
+                            try {
+                                // Appel AuthRepository.signupAgence -> POST /agence/signup avec multipart
+                                val result = sharedAuthRepository.signupAgence(
+                                    nomAgence = currentData.nomAgence,
+                                    responsable = currentData.nomResponsable,
+                                    email = currentData.email,
+                                    motDePasse = currentData.motDePasse,
+                                    tel = currentData.telephone,
+                                    gouvernorat = currentData.gouvernorat,
                                     siteWeb = siteWeb.takeIf { it.isNotBlank() },
                                     description = description,
-                                    logoUrl = logoUrl,
-                                    documentUrl = documentUrl
+                                    logoFile = logoFile,
+                                    documentFile = documentFile,
+                                    facebook = facebook,
+                                    instagram = instagram
                                 )
-                                // Après succès, on enchaîne sur l'écran de confirmation
-                                navController.navigate("agencyConfirmation") {
-                                    popUpTo("signUpAgencyStep1") { inclusive = true }
+                                result.onSuccess {
+                                    isLoading = false
+                                    agencySignupData = currentData.copy(
+                                        siteWeb = siteWeb.takeIf { it.isNotBlank() },
+                                        description = description,
+                                        logoUrl = null, // Les fichiers sont uploadés, pas besoin d'URL
+                                        documentUrl = null // Les fichiers sont uploadés, pas besoin d'URL
+                                    )
+                                    // Après succès, on enchaîne sur l'écran de confirmation
+                                    navController.navigate("agencyConfirmation") {
+                                        popUpTo("signUpAgencyStep1") { inclusive = true }
+                                    }
                                 }
-                            }
-                            result.onFailure { exception ->
+                                result.onFailure { exception ->
+                                    isLoading = false
+                                    errorMessage = getErrorMessage(exception)
+                                    android.util.Log.e("MainActivity", "❌ Erreur inscription agence: ${exception.message}", exception)
+                                }
+                            } catch (e: Exception) {
                                 isLoading = false
-                                errorMessage = getErrorMessage(exception)
+                                errorMessage = "Erreur lors de l'inscription: ${e.message}"
+                                android.util.Log.e("MainActivity", "❌ Exception inscription agence: ${e.message}", e)
                             }
                         }
                     }

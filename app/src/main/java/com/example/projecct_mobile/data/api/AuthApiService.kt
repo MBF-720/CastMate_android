@@ -68,6 +68,11 @@ interface AuthApiService {
      * Inscription d'une nouvelle agence
      * POST /agence/signup
      * 
+     * Multipart attendu :
+     * - Part "payload": JSON sérialisé du CreateAgenceDto
+     * - Part "photo": (optionnel) image JPEG/PNG pour le logo
+     * - Part "document": (optionnel) PDF
+     * 
      * Exemple de requête selon l'API :
      * {
      *   "nomAgence": "Agence de Casting Tunis",
@@ -77,14 +82,15 @@ interface AuthApiService {
      *   "tel": "+21612345678",
      *   "gouvernorat": "Tunis",
      *   "siteWeb": "https://www.agence-casting.tn",
-     *   "description": "Agence spécialisée dans le casting",
-     *   "logoUrl": "https://example.com/logo.png",
-     *   "documents": "https://example.com/documents.pdf"
+     *   "description": "Agence spécialisée dans le casting"
      * }
      */
+    @Multipart
     @POST("agence/signup")
     suspend fun signupAgence(
-        @Body request: AgenceSignupRequest
+        @Part("payload") payload: RequestBody,
+        @Part photo: MultipartBody.Part? = null,
+        @Part document: MultipartBody.Part? = null
     ): Response<AuthResponse>
 }
 

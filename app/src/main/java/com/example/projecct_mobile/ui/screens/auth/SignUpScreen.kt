@@ -339,7 +339,7 @@ fun SignUpScreen(onSignUpClick: () -> Unit = {}, onLoginClick: () -> Unit = {}) 
                                     tel = tel.trim(),
                                     gouvernorat = gouvernorat.trim(),
                                     siteWeb = siteWeb.takeIf { it.isNotBlank() },
-                                    description = description.takeIf { it.isNotBlank() }
+                                    description = description.trim().takeIf { it.isNotBlank() } ?: ""
                                 )
                                 
                                 result.onSuccess {

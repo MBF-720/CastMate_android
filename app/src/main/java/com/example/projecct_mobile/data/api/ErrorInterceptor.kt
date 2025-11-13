@@ -23,6 +23,8 @@ class ErrorInterceptor(
         } catch (e: IOException) {
             if (e.message?.contains("Canceled", ignoreCase = true) == true || 
                 e.message?.contains("canceled", ignoreCase = true) == true) {
+                // Ne pas lancer l'exception pour éviter le crash - laisser le repository gérer
+                android.util.Log.w("ErrorInterceptor", "⚠️ Requête annulée: ${request.url}")
                 throw ApiException.CanceledException("Requête annulée")
             }
             throw ApiException.NetworkException("Erreur de connexion réseau: ${e.message}")
@@ -77,7 +79,10 @@ class ErrorInterceptor(
             400 -> {
                 val error = parseError(response)
                 val errorMessage = buildErrorMessage(error, response)
-                throw ApiException.BadRequestException(errorMessage)
+                // Ne pas lancer l'exception pour éviter le crash - laisser le repository gérer
+                android.util.Log.e("ErrorInterceptor", "❌ Erreur 400: $errorMessage - URL: ${request.url}")
+                // Retourner la réponse pour que le repository puisse la gérer
+                return response
             }
             
             in 500..599 -> {

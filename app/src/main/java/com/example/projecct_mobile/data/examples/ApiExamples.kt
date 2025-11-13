@@ -78,6 +78,7 @@ fun exampleSignupAgence(scope: CoroutineScope) {
     val authRepository = AuthRepository()
     
     scope.launch {
+        // Exemple avec fichiers (logo et document optionnels)
         val result = authRepository.signupAgence(
             nomAgence = "Agence de Casting Tunis",
             responsable = "Mohamed Ben Ali",
@@ -87,8 +88,8 @@ fun exampleSignupAgence(scope: CoroutineScope) {
             gouvernorat = "Tunis",
             siteWeb = "https://www.agence-casting.tn",
             description = "Agence spécialisée dans le casting",
-            logoUrl = "https://example.com/logo.png",
-            documents = "https://example.com/documents.pdf"
+            logoFile = null, // Optionnel : passer un File si disponible
+            documentFile = null // Optionnel : passer un File si disponible
         )
         
         result.onSuccess { authResponse ->
