@@ -40,7 +40,9 @@ interface CastingApiService {
      *   "lieu": "Paris",
      *   "dateDebut": "2024-01-15",
      *   "dateFin": "2024-02-15",
-     *   "remuneration": "1000€/jour",
+     *   "prix": 5000,
+     *   "types": ["Cinéma", "Télévision"],
+     *   "age": "25-35 ans",
      *   "conditions": "Disponibilité totale requise"
      * }
      */

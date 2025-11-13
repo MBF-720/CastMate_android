@@ -4,7 +4,7 @@ import com.google.gson.annotations.SerializedName
 
 /**
  * Modèle de données pour un casting
- * Selon l'API : titre, descriptionRole, synopsis, lieu, dateDebut, dateFin, remuneration, conditions
+ * Selon l'API : titre, descriptionRole, synopsis, lieu, dateDebut, dateFin, prix, types, age, conditions
  */
 data class Casting(
     @SerializedName("_id")
@@ -31,11 +31,14 @@ data class Casting(
     @SerializedName("dateFin")
     val dateFin: String? = null, // Format: "YYYY-MM-DD"
     
-    @SerializedName("remuneration")
-    val remuneration: String? = null, // Ex: "1000€/jour"
-    
     @SerializedName("prix")
     val prix: Double? = null,
+    
+    @SerializedName("types")
+    val types: List<String>? = null, // ⭐ NOUVEAU - Optionnel, tableau de types (ex: ["Cinéma", "Télévision"])
+    
+    @SerializedName("age")
+    val age: String? = null, // ⭐ NOUVEAU - Optionnel, tranche d'âge (ex: "25-35 ans")
 
     @SerializedName("afficheFileId")
     val afficheFileId: String? = null,
@@ -59,7 +62,7 @@ data class Casting(
 
 /**
  * Requête pour créer un nouveau casting
- * Selon l'API : titre, descriptionRole, synopsis, lieu, dateDebut, dateFin, remuneration, conditions
+ * Selon l'API : titre, descriptionRole, synopsis, lieu, dateDebut, dateFin, prix, types, age, conditions
  */
 data class CreateCastingRequest(
     @SerializedName("titre")
@@ -79,12 +82,15 @@ data class CreateCastingRequest(
     
     @SerializedName("dateFin")
     val dateFin: String? = null, // Format: "YYYY-MM-DD"
-    
-    @SerializedName("remuneration")
-    val remuneration: String? = null,
  
     @SerializedName("prix")
     val prix: Double? = null,
+    
+    @SerializedName("types")
+    val types: List<String>? = null, // ⭐ NOUVEAU - Optionnel, tableau de types (ex: ["Cinéma", "Télévision"])
+    
+    @SerializedName("age")
+    val age: String? = null, // ⭐ NOUVEAU - Optionnel, tranche d'âge (ex: "25-35 ans")
 
     @SerializedName("conditions")
     val conditions: String? = null

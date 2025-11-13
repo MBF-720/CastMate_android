@@ -58,8 +58,8 @@ fun com.example.projecct_mobile.data.model.Casting.toCastingItem(isFavorite: Boo
         date = this.dateDebut ?: this.dateFin ?: "Date non spécifiée",
         description = this.descriptionRole ?: this.synopsis ?: "Aucune description",
         role = this.descriptionRole ?: "Rôle non spécifié",
-        age = "", // Pas disponible dans l'API
-        compensation = this.remuneration ?: "Non spécifié",
+        age = this.age ?: "",
+        compensation = this.prix?.toString() ?: "Non spécifié",
         isFavorite = isFavorite
     )
 }

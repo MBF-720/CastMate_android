@@ -371,12 +371,49 @@ fun NavigationScreen() {
         }
         
         composable("agencyCreateCasting") {
+            val castingRepository = remember { CastingRepository() }
+            var isLoading by remember { mutableStateOf(false) }
+            var errorMessage by remember { mutableStateOf<String?>(null) }
+            
             CreateCastingScreen(
                 onBackClick = {
                     navController.popBackStack()
                 },
-                onSaveCastingClick = { _, _, _, _, _, _, _ ->
-                    navController.popBackStack()
+                externalErrorMessage = errorMessage,
+                onSaveCastingClick = { titre, descriptionRole, synopsis, dateDebut, dateFin, prix, types, age, conditions, lieu, afficheFile ->
+                    isLoading = true
+                    errorMessage = null
+                    scope.launch {
+                        try {
+                            val result = castingRepository.createCasting(
+                                titre = titre,
+                                descriptionRole = descriptionRole,
+                                synopsis = synopsis,
+                                lieu = lieu,
+                                dateDebut = dateDebut,
+                                dateFin = dateFin,
+                                prix = prix,
+                                types = types,
+                                age = age,
+                                conditions = conditions,
+                                afficheFile = afficheFile
+                            )
+                            result.onSuccess { casting ->
+                                isLoading = false
+                                android.util.Log.d("MainActivity", "✅ Casting créé avec succès: ${casting.titre}")
+                                navController.popBackStack()
+                            }
+                            result.onFailure { exception ->
+                                isLoading = false
+                                errorMessage = getErrorMessage(exception)
+                                android.util.Log.e("MainActivity", "❌ Erreur création casting: ${exception.message}", exception)
+                            }
+                        } catch (e: Exception) {
+                            isLoading = false
+                            errorMessage = "Erreur lors de la création: ${e.message}"
+                            android.util.Log.e("MainActivity", "❌ Exception création casting: ${e.message}", e)
+                        }
+                    }
                 }
             )
         }

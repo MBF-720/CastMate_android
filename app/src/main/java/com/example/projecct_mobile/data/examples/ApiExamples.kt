@@ -238,7 +238,9 @@ fun exampleCreateCasting(scope: CoroutineScope) {
             lieu = "Paris",
             dateDebut = "2024-01-15", // Format: YYYY-MM-DD
             dateFin = "2024-02-15", // Format: YYYY-MM-DD
-            remuneration = "1000€/jour",
+            prix = 5000.0,
+            types = listOf("Cinéma", "Télévision"),
+            age = "25-35 ans",
             conditions = "Disponibilité totale requise, expérience en cinéma"
         )
         
@@ -249,7 +251,9 @@ fun exampleCreateCasting(scope: CoroutineScope) {
             println("Lieu: ${casting.lieu}")
             println("Date début: ${casting.dateDebut}")
             println("Date fin: ${casting.dateFin}")
-            println("Rémunération: ${casting.remuneration}")
+            println("Prix: ${casting.prix}")
+            println("Types: ${casting.types}")
+            println("Âge: ${casting.age}")
         }
         
         result.onFailure { exception ->

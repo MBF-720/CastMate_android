@@ -20,18 +20,29 @@ class AuthInterceptor(
         val publicRoutes = listOf(
             "/auth/login",
             "/acteur/signup",
-            "/agence/signup",
-            "/castings",
-            "/api"
+            "/agence/signup"
         )
         
-        // Vérifie si la route est publique
+        // Routes publiques avec méthodes spécifiques
+        val publicRoutesWithMethods = mapOf(
+            "/castings" to listOf("GET") // Seul GET /castings est public
+        )
+        
+        val requestPath = originalRequest.url.encodedPath
+        val requestMethod = originalRequest.method
+        
+        // Vérifie si la route est publique (sans restriction de méthode)
         val isPublicRoute = publicRoutes.any { route ->
-            originalRequest.url.encodedPath.startsWith(route)
+            requestPath.startsWith(route)
+        }
+        
+        // Vérifie si la route est publique avec restriction de méthode
+        val isPublicRouteWithMethod = publicRoutesWithMethods.any { (route, methods) ->
+            requestPath.startsWith(route) && requestMethod in methods
         }
         
         // Si la route est publique, on ne modifie pas la requête
-        if (isPublicRoute) {
+        if (isPublicRoute || isPublicRouteWithMethod) {
             return chain.proceed(originalRequest)
         }
         

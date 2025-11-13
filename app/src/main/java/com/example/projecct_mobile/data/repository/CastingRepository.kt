@@ -91,8 +91,11 @@ class CastingRepository {
      * @param lieu Lieu du casting (optionnel)
      * @param dateDebut Date de début format "YYYY-MM-DD" (optionnel)
      * @param dateFin Date de fin format "YYYY-MM-DD" (optionnel)
-     * @param remuneration Rémunération (optionnel, ex: "1000€/jour")
+     * @param prix Prix du casting (optionnel)
+     * @param types Types de casting (optionnel, ex: ["Cinéma", "Télévision"])
+     * @param age Tranche d'âge (optionnel, ex: "25-35 ans")
      * @param conditions Conditions du casting (optionnel)
+     * @param afficheFile Fichier affiche (optionnel)
      * 
      * @return Result<Casting> Le casting créé
      * 
@@ -105,7 +108,9 @@ class CastingRepository {
      *     lieu = "Paris",
      *     dateDebut = "2024-01-15",
      *     dateFin = "2024-02-15",
-     *     remuneration = "1000€/jour",
+     *     prix = 5000.0,
+     *     types = listOf("Cinéma", "Télévision"),
+     *     age = "25-35 ans",
      *     conditions = "Disponibilité totale requise"
      * )
      * ```
@@ -117,9 +122,10 @@ class CastingRepository {
         lieu: String? = null,
         dateDebut: String? = null,
         dateFin: String? = null,
-        remuneration: String? = null,
-        conditions: String? = null,
         prix: Double? = null,
+        types: List<String>? = null,
+        age: String? = null,
+        conditions: String? = null,
         afficheFile: File? = null
     ): Result<Casting> {
         return try {
@@ -130,8 +136,9 @@ class CastingRepository {
                 lieu = lieu,
                 dateDebut = dateDebut,
                 dateFin = dateFin,
-                remuneration = remuneration,
                 prix = prix,
+                types = types?.takeIf { it.isNotEmpty() },
+                age = age?.takeIf { it.isNotBlank() },
                 conditions = conditions
             )
             
@@ -166,9 +173,10 @@ class CastingRepository {
         lieu: String? = null,
         dateDebut: String? = null,
         dateFin: String? = null,
-        remuneration: String? = null,
-        conditions: String? = null,
         prix: Double? = null,
+        types: List<String>? = null,
+        age: String? = null,
+        conditions: String? = null,
         afficheFile: File? = null
     ): Result<Casting> {
         return try {
@@ -179,8 +187,9 @@ class CastingRepository {
                 lieu = lieu,
                 dateDebut = dateDebut,
                 dateFin = dateFin,
-                remuneration = remuneration,
                 prix = prix,
+                types = types?.takeIf { it.isNotEmpty() },
+                age = age?.takeIf { it.isNotBlank() },
                 conditions = conditions
             )
             
