@@ -21,13 +21,12 @@ class ErrorInterceptor(
         val response: Response = try {
             chain.proceed(request)
         } catch (e: IOException) {
-            if (e.message?.contains("Canceled", ignoreCase = true) == true || 
-                e.message?.contains("canceled", ignoreCase = true) == true) {
-                // Ne pas lancer l'exception pour éviter le crash - laisser le repository gérer
-                android.util.Log.w("ErrorInterceptor", "⚠️ Requête annulée: ${request.url}")
-                throw ApiException.CanceledException("Requête annulée")
-            }
-            throw ApiException.NetworkException("Erreur de connexion réseau: ${e.message}")
+            // Les IOException (y compris les requêtes annulées) sont normales
+            // Ne pas les intercepter ici - laisser Retrofit les gérer
+            // Les repositories captureront ces exceptions et les convertiront en Result.failure
+            android.util.Log.d("ErrorInterceptor", "⚠️ IOException (sera gérée par Retrofit): ${e.message}")
+            // Relancer l'IOException originale - Retrofit la gère correctement
+            throw e
         }
         
         if (response.isSuccessful) {
@@ -72,8 +71,15 @@ class ErrorInterceptor(
             }
             
             409 -> {
+                // IMPORTANT: Ne pas lancer l'exception ici pour éviter le crash
+                // Laisser la réponse être retournée avec le code 409
+                // L'erreur sera gérée dans le repository (applyToCasting)
                 val error = parseError(response)
-                throw ApiException.ConflictException(error?.message ?: "Conflit : la ressource existe déjà")
+                val errorMessage = error?.message ?: "Conflit : la ressource existe déjà"
+                android.util.Log.e("ErrorInterceptor", "❌ Erreur 409 (Conflict): $errorMessage - URL: ${request.url}")
+                // Ne pas lancer l'exception - laisser la réponse être retournée
+                // L'erreur sera gérée dans le repository
+                return response
             }
             
             400 -> {
@@ -87,7 +93,11 @@ class ErrorInterceptor(
             
             in 500..599 -> {
                 val error = parseError(response)
-                throw ApiException.ServerException(error?.message ?: "Erreur serveur")
+                val errorMessage = error?.message ?: "Erreur serveur"
+                // Ne pas lancer l'exception pour éviter le crash - laisser le repository gérer
+                android.util.Log.e("ErrorInterceptor", "❌ Erreur serveur (${response.code}): $errorMessage - URL: ${request.url}")
+                // Retourner la réponse pour que le repository puisse la gérer
+                return response
             }
             
             else -> {

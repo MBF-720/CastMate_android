@@ -1,9 +1,13 @@
 package com.example.projecct_mobile.ui.screens.casting
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -12,459 +16,1434 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import com.example.projecct_mobile.R
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.graphics.BitmapFactory
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import com.example.projecct_mobile.data.model.Casting
+import com.example.projecct_mobile.data.model.ApiException
+import com.example.projecct_mobile.data.model.AgenceProfile
+import com.example.projecct_mobile.data.repository.ActeurRepository
+import com.example.projecct_mobile.data.repository.AgenceRepository
+import com.example.projecct_mobile.data.repository.CastingRepository
 import com.example.projecct_mobile.ui.theme.*
+import com.example.projecct_mobile.ui.components.ComingSoonAlert
+import com.example.projecct_mobile.ui.components.CandidatureSuccessDialog
+import com.example.projecct_mobile.ui.components.CandidatureAlreadyAppliedDialog
+import com.example.projecct_mobile.ui.components.CastingClosedDialog
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.*
 
 @Composable
 fun CastingDetailScreen(
-    casting: CastingItem,
+    casting: Casting,
     onBackClick: () -> Unit = {},
     onMapClick: () -> Unit = {},
     onSubmitClick: () -> Unit = {},
     onNavigateToProfile: (() -> Unit)? = null,
-    onNavigateToHome: (() -> Unit)? = null
+    onNavigateToHome: (() -> Unit)? = null,
+    onNavigateToCandidatures: (() -> Unit)? = null
 ) {
-    var isFavorite by remember { mutableStateOf(casting.isFavorite) }
+    val context = LocalContext.current
+    val acteurRepository = remember { ActeurRepository() }
+    val castingRepository = remember { CastingRepository() }
+    val scope = rememberCoroutineScope()
+    var afficheImage by remember { mutableStateOf<ImageBitmap?>(null) }
+    var isLoadingImage by remember { mutableStateOf(false) }
+    var isFavorite by remember { mutableStateOf(false) }
     var selectedTabIndex by remember { mutableStateOf(0) }
+    var showComingSoon by remember { mutableStateOf(false) }
+    var showSuccessDialog by remember { mutableStateOf(false) }
+    var showAlreadyAppliedDialog by remember { mutableStateOf(false) }
+    var showCastingClosedDialog by remember { mutableStateOf(false) }
+    var isSubmitting by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
     val tabs = listOf("overview", "Film", "production")
+    
+    // Télécharger l'affiche si disponible
+    LaunchedEffect(casting.actualAfficheFileId) {
+        if (casting.actualAfficheFileId != null && afficheImage == null && !isLoadingImage) {
+            isLoadingImage = true
+            try {
+                val result = acteurRepository.downloadMedia(casting.actualAfficheFileId!!)
+                result.onSuccess { bytes ->
+                    if (bytes != null && bytes.isNotEmpty()) {
+                        withContext(Dispatchers.IO) {
+                            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                            bitmap?.let {
+                                afficheImage = it.asImageBitmap()
+                            }
+                        }
+                    }
+                    isLoadingImage = false
+                }
+                result.onFailure { exception ->
+                    if (exception is ApiException.ForbiddenException) {
+                        android.util.Log.d("CastingDetailScreen", "⚠️ Accès refusé à l'affiche (403)")
+                    } else {
+                        android.util.Log.e("CastingDetailScreen", "Erreur téléchargement affiche: ${exception.message}")
+                    }
+                    isLoadingImage = false
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("CastingDetailScreen", "Exception téléchargement affiche: ${e.message}")
+                isLoadingImage = false
+            }
+        } else if (casting.actualAfficheFileId == null) {
+            isLoadingImage = false
+        }
+    }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        // En-tête avec image/poster
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Image en arrière-plan (fixe)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(280.dp)
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(Color(0xFF8B4513), Color(0xFF6B3410))
-                    )
-                )
+                .height(350.dp)
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // Barre de navigation
-                Row(
+            // Affiche du casting en arrière-plan
+            if (afficheImage != null) {
+                Image(
+                    bitmap = afficheImage!!,
+                    contentDescription = "Affiche du casting",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                // Image par défaut avec gradient
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .fillMaxSize()
+                        .background(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    Color(0xFFE57373),
+                                    Color(0xFFAD1457)
+                                )
+                            )
+                        )
+                )
+            }
+            
+            if (isLoadingImage) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
                 ) {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = White
-                        )
-                    }
-
-                    Text(
-                        text = casting.title,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = White
+                    CircularProgressIndicator(
+                        color = White,
+                        modifier = Modifier.size(32.dp)
                     )
-
-                    IconButton(onClick = {
-                        isFavorite = !isFavorite
-                    }) {
-                        Icon(
-                            imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                            contentDescription = "Favorite",
-                            tint = if (isFavorite) RedHeart else White,
-                            modifier = Modifier.size(28.dp)
-                        )
-                    }
+                }
+            }
+            
+            // Barre de navigation en haut
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 40.dp, start = 16.dp, end = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = onBackClick,
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = White
+                    )
                 }
 
-                Spacer(modifier = Modifier.weight(1f))
+                IconButton(
+                    onClick = { isFavorite = !isFavorite },
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        contentDescription = "Favorite",
+                        tint = if (isFavorite) RedHeart else White,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             }
         }
 
-        // Contenu avec onglets
-        Box(
+        // Contenu scrollable qui se superpose à l'image (overlap)
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .background(White)
-                .clip(RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp))
+                .fillMaxSize()
+                .padding(top = 200.dp) // Commence plus haut pour créer l'overlap
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // Onglets
-                TabRow(
-                    selectedTabIndex = selectedTabIndex,
-                    containerColor = White,
-                    contentColor = DarkBlue
-                ) {
-                    tabs.forEachIndexed { index, title ->
-                        Tab(
-                            selected = selectedTabIndex == index,
-                            onClick = { selectedTabIndex = index },
-                            text = {
+            // Surface blanche arrondie qui se superpose
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp),
+                color = White
+            ) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // Onglets personnalisés (style "pill")
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 16.dp)
+                            .clip(RoundedCornerShape(25.dp))
+                            .background(DarkBlue)
+                            .padding(4.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        tabs.forEachIndexed { index, title ->
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(
+                                        if (selectedTabIndex == index) White
+                                        else Color.Transparent
+                                    )
+                                    .clickable { selectedTabIndex = index }
+                                    .padding(vertical = 10.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
                                 Text(
                                     text = title,
                                     fontSize = 14.sp,
                                     fontWeight = if (selectedTabIndex == index) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (selectedTabIndex == index) DarkBlue else GrayBorder
+                                    color = if (selectedTabIndex == index) DarkBlue else White
                                 )
                             }
-                        )
-                    }
-                }
-
-                // Contenu selon l'onglet sélectionné
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState())
-                        .padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    when (selectedTabIndex) {
-                        0 -> OverviewContent(casting, onMapClick)
-                        1 -> FilmContent(casting)
-                        2 -> ProductionContent(casting)
+                        }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Bouton Submit
-                    Button(
-                        onClick = onSubmitClick,
+                    // Contenu selon l'onglet sélectionné (avec espace pour le bouton fixe)
+                    // Ajout de la détection de swipe gauche/droite
+                    var dragOffset by remember { mutableStateOf(0f) }
+                    
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(56.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = DarkBlue
-                        )
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState())
+                            .pointerInput(Unit) {
+                                detectHorizontalDragGestures(
+                                    onDragEnd = {
+                                        // Détecter la direction du swipe
+                                        if (dragOffset > 100) {
+                                            // Swipe vers la droite - onglet précédent
+                                            if (selectedTabIndex > 0) {
+                                                selectedTabIndex--
+                                            }
+                                        } else if (dragOffset < -100) {
+                                            // Swipe vers la gauche - onglet suivant
+                                            if (selectedTabIndex < tabs.size - 1) {
+                                                selectedTabIndex++
+                                            }
+                                        }
+                                        dragOffset = 0f
+                                    },
+                                    onHorizontalDrag = { _, dragAmount ->
+                                        dragOffset += dragAmount
+                                    }
+                                )
+                            }
+                            .padding(horizontal = 20.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Text(
-                            text = "Submit",
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = White,
-                            letterSpacing = 0.5.sp
-                        )
+                        when (selectedTabIndex) {
+                            0 -> OverviewContent(casting, onMapClick)
+                            1 -> FilmContent(casting)
+                            2 -> ProductionContent(casting)
+                        }
+
+                        // Espace pour le bouton fixe + barre de navigation
+                        Spacer(modifier = Modifier.height(140.dp))
                     }
                 }
             }
         }
 
-        // Barre de navigation du bas (Favorite, Home, Profile)
-        DetailBottomNavigationBar(
-            onFavoriteClick = { isFavorite = !isFavorite },
-            onHomeClick = { onNavigateToHome?.invoke() },
-            onProfileClick = { onNavigateToProfile?.invoke() },
-            isFavorite = isFavorite
-        )
-    }
-}
-
-@Composable
-fun OverviewContent(casting: CastingItem, onMapClick: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        // Description du rôle
-        Text(
-            text = "(Arabic) Special Training: Combat choreography provided",
-            fontSize = 14.sp,
-            color = GrayBorder,
-            lineHeight = 20.sp
-        )
-
-        // Costume / Look
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                text = "Costume / Look",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = Black
-            )
-            Text(
-                text = "• Clothing: Neutral, fitted athletic wear for movement; bring one casual outfit.",
-                fontSize = 14.sp,
-                color = GrayBorder,
-                lineHeight = 20.sp
-            )
-            Text(
-                text = "• Shoes: Comfortable for running/jumping (sneakers or boots)",
-                fontSize = 14.sp,
-                color = GrayBorder,
-                lineHeight = 20.sp
-            )
-            Text(
-                text = "• Grooming: Hair tidy, minimal makeup, natural look",
-                fontSize = 14.sp,
-                color = GrayBorder,
-                lineHeight = 20.sp
-            )
-            Text(
-                text = "• Optional props: None required unless specified by casting",
-                fontSize = 14.sp,
-                color = GrayBorder,
-                lineHeight = 20.sp
-            )
-        }
-
-        // Location
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                text = "Location",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = Black
-            )
+        // Bouton Submit FIXE en bas (au-dessus de la barre de navigation)
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .background(White)
+        ) {
+            // Afficher le message d'erreur si présent (AU-DESSUS du bouton)
+            errorMessage?.let { error ->
+                Text(
+                    text = error,
+                    color = Color(0xFFF44336),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 8.dp),
+                    textAlign = TextAlign.Center
+                )
+            }
+            
+            // Bouton Submit fixe
             Button(
-                onClick = onMapClick,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
+                onClick = {
+                    val castingId = casting.actualId
+                    
+                    // Vérifier d'abord si le casting est ouvert
+                    if (!casting.ouvert) {
+                        showCastingClosedDialog = true
+                        return@Button
+                    }
+                    
+                    if (castingId != null && !isSubmitting) {
+                        isSubmitting = true
+                        errorMessage = null // Réinitialiser le message d'erreur
+                        showSuccessDialog = false // S'assurer que le dialogue de succès n'est pas affiché
+                        showAlreadyAppliedDialog = false // S'assurer que le dialogue "déjà postulé" n'est pas affiché
+                        showCastingClosedDialog = false // S'assurer que le dialogue "fermé" n'est pas affiché
+                        scope.launch {
+                            try {
+                                val result = castingRepository.applyToCasting(castingId)
+                                result.onSuccess {
+                                    android.util.Log.d("CastingDetailScreen", "✅ Candidature envoyée avec succès pour le casting: ${casting.titre}")
+                                    errorMessage = null // Pas d'erreur
+                                    onSubmitClick()
+                                    showSuccessDialog = true // Afficher le dialogue de succès SEULEMENT en cas de succès
+                                    isSubmitting = false
+                                }
+                                result.onFailure { exception ->
+                                    android.util.Log.e("CastingDetailScreen", "❌ Erreur lors de la candidature: ${exception.message}", exception)
+                                    showSuccessDialog = false // Ne PAS afficher le dialogue de succès en cas d'erreur
+                                    
+                                    // Vérifier si le message d'erreur indique que le casting est fermé
+                                    val errorMessageText = exception.message?.lowercase() ?: ""
+                                    val isCastingClosed = errorMessageText.contains("n'accepte plus") ||
+                                            errorMessageText.contains("fermé") ||
+                                            errorMessageText.contains("closed") ||
+                                            errorMessageText.contains("n'accepte pas") ||
+                                            (!casting.ouvert)
+                                    
+                                    when {
+                                        isCastingClosed -> {
+                                            // Afficher le dialogue spécial pour "casting fermé"
+                                            showCastingClosedDialog = true
+                                            showAlreadyAppliedDialog = false
+                                            errorMessage = null // Ne pas afficher de message d'erreur en texte
+                                        }
+                                        exception is ApiException.ConflictException -> {
+                                            // Afficher le dialogue spécial pour "déjà postulé"
+                                            showAlreadyAppliedDialog = true
+                                            showCastingClosedDialog = false
+                                            errorMessage = null // Ne pas afficher de message d'erreur en texte
+                                        }
+                                        exception is ApiException.UnauthorizedException -> {
+                                            errorMessage = "Vous devez être connecté pour postuler"
+                                            showAlreadyAppliedDialog = false
+                                            showCastingClosedDialog = false
+                                        }
+                                        exception is ApiException.ForbiddenException -> {
+                                            // Vérifier si l'erreur 403 indique que le casting est fermé
+                                            if (errorMessageText.contains("n'accepte plus") || errorMessageText.contains("fermé")) {
+                                                showCastingClosedDialog = true
+                                                showAlreadyAppliedDialog = false
+                                                errorMessage = null
+                                            } else {
+                                                errorMessage = "Vous ne pouvez pas postuler à ce casting"
+                                                showAlreadyAppliedDialog = false
+                                                showCastingClosedDialog = false
+                                            }
+                                        }
+                                        exception is ApiException.BadRequestException -> {
+                                            // Vérifier si l'erreur 400 indique que le casting est fermé
+                                            if (errorMessageText.contains("n'accepte plus") || errorMessageText.contains("fermé")) {
+                                                showCastingClosedDialog = true
+                                                showAlreadyAppliedDialog = false
+                                                errorMessage = null
+                                            } else {
+                                                errorMessage = "Erreur lors de la candidature: ${exception.message}"
+                                                showAlreadyAppliedDialog = false
+                                                showCastingClosedDialog = false
+                                            }
+                                        }
+                                        else -> {
+                                            errorMessage = "Erreur: ${exception.message}"
+                                            showAlreadyAppliedDialog = false
+                                            showCastingClosedDialog = false
+                                        }
+                                    }
+                                    isSubmitting = false
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.e("CastingDetailScreen", "❌ Exception lors de la candidature: ${e.message}", e)
+                                showSuccessDialog = false // Ne PAS afficher le dialogue de succès en cas d'exception
+                                showAlreadyAppliedDialog = false // Ne PAS afficher le dialogue "déjà postulé" en cas d'exception
+                                showCastingClosedDialog = false // Ne PAS afficher le dialogue "fermé" en cas d'exception
+                                errorMessage = "Erreur inconnue: ${e.message}"
+                                isSubmitting = false
+                            }
+                        }
+                    } else if (castingId == null) {
+                        errorMessage = "ID de casting invalide"
+                        showSuccessDialog = false
+                        showAlreadyAppliedDialog = false
+                        showCastingClosedDialog = false
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+                    .padding(horizontal = 20.dp),
+                shape = RoundedCornerShape(26.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = DarkBlue
-                )
+                ),
+                enabled = !isSubmitting
             ) {
-                Text(
-                    text = "Map",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = White
-                )
+                if (isSubmitting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = White,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(
+                        text = "Submit",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = White
+                    )
+                }
             }
-        }
 
-        // Dates
-        if (casting.date.isNotEmpty()) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = "dates",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = GrayBorder
-                )
-                Text(
-                    text = casting.date,
-                    fontSize = 16.sp,
-                    color = Black
-                )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Barre de navigation du bas (Favorite, Home, Profile)
+            HomeBottomNavigationBar(
+                onFavoriteClick = { 
+                    // Afficher "Coming Soon" pour la page Favoris
+                    showComingSoon = true
+                },
+                onHomeClick = { 
+                    // Retourner à la page d'accueil de l'acteur
+                    onNavigateToHome?.invoke() 
+                },
+                onProfileClick = { 
+                    // Naviguer vers les paramètres de l'acteur
+                    onNavigateToProfile?.invoke() 
+                }
+            )
+        }
+    }
+    
+    // Alerte "Coming Soon" pour la page Favoris
+    if (showComingSoon) {
+        ComingSoonAlert(
+            onDismiss = { showComingSoon = false },
+            featureName = "Favoris"
+        )
+    }
+    
+    // Dialogue de confirmation de candidature
+    if (showSuccessDialog) {
+        CandidatureSuccessDialog(
+            onDismiss = { showSuccessDialog = false },
+            onViewCandidatures = {
+                onNavigateToCandidatures?.invoke()
             }
-        }
-
-        // Rôle
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                text = "rôle",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                color = GrayBorder
-            )
-            Text(
-                text = "• Character Type: Supporting",
-                fontSize = 14.sp,
-                color = GrayBorder,
-                lineHeight = 20.sp
-            )
-            Text(
-                text = "• Gender/Age: Male, 20-30 years old",
-                fontSize = 14.sp,
-                color = GrayBorder,
-                lineHeight = 20.sp
-            )
-            Text(
-                text = "• Physical Traits: Athletic build, expressive eyes",
-                fontSize = 14.sp,
-                color = GrayBorder,
-                lineHeight = 20.sp
-            )
-        }
+        )
+    }
+    
+    // Dialogue pour "déjà postulé"
+    if (showAlreadyAppliedDialog) {
+        CandidatureAlreadyAppliedDialog(
+            onDismiss = { showAlreadyAppliedDialog = false },
+            onViewCandidatures = {
+                onNavigateToCandidatures?.invoke()
+            }
+        )
+    }
+    
+    // Dialogue pour "casting fermé"
+    if (showCastingClosedDialog) {
+        CastingClosedDialog(
+            onDismiss = { showCastingClosedDialog = false }
+        )
     }
 }
 
 @Composable
-fun FilmContent(casting: CastingItem) {
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        // Synopsis
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                text = "synopsis",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = Black
-            )
-            Text(
-                text = "Paul Atreides unites with Chani and the Fremen while seeking revenge against the conspirators who destroyed his family. Facing a choice between the love of his life and the fate of the known universe, he must prevent a terrible future only he can foresee.",
-                fontSize = 14.sp,
-                color = GrayBorder,
-                lineHeight = 20.sp
-            )
+fun OverviewContent(casting: Casting, onMapClick: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+        // Badge de statut (Ouvert/Fermé) - UNIQUEMENT dans Overview
+        val isOpen = casting.ouvert == true
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Start,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = if (isOpen) Color(0xFF4CAF50).copy(alpha = 0.15f) else Color(0xFFF44336).copy(alpha = 0.15f)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (isOpen) Color(0xFF4CAF50) else Color(0xFFF44336)
+                            )
+                    )
+                    Text(
+                        text = if (isOpen) "Ouvert" else "Fermé",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (isOpen) Color(0xFF2E7D32) else Color(0xFFC62828)
+                    )
+                }
+            }
         }
-
-        // Réalisateur
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                text = "realisateur",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = Black
-            )
-            Text(
-                text = "Denis Villeneuve - Known for \"Arrival\" and \"Blade Runner 2049\", brings his visionary storytelling to this epic continuation.",
-                fontSize = 14.sp,
-                color = GrayBorder,
-                lineHeight = 20.sp
-            )
-        }
-
-        // Scénariste
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                text = "scénariste",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = Black
-            )
-            Text(
-                text = "Jon Spaihts & Denis Villeneuve - Blending myth, politics, and emotion into a compelling sci-fi narrative.",
-                fontSize = 14.sp,
-                color = GrayBorder,
-                lineHeight = 20.sp
-            )
-        }
-    }
-}
-
-@Composable
-fun ProductionContent(casting: CastingItem) {
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        
         // Description
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 text = "Description",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
-                color = Black
+                color = Color(0xFF1A1A1A)
             )
             Text(
-                text = "Warner Bros. Pictures is a leading film studio, founded in 1923 in Burbank, California. Known for producing blockbuster films and operating globally.",
+                text = casting.descriptionRole ?: casting.synopsis ?: "Aucune description disponible",
                 fontSize = 14.sp,
-                color = GrayBorder,
+                color = Color(0xFF666666),
                 lineHeight = 20.sp
             )
         }
 
-        // Notable Productions
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Dates
+        val dateDebut = casting.dateDebut
+        val dateFin = casting.dateFin
+        if (!dateDebut.isNullOrBlank() || !dateFin.isNullOrBlank()) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = "dates",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF1A1A1A)
+                )
+                if (!dateDebut.isNullOrBlank()) {
+                    Text(
+                        text = formatDate(dateDebut),
+                        fontSize = 14.sp,
+                        color = Color(0xFF666666)
+                    )
+                }
+                if (!dateFin.isNullOrBlank() && dateFin != dateDebut) {
+                    Text(
+                        text = formatDate(dateFin),
+                        fontSize = 14.sp,
+                        color = Color(0xFF666666)
+                    )
+                }
+            }
+        }
+
+        // Rôle (Character Type, Gender/Age, Physical Traits)
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
-                text = "Notable Productions",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = Black
+                text = "rôle",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color(0xFF1A1A1A)
             )
-            Text(
-                text = "• Dune (2021-2024)",
-                fontSize = 14.sp,
-                color = GrayBorder,
-                lineHeight = 20.sp
+            
+            // Types de casting
+            if (!casting.types.isNullOrEmpty()) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "•",
+                        fontSize = 14.sp,
+                        color = Color(0xFF666666)
+                    )
+                    Text(
+                        text = "Character Type: ${casting.types.joinToString(", ")}",
+                        fontSize = 14.sp,
+                        color = Color(0xFF666666)
+                    )
+                }
+            }
+            
+            // Âge
+            if (!casting.age.isNullOrBlank()) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "•",
+                        fontSize = 14.sp,
+                        color = Color(0xFF666666)
+                    )
+                    Text(
+                        text = "Gender/Age: ${casting.age}",
+                        fontSize = 14.sp,
+                        color = Color(0xFF666666)
+                    )
+                }
+            }
+            
+            // Conditions physiques/traits
+            if (!casting.conditions.isNullOrBlank()) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Text(
+                        text = "•",
+                        fontSize = 14.sp,
+                        color = Color(0xFF666666),
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                    Text(
+                        text = "Physical Traits: ${casting.conditions}",
+                        fontSize = 14.sp,
+                        color = Color(0xFF666666),
+                        lineHeight = 20.sp
+                    )
+                }
+            }
+        }
+
+        // Lieu
+        if (!casting.lieu.isNullOrBlank()) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Lieu",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF1A1A1A)
+                )
+                Text(
+                    text = casting.lieu,
+                    fontSize = 14.sp,
+                    color = Color(0xFF666666)
+                )
+            }
+        }
+
+        // Prix
+        if (casting.prix != null) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Rémunération",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF1A1A1A)
+                )
+                Text(
+                    text = "${casting.prix}€",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = DarkBlue
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Composant pour afficher une icône de lien social (icône Material) avec label
+ */
+@Composable
+private fun SocialLinkIcon(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    backgroundColor: Color,
+    iconTint: Color
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.width(80.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(72.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(backgroundColor)
+                .clickable(onClick = onClick)
+                .shadow(
+                    elevation = 6.dp,
+                    shape = RoundedCornerShape(20.dp),
+                    spotColor = backgroundColor.copy(alpha = 0.4f)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = iconTint,
+                modifier = Modifier.size(36.dp)
             )
-            Text(
-                text = "• The Dark Knight Trilogy",
-                fontSize = 14.sp,
-                color = GrayBorder,
-                lineHeight = 20.sp
+        }
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            color = Color(0xFF666666),
+            textAlign = TextAlign.Center,
+            maxLines = 1
+        )
+    }
+}
+
+/**
+ * Composant pour afficher une icône de lien social (image drawable) avec label
+ */
+@Composable
+private fun SocialLinkImageIcon(
+    painter: androidx.compose.ui.graphics.painter.Painter,
+    label: String,
+    onClick: () -> Unit,
+    backgroundColor: Color
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.width(80.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(72.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(backgroundColor)
+                .clickable(onClick = onClick)
+                .shadow(
+                    elevation = 6.dp,
+                    shape = RoundedCornerShape(20.dp),
+                    spotColor = backgroundColor.copy(alpha = 0.4f)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                painter = painter,
+                contentDescription = label,
+                modifier = Modifier.size(40.dp),
+                contentScale = ContentScale.Fit
             )
-            Text(
-                text = "• Harry Potter & Fantastic Beasts series",
-                fontSize = 14.sp,
-                color = GrayBorder,
-                lineHeight = 20.sp
-            )
-            Text(
-                text = "• Inception",
-                fontSize = 14.sp,
-                color = GrayBorder,
-                lineHeight = 20.sp
-            )
-            Text(
-                text = "• Joker",
-                fontSize = 14.sp,
-                color = GrayBorder,
-                lineHeight = 20.sp
-            )
+        }
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            color = Color(0xFF666666),
+            textAlign = TextAlign.Center,
+            maxLines = 1
+        )
+    }
+}
+
+/**
+ * Formate une date ISO en format lisible en français
+ * Exemple: "2024-01-15T00:00:00.000Z" -> "15 janvier 2024"
+ *          "2024-01-15" -> "15 janvier 2024"
+ */
+fun formatDate(dateString: String): String {
+    return try {
+        // Essayer de parser différents formats de date
+        val formats = listOf(
+            "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+            "yyyy-MM-dd'T'HH:mm:ss'Z'",
+            "yyyy-MM-dd"
+        )
+        
+        var parsedDate: Date? = null
+        for (format in formats) {
+            try {
+                val sdf = SimpleDateFormat(format, Locale("fr", "FR"))
+                sdf.timeZone = TimeZone.getTimeZone("UTC")
+                parsedDate = sdf.parse(dateString)
+                if (parsedDate != null) break
+            } catch (e: Exception) {
+                // Continuer avec le format suivant
+            }
+        }
+        
+        if (parsedDate != null) {
+            val outputFormat = SimpleDateFormat("d MMMM yyyy", Locale("fr", "FR"))
+            outputFormat.format(parsedDate)
+        } else {
+            // Si le parsing échoue, retourner la date originale
+            dateString
+        }
+    } catch (e: Exception) {
+        // En cas d'erreur, retourner la date originale
+        dateString
+    }
+}
+
+@Composable
+fun FilmContent(casting: Casting) {
+    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        // Synopsis
+        if (!casting.synopsis.isNullOrBlank()) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Synopsis",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Black
+                )
+                Text(
+                    text = casting.synopsis,
+                    fontSize = 14.sp,
+                    color = GrayBorder,
+                    lineHeight = 20.sp
+                )
+            }
+        }
+        
+        // Description du rôle
+        if (!casting.descriptionRole.isNullOrBlank()) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Description du rôle",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Black
+                )
+                Text(
+                    text = casting.descriptionRole,
+                    fontSize = 14.sp,
+                    color = GrayBorder,
+                    lineHeight = 20.sp
+                )
+            }
         }
     }
 }
 
 @Composable
-fun DetailBottomNavigationBar(
+fun ProductionContent(casting: Casting) {
+    val recruteur = casting.recruteur
+    val context = LocalContext.current
+    val acteurRepository = remember { ActeurRepository() }
+    val agenceRepository = remember { AgenceRepository() }
+    val scope = rememberCoroutineScope()
+    var logoImage by remember { mutableStateOf<ImageBitmap?>(null) }
+    var isLoadingLogo by remember { mutableStateOf(false) }
+    var agenceProfile by remember { mutableStateOf<AgenceProfile?>(null) }
+    var isLoadingAgence by remember { mutableStateOf(false) }
+
+    // Récupérer les informations complètes de l'agence
+    LaunchedEffect(recruteur?.actualId) {
+        val agenceId = recruteur?.actualId
+        android.util.Log.d("ProductionContent", "🔍 Recruteur: $recruteur")
+        android.util.Log.d("ProductionContent", "🔍 Recruteur ID (actualId): $agenceId")
+        android.util.Log.d("ProductionContent", "🔍 Recruteur tel: ${recruteur?.tel}")
+        android.util.Log.d("ProductionContent", "🔍 Recruteur gouvernorat: ${recruteur?.gouvernorat}")
+        android.util.Log.d("ProductionContent", "🔍 Recruteur siteWeb: ${recruteur?.siteWeb}")
+        android.util.Log.d("ProductionContent", "🔍 Recruteur description: ${recruteur?.description}")
+        android.util.Log.d("ProductionContent", "🔍 Recruteur socialLinks: ${recruteur?.socialLinks}")
+        
+        if (agenceId != null && agenceProfile == null && !isLoadingAgence) {
+            isLoadingAgence = true
+            android.util.Log.d("ProductionContent", "📞 Récupération des informations complètes de l'agence: $agenceId")
+            try {
+                val result = agenceRepository.getAgenceById(agenceId)
+                result.onSuccess { profile ->
+                    android.util.Log.d("ProductionContent", "✅ Informations agence récupérées: ${profile.nomAgence}")
+                    android.util.Log.d("ProductionContent", "✅ Téléphone: ${profile.tel}")
+                    android.util.Log.d("ProductionContent", "✅ Gouvernorat: ${profile.gouvernorat}")
+                    android.util.Log.d("ProductionContent", "✅ Site web: ${profile.siteWeb}")
+                    android.util.Log.d("ProductionContent", "✅ Description: ${profile.description}")
+                    android.util.Log.d("ProductionContent", "✅ Social links: ${profile.socialLinks}")
+                    agenceProfile = profile
+                    isLoadingAgence = false
+                }
+                result.onFailure { exception ->
+                    android.util.Log.e("ProductionContent", "❌ Erreur récupération agence: ${exception.message}")
+                    android.util.Log.e("ProductionContent", "❌ Exception type: ${exception::class.simpleName}")
+                    // On continue avec les informations de base du recruteur si l'appel échoue
+                    isLoadingAgence = false
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("ProductionContent", "Exception récupération agence: ${e.message}", e)
+                isLoadingAgence = false
+            }
+        } else {
+            if (agenceId == null) {
+                android.util.Log.w("ProductionContent", "⚠️ ID agence null - utilisation des informations de base du recruteur")
+            }
+            isLoadingAgence = false
+        }
+    }
+
+    // Utiliser les informations complètes de l'agence si disponibles, sinon utiliser les informations de base du recruteur
+    val agenceInfo = agenceProfile ?: run {
+        // Convertir RecruteurInfo en AgenceProfile si on n'a pas les informations complètes
+        if (recruteur != null) {
+            AgenceProfile(
+                id = recruteur.actualId,
+                idAlt = recruteur.idAlt,
+                nomAgence = recruteur.nomAgence,
+                responsable = recruteur.responsable,
+                email = recruteur.email,
+                tel = recruteur.tel,
+                gouvernorat = recruteur.gouvernorat,
+                siteWeb = recruteur.siteWeb,
+                description = recruteur.description,
+                socialLinks = recruteur.socialLinks?.let { links ->
+                    com.example.projecct_mobile.data.model.AgenceSocialLinks(
+                        facebook = links.facebook,
+                        instagram = links.instagram
+                    )
+                },
+                media = recruteur.media?.let { media ->
+                    com.example.projecct_mobile.data.model.UserMedia(
+                        photoFileId = media.photoFileId,
+                        documentFileId = null,
+                        gallery = null
+                    )
+                },
+                createdAt = null,
+                updatedAt = null
+            )
+        } else {
+            null
+        }
+    }
+
+    // Télécharger le logo de l'agence si disponible
+    LaunchedEffect(agenceInfo?.media?.photoFileId) {
+        val photoFileId = agenceInfo?.media?.photoFileId
+        if (photoFileId != null && logoImage == null && !isLoadingLogo) {
+            isLoadingLogo = true
+            try {
+                val result = acteurRepository.downloadMedia(photoFileId)
+                result.onSuccess { bytes ->
+                    if (bytes != null && bytes.isNotEmpty()) {
+                        withContext(Dispatchers.IO) {
+                            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                            bitmap?.let {
+                                logoImage = it.asImageBitmap()
+                            }
+                        }
+                    }
+                    isLoadingLogo = false
+                }
+                result.onFailure { exception ->
+                    if (exception is ApiException.ForbiddenException) {
+                        android.util.Log.d("ProductionContent", "⚠️ Accès refusé au logo (403)")
+                    } else {
+                        android.util.Log.e("ProductionContent", "Erreur téléchargement logo: ${exception.message}")
+                    }
+                    isLoadingLogo = false
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("ProductionContent", "Exception téléchargement logo: ${e.message}")
+                isLoadingLogo = false
+            }
+        } else if (photoFileId == null) {
+            isLoadingLogo = false
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        // Titre de la section
+        Text(
+            text = "Agence de casting",
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            color = Black
+        )
+
+        if (agenceInfo != null) {
+            // Indicateur de chargement des informations complètes
+            if (isLoadingAgence && agenceProfile == null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = DarkBlue,
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Chargement des informations...",
+                        fontSize = 12.sp,
+                        color = Color(0xFF666666)
+                    )
+                }
+            }
+
+            // Logo de l'agence
+            if (logoImage != null || isLoadingLogo) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(100.dp)
+                            .clip(CircleShape)
+                            .background(DarkBlue.copy(alpha = 0.1f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (isLoadingLogo) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(32.dp),
+                                color = DarkBlue,
+                                strokeWidth = 2.dp
+                            )
+                        } else if (logoImage != null) {
+                            Image(
+                                bitmap = logoImage!!,
+                                contentDescription = "Logo de l'agence",
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(CircleShape),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            // Icône par défaut si le logo n'est pas disponible
+                            Icon(
+                                imageVector = Icons.Default.Business,
+                                contentDescription = "Logo",
+                                tint = DarkBlue,
+                                modifier = Modifier.size(48.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Nom de l'agence
+            if (!agenceInfo.nomAgence.isNullOrBlank()) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Nom de l'agence",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Black
+                    )
+                    Text(
+                        text = agenceInfo.nomAgence,
+                        fontSize = 16.sp,
+                        color = Black,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+
+            // Responsable
+            if (!agenceInfo.responsable.isNullOrBlank()) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Responsable",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Black
+                    )
+                    Text(
+                        text = agenceInfo.responsable,
+                        fontSize = 14.sp,
+                        color = Color(0xFF555555)
+                    )
+                }
+            }
+
+            // Téléphone
+            if (!agenceInfo.tel.isNullOrBlank()) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Téléphone",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Black
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable {
+                            try {
+                                val phoneNumber = agenceInfo.tel!!.trim()
+                                // Nettoyer le numéro de téléphone (supprimer les espaces, tirets, etc.)
+                                val cleanPhoneNumber = phoneNumber.replace(Regex("[^0-9+]"), "")
+                                val intent = android.content.Intent(android.content.Intent.ACTION_DIAL)
+                                intent.data = android.net.Uri.parse("tel:$cleanPhoneNumber")
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                android.util.Log.e("ProductionContent", "Erreur ouverture téléphone: ${e.message}")
+                            }
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Phone,
+                            contentDescription = "Appeler",
+                            tint = DarkBlue,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = agenceInfo.tel,
+                            fontSize = 14.sp,
+                            color = DarkBlue,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+
+            // Email
+            if (!agenceInfo.email.isNullOrBlank()) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Email",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Black
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable {
+                            try {
+                                val emailAddress = agenceInfo.email!!.trim()
+                                val intent = android.content.Intent(android.content.Intent.ACTION_SENDTO)
+                                intent.data = android.net.Uri.parse("mailto:$emailAddress")
+                                intent.putExtra(android.content.Intent.EXTRA_EMAIL, arrayOf(emailAddress))
+                                context.startActivity(android.content.Intent.createChooser(intent, "Envoyer un email"))
+                            } catch (e: Exception) {
+                                android.util.Log.e("ProductionContent", "Erreur ouverture email: ${e.message}")
+                            }
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Email,
+                            contentDescription = "Envoyer un email",
+                            tint = DarkBlue,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = agenceInfo.email,
+                            fontSize = 14.sp,
+                            color = DarkBlue,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+
+            // Gouvernorat
+            if (!agenceInfo.gouvernorat.isNullOrBlank()) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Gouvernorat",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Black
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.LocationOn,
+                            contentDescription = null,
+                            tint = DarkBlue,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = agenceInfo.gouvernorat,
+                            fontSize = 14.sp,
+                            color = Color(0xFF555555)
+                        )
+                    }
+                }
+            }
+
+            // Description
+            if (!agenceInfo.description.isNullOrBlank()) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Description",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Black
+                    )
+                    Text(
+                        text = agenceInfo.description,
+                        fontSize = 14.sp,
+                        color = Color(0xFF555555),
+                        lineHeight = 20.sp
+                    )
+                }
+            }
+
+            // Liens et réseaux sociaux
+            val socialLinks = agenceInfo.socialLinks
+            val hasSiteWeb = !agenceInfo.siteWeb.isNullOrBlank()
+            val hasFacebook = !socialLinks?.facebook.isNullOrBlank()
+            val hasInstagram = !socialLinks?.instagram.isNullOrBlank()
+            
+            // Logs de débogage pour vérifier les liens
+            android.util.Log.d("ProductionContent", "🔗 Site web: '${agenceInfo.siteWeb}' (hasSiteWeb: $hasSiteWeb)")
+            android.util.Log.d("ProductionContent", "🔗 Social links: $socialLinks")
+            android.util.Log.d("ProductionContent", "🔗 Facebook: '${socialLinks?.facebook}' (hasFacebook: $hasFacebook)")
+            android.util.Log.d("ProductionContent", "🔗 Instagram: '${socialLinks?.instagram}' (hasInstagram: $hasInstagram)")
+            
+            // Afficher la section "Liens" si au moins un lien est disponible
+            if (hasSiteWeb || hasFacebook || hasInstagram) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Liens",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Black
+                    )
+                    
+                    // Icônes cliquables en ligne (style similaire aux autres écrans)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Start,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Site web
+                        if (hasSiteWeb) {
+                            val siteWebUrl = agenceInfo.siteWeb!!.let { url ->
+                                when {
+                                    url.startsWith("http://") || url.startsWith("https://") -> url
+                                    url.startsWith("www.") -> "https://$url"
+                                    else -> "https://$url"
+                                }
+                            }
+                            
+                            SocialLinkIcon(
+                                icon = Icons.Default.Language,
+                                label = "Site web",
+                                onClick = {
+                                    try {
+                                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW)
+                                        intent.data = android.net.Uri.parse(siteWebUrl)
+                                        context.startActivity(android.content.Intent.createChooser(intent, "Ouvrir avec"))
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("ProductionContent", "Erreur ouverture site web: ${e.message}")
+                                    }
+                                },
+                                backgroundColor = DarkBlue.copy(alpha = 0.1f),
+                                iconTint = DarkBlue
+                            )
+                        }
+                        
+                        // Facebook
+                        if (hasFacebook) {
+                            val facebookUrl = socialLinks!!.facebook!!.let { url ->
+                                when {
+                                    url.startsWith("http://") || url.startsWith("https://") -> url
+                                    url.startsWith("www.") -> "https://$url"
+                                    url.startsWith("facebook.com") -> "https://$url"
+                                    url.startsWith("fb.com") -> "https://$url"
+                                    else -> "https://$url"
+                                }
+                            }
+                            
+                            SocialLinkImageIcon(
+                                painter = painterResource(id = R.drawable.facebook),
+                                label = "Facebook",
+                                onClick = {
+                                    try {
+                                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW)
+                                        intent.data = android.net.Uri.parse(facebookUrl)
+                                        context.startActivity(android.content.Intent.createChooser(intent, "Ouvrir avec"))
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("ProductionContent", "Erreur ouverture lien Facebook: ${e.message}")
+                                    }
+                                },
+                                backgroundColor = Color(0xFF1877F2).copy(alpha = 0.1f)
+                            )
+                        }
+                        
+                        // Instagram
+                        if (hasInstagram) {
+                            val instagramUrl = socialLinks!!.instagram!!.let { url ->
+                                when {
+                                    url.startsWith("http://") || url.startsWith("https://") -> url
+                                    url.startsWith("www.") -> "https://$url"
+                                    url.startsWith("instagram.com") -> "https://$url"
+                                    url.startsWith("@") -> "https://instagram.com/${url.substring(1)}"
+                                    else -> "https://$url"
+                                }
+                            }
+                            
+                            SocialLinkImageIcon(
+                                painter = painterResource(id = R.drawable.instagram),
+                                label = "Instagram",
+                                onClick = {
+                                    try {
+                                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW)
+                                        intent.data = android.net.Uri.parse(instagramUrl)
+                                        context.startActivity(android.content.Intent.createChooser(intent, "Ouvrir avec"))
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("ProductionContent", "Erreur ouverture lien Instagram: ${e.message}")
+                                    }
+                                },
+                                backgroundColor = Color(0xFFE4405F).copy(alpha = 0.1f)
+                            )
+                        }
+                    }
+                }
+            }
+        } else {
+            // Aucune information sur l'agence
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(vertical = 24.dp)
+            ) {
+                Text(
+                    text = "Aucune information sur l'agence disponible",
+                    fontSize = 14.sp,
+                    color = Color(0xFF666666),
+                    fontStyle = FontStyle.Italic,
+                    textAlign = TextAlign.Center
+                )
+                if (recruteur == null) {
+                    Text(
+                        text = "Les informations de l'agence n'ont pas été renvoyées par le backend",
+                        fontSize = 12.sp,
+                        color = Color(0xFF999999),
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeBottomNavigationBar(
     onFavoriteClick: () -> Unit,
     onHomeClick: () -> Unit,
-    onProfileClick: () -> Unit,
-    isFavorite: Boolean
+    onProfileClick: () -> Unit
 ) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(70.dp)
-            .background(DarkBlue),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
+        // Navbar flottante avec transparence (même style que ProfileBottomNavigationBar)
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(70.dp)
+                .shadow(
+                    elevation = 12.dp,
+                    shape = RoundedCornerShape(24.dp),
+                    spotColor = DarkBlue.copy(alpha = 0.3f)
+                ),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = White.copy(alpha = 0.95f)
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
         ) {
-            NavigationItem(
-                icon = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                label = "Favorite",
-                onClick = onFavoriteClick,
-                tint = if (isFavorite) RedHeart else White
-            )
-            
-            NavigationItem(
-                icon = Icons.Default.Home,
-                label = "Home",
-                onClick = onHomeClick
-            )
-            
-            NavigationItem(
-                icon = Icons.Default.Person,
-                label = "Profile",
-                onClick = onProfileClick
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp),
+                horizontalArrangement = Arrangement.SpaceAround,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Favorite
+                HomeNavigationItem(
+                    icon = Icons.Default.Favorite,
+                    label = "Favorite",
+                    onClick = onFavoriteClick,
+                    isSelected = false
+                )
+                
+                // Home - PAS sélectionné car on est sur la page détail
+                HomeNavigationItem(
+                    icon = Icons.Default.Home,
+                    label = "Home",
+                    onClick = onHomeClick,
+                    isSelected = false
+                )
+                
+                // Profile
+                HomeNavigationItem(
+                    icon = Icons.Default.Person,
+                    label = "Profile",
+                    onClick = onProfileClick,
+                    isSelected = false
+                )
+            }
         }
     }
 }
 
 @Composable
-fun NavigationItem(
+private fun HomeNavigationItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
     onClick: () -> Unit,
-    tint: Color = White
+    isSelected: Boolean = false
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
-        modifier = Modifier.clickable { onClick() }
+        modifier = Modifier
+            .clickable { onClick() }
+            .padding(vertical = 8.dp, horizontal = 12.dp)
     ) {
         Icon(
             imageVector = icon,
             contentDescription = label,
-            tint = tint,
-            modifier = Modifier.size(28.dp)
+            tint = if (isSelected) DarkBlue else GrayBorder,
+            modifier = Modifier.size(24.dp)
         )
         Text(
             text = label,
-            fontSize = 12.sp,
-            color = White,
-            fontWeight = FontWeight.Medium
+            fontSize = 11.sp,
+            color = if (isSelected) DarkBlue else GrayBorder,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
         )
     }
 }
@@ -474,14 +1453,17 @@ fun NavigationItem(
 fun CastingDetailScreenPreview() {
     Projecct_MobileTheme {
         CastingDetailScreen(
-            casting = CastingItem(
-                id = "1",
-                title = "Dune : Part 3",
-                date = "30/10/2025",
-                description = "Paul Atreides faces new political and spiritual challenges as...",
-                role = "Arven",
+            casting = com.example.projecct_mobile.data.model.Casting(
+                idAlt = "1",
+                titre = "Dune : Part 3",
+                dateDebut = "2025-10-30",
+                dateFin = "2025-10-30",
+                descriptionRole = "Arven",
+                synopsis = "Paul Atreides faces new political and spiritual challenges as...",
                 age = "20+",
-                compensation = "20$"
+                prix = 20.0,
+                lieu = "Paris",
+                ouvert = true
             )
         )
     }

@@ -3,11 +3,109 @@ package com.example.projecct_mobile.data.model
 import com.google.gson.annotations.SerializedName
 
 /**
+ * Modèle de données pour les médias d'un casting
+ */
+data class CastingMedia(
+    @SerializedName("afficheFileId")
+    val afficheFileId: String? = null,
+    
+    @SerializedName("afficheMimeType")
+    val afficheMimeType: String? = null,
+    
+    @SerializedName("afficheOriginalName")
+    val afficheOriginalName: String? = null,
+    
+    @SerializedName("afficheLength")
+    val afficheLength: Double? = null,
+    
+    @SerializedName("afficheUploadDate")
+    val afficheUploadDate: String? = null
+)
+
+/**
+ * Modèle de données pour les médias d'un recruteur (agence)
+ */
+data class RecruteurMedia(
+    @SerializedName("photoFileId")
+    val photoFileId: String? = null,
+    
+    @SerializedName("photoMimeType")
+    val photoMimeType: String? = null
+)
+
+/**
+ * Modèle de données pour les liens sociaux d'une agence
+ */
+data class RecruteurSocialLinks(
+    @SerializedName("facebook")
+    val facebook: String? = null,
+    
+    @SerializedName("instagram")
+    val instagram: String? = null
+)
+
+/**
+ * Modèle de données pour un recruteur (agence)
+ */
+data class RecruteurInfo(
+    @SerializedName("_id")
+    val idAlt: String? = null, // Format MongoDB (_id)
+    
+    @SerializedName("id")
+    val id: String? = null, // Format alternatif (id)
+    
+    @SerializedName("nomAgence")
+    val nomAgence: String? = null,
+    
+    @SerializedName("responsable")
+    val responsable: String? = null,
+    
+    @SerializedName("email")
+    val email: String? = null,
+    
+    @SerializedName("tel")
+    val tel: String? = null,
+    
+    @SerializedName("gouvernorat")
+    val gouvernorat: String? = null,
+    
+    @SerializedName("siteWeb")
+    val siteWeb: String? = null,
+    
+    @SerializedName("description")
+    val description: String? = null,
+    
+    @SerializedName("socialLinks")
+    val socialLinks: RecruteurSocialLinks? = null,
+    
+    @SerializedName("media")
+    val media: RecruteurMedia? = null
+) {
+    // Propriété calculée pour obtenir l'ID (priorité à _id)
+    val actualId: String?
+        get() = idAlt ?: id
+}
+
+/**
+ * Modèle de données pour les médias d'un acteur (utilisé dans les candidats)
+ */
+data class ActeurMedia(
+    @SerializedName("photoFileId")
+    val photoFileId: String? = null,
+    
+    @SerializedName("photoMimeType")
+    val photoMimeType: String? = null
+)
+
+/**
  * Modèle de données pour un acteur (utilisé dans les candidats)
  */
 data class ActeurInfo(
+    @SerializedName("_id")
+    val idAlt: String? = null, // Format MongoDB (_id)
+    
     @SerializedName("id")
-    val id: String? = null,
+    val id: String? = null, // Format alternatif (id)
     
     @SerializedName("nom")
     val nom: String? = null,
@@ -19,8 +117,12 @@ data class ActeurInfo(
     val email: String? = null,
     
     @SerializedName("media")
-    val media: UserMedia? = null
-)
+    val media: ActeurMedia? = null
+) {
+    // Propriété calculée pour obtenir l'ID (priorité à _id)
+    val actualId: String?
+        get() = idAlt ?: id
+}
 
 /**
  * Modèle de données pour un candidat à un casting
@@ -78,13 +180,16 @@ data class Casting(
     val ouvert: Boolean = true, // ⭐ NOUVEAU - Indique si le casting accepte des candidatures (défaut: true)
 
     @SerializedName("afficheFileId")
-    val afficheFileId: String? = null,
+    val afficheFileId: String? = null, // Ancien format (pour compatibilité)
+
+    @SerializedName("media")
+    val media: CastingMedia? = null, // Nouveau format avec media.afficheFileId
 
     @SerializedName("conditions")
     val conditions: String? = null,
     
     @SerializedName("recruteur")
-    val recruteur: Any? = null, // Peut être un String (ID) ou un objet (recruteur complet)
+    val recruteur: RecruteurInfo? = null, // Objet recruteur complet selon la documentation
     
     @SerializedName("candidats")
     val candidats: List<Candidat>? = null, // ⭐ MODIFIÉ - Nouvelle structure avec statut
@@ -98,6 +203,10 @@ data class Casting(
     // Propriété calculée pour obtenir l'ID (priorité à _id)
     val actualId: String?
         get() = id ?: idAlt
+    
+    // Propriété calculée pour obtenir l'afficheFileId (priorité à media.afficheFileId)
+    val actualAfficheFileId: String?
+        get() = media?.afficheFileId ?: afficheFileId
 }
 
 /**

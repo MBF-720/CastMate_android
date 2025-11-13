@@ -67,14 +67,46 @@ class CastingRepository {
      */
     suspend fun getCastingById(id: String): Result<Casting> {
         return try {
+            // Valider l'ID avant de faire la requête
+            if (id.isBlank()) {
+                android.util.Log.e("CastingRepository", "❌ ID de casting vide ou invalide")
+                return Result.failure(
+                    ApiException.BadRequestException("ID de casting invalide")
+                )
+            }
+            
+            android.util.Log.d("CastingRepository", "📞 Appel de getCastingById avec ID: $id")
             val response = castingService.getCastingById(id)
+            android.util.Log.d("CastingRepository", "📞 Réponse reçue: code=${response.code()}, isSuccessful=${response.isSuccessful}")
             
             if (response.isSuccessful && response.body() != null) {
                 Result.success(response.body()!!)
             } else {
+                val errorCode = response.code()
+                val errorMessage = when (errorCode) {
+                    in 500..599 -> {
+                        val errorBody = response.errorBody()?.string()
+                        "Erreur serveur ($errorCode): ${errorBody?.take(200) ?: "Erreur interne du serveur"}"
+                    }
+                    404 -> "Casting non trouvé"
+                    else -> "Erreur ${errorCode}: ${response.message()}"
+                }
                 Result.failure(
-                    ApiException.NotFoundException("Casting non trouvé")
+                    when (errorCode) {
+                        in 500..599 -> ApiException.ServerException(errorMessage)
+                        404 -> ApiException.NotFoundException(errorMessage)
+                        else -> ApiException.UnknownException(errorMessage)
+                    }
                 )
+            }
+        } catch (e: java.io.IOException) {
+            // Gérer les requêtes annulées et autres IOException
+            if (e.message?.contains("Canceled", ignoreCase = true) == true || 
+                e.message?.contains("canceled", ignoreCase = true) == true) {
+                android.util.Log.d("CastingRepository", "⚠️ Requête annulée (normal)")
+                Result.failure(ApiException.CanceledException("Requête annulée"))
+            } else {
+                Result.failure(ApiException.NetworkException("Erreur de connexion réseau: ${e.message}"))
             }
         } catch (e: ApiException) {
             Result.failure(e)
@@ -251,18 +283,45 @@ class CastingRepository {
      */
     suspend fun applyToCasting(id: String): Result<Unit> {
         return try {
+            android.util.Log.d("CastingRepository", "📝 Postulation au casting: $id")
             val response = castingService.applyToCasting(id)
             
             if (response.isSuccessful) {
+                android.util.Log.d("CastingRepository", "✅ Candidature envoyée avec succès")
                 Result.success(Unit)
             } else {
-                Result.failure(
-                    ApiException.BadRequestException("Erreur lors de la candidature")
-                )
+                val errorCode = response.code()
+                val errorBody = response.errorBody()?.string()
+                android.util.Log.e("CastingRepository", "❌ Erreur ${errorCode}: $errorBody")
+                
+                // Extraire le message d'erreur du body si possible
+                val errorMessage = try {
+                    if (errorBody != null && errorBody.isNotBlank()) {
+                        val jsonObject = com.google.gson.JsonParser.parseString(errorBody).asJsonObject
+                        jsonObject.get("message")?.asString ?: errorBody
+                    } else {
+                        null
+                    }
+                } catch (e: Exception) {
+                    errorBody
+                }
+                
+                val exception = when (errorCode) {
+                    401 -> ApiException.UnauthorizedException("Vous devez être connecté pour postuler")
+                    403 -> ApiException.ForbiddenException("Vous ne pouvez pas postuler à ce casting")
+                    404 -> ApiException.NotFoundException("Casting non trouvé")
+                    409 -> ApiException.ConflictException(errorMessage ?: "Vous avez déjà postulé à ce casting")
+                    400 -> ApiException.BadRequestException(errorMessage ?: "Erreur lors de la candidature")
+                    in 500..599 -> ApiException.ServerException("Erreur serveur: ${errorMessage ?: errorBody}")
+                    else -> ApiException.UnknownException("Erreur ${errorCode}: ${errorMessage ?: errorBody ?: response.message()}")
+                }
+                Result.failure(exception)
             }
         } catch (e: ApiException) {
+            android.util.Log.e("CastingRepository", "❌ ApiException: ${e.message}", e)
             Result.failure(e)
         } catch (e: Exception) {
+            android.util.Log.e("CastingRepository", "❌ Exception: ${e.message}", e)
             Result.failure(ApiException.UnknownException("Erreur inconnue: ${e.message}"))
         }
     }

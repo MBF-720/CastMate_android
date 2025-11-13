@@ -10,6 +10,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -44,6 +46,8 @@ import com.example.projecct_mobile.ui.screens.agence.auth.*
 import com.example.projecct_mobile.ui.screens.agence.casting.*
 import com.example.projecct_mobile.ui.screens.agence.profile.AgencyProfileScreen
 import com.example.projecct_mobile.ui.screens.settings.SettingsScreen
+import com.example.projecct_mobile.ui.screens.acteur.ActorSettingsScreen
+import com.example.projecct_mobile.ui.screens.acteur.MyCandidaturesScreen
 import com.example.projecct_mobile.ui.components.getErrorMessage
 import com.example.projecct_mobile.ui.theme.Projecct_MobileTheme
 import kotlinx.coroutines.launch
@@ -282,36 +286,36 @@ fun NavigationScreen() {
                         scope.launch {
                             try {
                                 // Appel AuthRepository.signupAgence -> POST /agence/signup avec multipart
-                                val result = sharedAuthRepository.signupAgence(
-                                    nomAgence = currentData.nomAgence,
-                                    responsable = currentData.nomResponsable,
-                                    email = currentData.email,
-                                    motDePasse = currentData.motDePasse,
-                                    tel = currentData.telephone,
-                                    gouvernorat = currentData.gouvernorat,
-                                    siteWeb = siteWeb.takeIf { it.isNotBlank() },
-                                    description = description,
+                            val result = sharedAuthRepository.signupAgence(
+                                nomAgence = currentData.nomAgence,
+                                responsable = currentData.nomResponsable,
+                                email = currentData.email,
+                                motDePasse = currentData.motDePasse,
+                                tel = currentData.telephone,
+                                gouvernorat = currentData.gouvernorat,
+                                siteWeb = siteWeb.takeIf { it.isNotBlank() },
+                                description = description,
                                     logoFile = logoFile,
                                     documentFile = documentFile,
                                     facebook = facebook,
                                     instagram = instagram
-                                )
-                                result.onSuccess {
-                                    isLoading = false
-                                    agencySignupData = currentData.copy(
-                                        siteWeb = siteWeb.takeIf { it.isNotBlank() },
-                                        description = description,
+                            )
+                            result.onSuccess {
+                                isLoading = false
+                                agencySignupData = currentData.copy(
+                                    siteWeb = siteWeb.takeIf { it.isNotBlank() },
+                                    description = description,
                                         logoUrl = null, // Les fichiers sont uploadés, pas besoin d'URL
                                         documentUrl = null // Les fichiers sont uploadés, pas besoin d'URL
-                                    )
-                                    // Après succès, on enchaîne sur l'écran de confirmation
-                                    navController.navigate("agencyConfirmation") {
-                                        popUpTo("signUpAgencyStep1") { inclusive = true }
-                                    }
+                                )
+                                // Après succès, on enchaîne sur l'écran de confirmation
+                                navController.navigate("agencyConfirmation") {
+                                    popUpTo("signUpAgencyStep1") { inclusive = true }
                                 }
-                                result.onFailure { exception ->
-                                    isLoading = false
-                                    errorMessage = getErrorMessage(exception)
+                            }
+                            result.onFailure { exception ->
+                                isLoading = false
+                                errorMessage = getErrorMessage(exception)
                                     android.util.Log.e("MainActivity", "❌ Erreur inscription agence: ${exception.message}", exception)
                                 }
                             } catch (e: Exception) {
@@ -402,7 +406,7 @@ fun NavigationScreen() {
                             result.onSuccess { casting ->
                                 isLoading = false
                                 android.util.Log.d("MainActivity", "✅ Casting créé avec succès: ${casting.titre}")
-                                navController.popBackStack()
+                    navController.popBackStack()
                             }
                             result.onFailure { exception ->
                                 isLoading = false
@@ -454,25 +458,59 @@ fun NavigationScreen() {
         ) { backStackEntry ->
             val role = backStackEntry.arguments?.getString("role") ?: "actor"
 
+            if (role.equals("agency", ignoreCase = true)) {
+                // Paramètres pour les agences
             SettingsScreen(
                 role = role,
                 onBackClick = { navController.popBackStack() },
                 onMyProfileClick = {
-                    if (role.equals("agency", ignoreCase = true)) {
                         navController.navigate("agencyProfile")
+                    },
+                    onLogoutClick = {
+                        scope.launch {
+                            sharedAuthRepository.logout()
+                        }
+                        navController.navigate("home") {
+                            popUpTo("welcome") { inclusive = false }
+                        }
+                    }
+                )
                     } else {
+                // Paramètres pour les acteurs
+                ActorSettingsScreen(
+                    onBackClick = { navController.popBackStack() },
+                    onMyProfileClick = {
                         navController.navigate("actorProfile")
+                    },
+                    onFavoritesClick = {
+                        // TODO: Naviguer vers la page des favoris
+                        android.util.Log.d("MainActivity", "Favoris - À implémenter")
+                    },
+                    onMyCandidaturesClick = {
+                        navController.navigate("myCandidatures")
+                    },
+                    onSettingsClick = {
+                        // TODO: Naviguer vers les réglages de l'application
+                        android.util.Log.d("MainActivity", "Réglages - À implémenter")
+                    },
+                    onLogoutClick = {
+                        scope.launch {
+                            sharedAuthRepository.logout()
+                        }
+                        navController.navigate("home") {
+                            popUpTo("welcome") { inclusive = false }
+                        }
+                    },
+                    onHomeClick = {
+                        navController.navigate("actorHome") {
+                            popUpTo("actorHome") { inclusive = true }
+                        }
+                    },
+                    onProfileClick = {
+                        // Déjà sur la page de profil
                     }
-                },
-                onLogoutClick = {
-                    scope.launch {
-                        sharedAuthRepository.logout()
-                    }
-                    navController.navigate("home") {
-                        popUpTo("welcome") { inclusive = false }
-                    }
-                }
-            )
+                )
+            }
         }
         
         composable(
@@ -675,10 +713,16 @@ fun NavigationScreen() {
         composable("actorHome") {
             ActorHomeScreen(
                 onCastingClick = { casting ->
+                    if (casting.id.isNotBlank()) {
+                        android.util.Log.d("MainActivity", "🎬 Navigation vers castingDetail avec ID: '${casting.id}'")
                     navController.navigate("castingDetail/${casting.id}")
+                    } else {
+                        android.util.Log.e("MainActivity", "❌ Impossible de naviguer: ID de casting vide")
+                        // Afficher un message d'erreur à l'utilisateur
+                    }
                 },
                 onProfileClick = {
-                    navController.navigate("actorProfile")
+                    navController.navigate("settings/actor")
                 },
                 onAgendaClick = {
                     navController.navigate("settings/actor")
@@ -688,6 +732,9 @@ fun NavigationScreen() {
                 },
                 onHistoryClick = {
                     // Géré par l'alerte "coming soon" dans ActorHomeScreen
+                },
+                onMyCandidaturesClick = {
+                    navController.navigate("myCandidatures")
                 },
                 onLogoutClick = {
                     scope.launch {
@@ -767,142 +814,40 @@ fun NavigationScreen() {
             )
         ) { backStackEntry ->
             val castingId = backStackEntry.arguments?.getString("castingId") ?: ""
-            var casting by remember { mutableStateOf<CastingItem?>(null) }
+            var casting by remember { mutableStateOf<com.example.projecct_mobile.data.model.Casting?>(null) }
             var isLoading by remember { mutableStateOf(true) }
-            var errorOccurred by remember { mutableStateOf(false) }
+            var errorMessage by remember { mutableStateOf<String?>(null) }
             val castingRepository = remember { CastingRepository() }
             val scope = rememberCoroutineScope()
             
-            // Castings d'exemple pour les tests
-            val exampleCastings = remember {
-                mapOf(
-                    "example_1" to CastingItem(
-                        id = "example_1",
-                        title = "Dune : Part 3",
-                        date = "19,20,21/10/2026",
-                        description = "Arven Talo, un jeune guerrier Fremen qui guide Paul et Chani à travers les défis émotionnels et physiques du désert. Ce rôle exige une présence intense et une capacité à exprimer la détermination et la vulnérabilité.",
-                        role = "Arven",
-                        age = "20-30 ans",
-                        compensation = "20$",
-                        isFavorite = true
-                    ),
-                    "example_2" to CastingItem(
-                        id = "example_2",
-                        title = "Keeper",
-                        date = "25/11/2025",
-                        description = "Un thriller intense sur un jeune garde de sécurité qui découvre un secret sombre dans le bâtiment qu'il surveille.",
-                        role = "Garde de sécurité",
-                        age = "18-25 ans",
-                        compensation = "20$",
-                        isFavorite = false
-                    ),
-                    "example_3" to CastingItem(
-                        id = "example_3",
-                        title = "Mutiny",
-                        date = "15/12/2025",
-                        description = "Un drame historique se déroulant lors d'une rébellion navale. Recherche d'acteurs pour des rôles de marins et d'officiers.",
-                        role = "Marin",
-                        age = "25-40 ans",
-                        compensation = "20$",
-                        isFavorite = true
-                    ),
-                    // Castings d'exemple de l'agenda
-                    "1" to CastingItem(
-                        id = "1",
-                        title = "Dune : Part 3",
-                        date = "30/10/2025",
-                        description = "Paul Atreides faces new political and spiritual challenges...",
-                        role = "Arven",
-                        age = "20+",
-                        compensation = "20$",
-                        isFavorite = true
-                    ),
-                    "2" to CastingItem(
-                        id = "2",
-                        title = "Keeper",
-                        date = "25/11/2025",
-                        description = "An intense thriller about a young security guard...",
-                        role = "men",
-                        age = "18+",
-                        compensation = "20$",
-                        isFavorite = false
-                    ),
-                    "3" to CastingItem(
-                        id = "3",
-                        title = "Mutiny",
-                        date = "15/12/2025",
-                        description = "A historical drama set during a naval rebellion...",
-                        role = "spy",
-                        age = "30+",
-                        compensation = "20$",
-                        isFavorite = true
-                    )
-                )
-            }
-            
-            // Charger le casting depuis l'API ou les données d'exemple
+            // Charger le casting depuis l'API
             LaunchedEffect(castingId) {
+                android.util.Log.d("MainActivity", "🔍 Chargement du casting avec ID: '$castingId'")
                 if (castingId.isNotEmpty()) {
-                    // Vérifier d'abord si c'est un casting d'exemple
-                    if (exampleCastings.containsKey(castingId)) {
-                        android.util.Log.d("MainActivity", "Utilisation du casting d'exemple: $castingId")
-                        casting = exampleCastings[castingId]
-                        isLoading = false
-                    } else {
-                        // Sinon, charger depuis l'API
                         isLoading = true
-                        errorOccurred = false
+                    errorMessage = null
                         try {
                             scope.launch {
                                 val result = castingRepository.getCastingById(castingId)
                                 result.onSuccess { apiCasting ->
-                                    casting = apiCasting.toCastingItem()
+                                casting = apiCasting
                                     isLoading = false
+                                errorMessage = null
                                 }
                                 result.onFailure { exception ->
                                     android.util.Log.e("MainActivity", "Erreur chargement casting: ${exception.message}", exception)
-                                    // En cas d'erreur, créer un casting par défaut avec les données disponibles
-                                    casting = CastingItem(
-                                        id = castingId,
-                                        title = "Casting non trouvé",
-                                        date = "",
-                                        description = "Impossible de charger les détails du casting",
-                                        role = "",
-                                        age = "",
-                                        compensation = ""
-                                    )
                                     isLoading = false
-                                    errorOccurred = true
+                                errorMessage = getErrorMessage(exception)
                                 }
                             }
                         } catch (e: Exception) {
                             android.util.Log.e("MainActivity", "Exception lors du chargement: ${e.message}", e)
-                            // En cas d'exception, créer un casting par défaut
-                            casting = CastingItem(
-                                id = castingId,
-                                title = "Casting non trouvé",
-                                date = "",
-                                description = "Erreur lors du chargement: ${e.message}",
-                                role = "",
-                                age = "",
-                                compensation = ""
-                            )
                             isLoading = false
-                            errorOccurred = true
-                        }
+                        errorMessage = getErrorMessage(e)
                     }
                 } else {
-                    // Si castingId est vide, on crée un casting par défaut
-                    casting = CastingItem(
-                        id = "",
-                        title = "Casting non trouvé",
-                        date = "",
-                        description = "ID de casting invalide",
-                        role = "",
-                        age = "",
-                        compensation = ""
-                    )
                     isLoading = false
+                    errorMessage = "ID de casting invalide"
                 }
             }
             
@@ -923,6 +868,61 @@ fun NavigationScreen() {
                         )
                     }
                 }
+            } else if (errorMessage != null) {
+                // Afficher un message d'erreur
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(24.dp),
+                        modifier = Modifier.padding(24.dp)
+                    ) {
+                        Text(
+                            text = "Erreur",
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = com.example.projecct_mobile.ui.theme.Red
+                        )
+                        Text(
+                            text = errorMessage ?: "Impossible de charger le casting",
+                            fontSize = 16.sp,
+                            color = com.example.projecct_mobile.ui.theme.GrayBorder,
+                            textAlign = TextAlign.Center
+                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { navController.popBackStack() }
+                            ) {
+                                Text("Retour")
+                            }
+                            Button(
+                                onClick = {
+                                    // Réessayer le chargement
+                                    isLoading = true
+                                    errorMessage = null
+                                    scope.launch {
+                                        val result = castingRepository.getCastingById(castingId)
+                                        result.onSuccess { apiCasting ->
+                                            casting = apiCasting
+                                            isLoading = false
+                                            errorMessage = null
+                                        }
+                                        result.onFailure { exception ->
+                                            isLoading = false
+                                            errorMessage = getErrorMessage(exception)
+                                        }
+                                    }
+                                }
+                            ) {
+                                Text("Réessayer")
+                            }
+                        }
+                    }
+                }
             } else {
                 // Afficher l'écran de détails seulement si le casting est chargé
                 val currentCasting = casting
@@ -936,16 +936,22 @@ fun NavigationScreen() {
                             navController.navigate("map")
                         },
                         onSubmitClick = {
-                            // Action après soumission
-                            navController.popBackStack()
+                            // L'appel API est géré directement dans CastingDetailScreen
+                            android.util.Log.d("MainActivity", "Callback onSubmitClick appelé pour le casting: ${currentCasting.titre}")
                         },
                         onNavigateToProfile = {
-                            navController.navigate("profile")
+                            // Navigue vers la page settings de l'acteur
+                            navController.navigate("settings/actor")
                         },
                         onNavigateToHome = {
-                            navController.navigate("castingList") {
-                                popUpTo("castingList") { inclusive = false }
+                            // Retourne à la page d'accueil de l'acteur
+                            navController.navigate("actorHome") {
+                                popUpTo("actorHome") { inclusive = false }
                             }
+                        },
+                        onNavigateToCandidatures = {
+                            // Navigue vers la page "Mes candidatures"
+                            navController.navigate("myCandidatures")
                         }
                     )
                 } else {
@@ -959,7 +965,7 @@ fun NavigationScreen() {
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
                             Text(
-                                text = "Impossible de charger le casting",
+                                text = "Casting non trouvé",
                                 color = com.example.projecct_mobile.ui.theme.Red
                             )
                             Button(onClick = { navController.popBackStack() }) {
@@ -994,6 +1000,28 @@ fun NavigationScreen() {
                 },
                 onNavigateToProfile = {
                     navController.navigate("profile")
+                }
+            )
+        }
+        
+        composable("myCandidatures") {
+            MyCandidaturesScreen(
+                onBackClick = {
+                    navController.popBackStack()
+                },
+                onCastingClick = { castingId ->
+                    if (castingId.isNotBlank()) {
+                        android.util.Log.d("MainActivity", "🎬 Navigation vers castingDetail depuis mes candidatures avec ID: '$castingId'")
+                        navController.navigate("castingDetail/$castingId")
+                    }
+                },
+                onHomeClick = {
+                    navController.navigate("actorHome") {
+                        popUpTo("actorHome") { inclusive = true }
+                    }
+                },
+                onProfileClick = {
+                    navController.navigate("settings/actor")
                 }
             )
         }

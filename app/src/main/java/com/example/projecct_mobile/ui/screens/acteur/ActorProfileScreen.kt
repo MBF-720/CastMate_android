@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,6 +27,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.foundation.border
+import com.example.projecct_mobile.R
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.content.Context
@@ -250,352 +257,332 @@ fun ActorProfileScreen(
         }
     }
     
+    // Fonction helper pour convertir un nom d'utilisateur ou URL en URL complète
+    fun String?.isValidSocialLink(): Boolean {
+        if (this == null || this.isBlank()) return false
+        val trimmed = this.trim()
+        return trimmed != "null" && trimmed.isNotBlank()
+    }
+    
+    fun getInstagramUrl(input: String?): String? {
+        if (!input.isValidSocialLink()) return null
+        val trimmed = input!!.trim()
+        return when {
+            trimmed.startsWith("http://") || trimmed.startsWith("https://") -> trimmed
+            trimmed.startsWith("instagram.com/") -> "https://$trimmed"
+            trimmed.startsWith("www.instagram.com/") -> "https://$trimmed"
+            trimmed.startsWith("@") -> "https://www.instagram.com/${trimmed.substring(1)}"
+            else -> "https://www.instagram.com/$trimmed"
+        }
+    }
+    
+    fun getYouTubeUrl(input: String?): String? {
+        if (!input.isValidSocialLink()) return null
+        val trimmed = input!!.trim()
+        return when {
+            trimmed.startsWith("http://") || trimmed.startsWith("https://") -> trimmed
+            trimmed.startsWith("youtube.com/") || trimmed.startsWith("youtu.be/") -> "https://$trimmed"
+            trimmed.startsWith("www.youtube.com/") -> "https://$trimmed"
+            trimmed.startsWith("@") -> "https://www.youtube.com/$trimmed"
+            else -> "https://www.youtube.com/$trimmed"
+        }
+    }
+    
+    fun getTikTokUrl(input: String?): String? {
+        if (!input.isValidSocialLink()) return null
+        val trimmed = input!!.trim()
+        return when {
+            trimmed.startsWith("http://") || trimmed.startsWith("https://") -> trimmed
+            trimmed.startsWith("tiktok.com/") -> "https://$trimmed"
+            trimmed.startsWith("www.tiktok.com/") -> "https://$trimmed"
+            trimmed.startsWith("@") -> "https://www.tiktok.com/$trimmed"
+            else -> "https://www.tiktok.com/@$trimmed"
+        }
+    }
+    
+    val instagramValue = instagram.takeIf { it.isValidSocialLink() } 
+        ?: acteurProfile?.socialLinks?.instagram?.takeIf { it.isValidSocialLink() }
+    val youtubeValue = youtube.takeIf { it.isValidSocialLink() } 
+        ?: acteurProfile?.socialLinks?.youtube?.takeIf { it.isValidSocialLink() }
+    val tiktokValue = tiktok.takeIf { it.isValidSocialLink() } 
+        ?: acteurProfile?.socialLinks?.tiktok?.takeIf { it.isValidSocialLink() }
+    
+    val finalInstagramUrl = getInstagramUrl(instagramValue)
+    val finalYouTubeUrl = getYouTubeUrl(youtubeValue)
+    val finalTikTokUrl = getTikTokUrl(tiktokValue)
+    
+    // Statistiques (placeholder - à implémenter plus tard)
+    var followersCount by remember { mutableStateOf(0) }
+    var followingCount by remember { mutableStateOf(0) }
+    var projectsCount by remember { mutableStateOf(0) }
+    
     Column(modifier = Modifier.fillMaxSize()) {
-        // En-tête
+        // Header avec gradient bleu foncé et forme ondulée blanche
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(120.dp)
-                .background(DarkBlue)
+                .height(280.dp)
         ) {
-            Row(
+            // Gradient background
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(DarkBlue, DarkBlueLight)
+                        )
+                    )
+            )
+            
+            // Forme ondulée blanche en bas
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(
-                    onClick = onBackClick,
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Retour",
-                        tint = White,
-                        modifier = Modifier.size(24.dp)
+                    .height(40.dp)
+                    .align(Alignment.BottomCenter)
+                    .background(
+                        color = White,
+                        shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)
                     )
-                }
-                
-                Text(
-                    text = "Mon Profil",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = White,
-                    modifier = Modifier.weight(1f),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                )
-                
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clickable {
-                            android.util.Log.d("ActorProfileScreen", "Bouton cliqué, isEditing actuel: $isEditing")
-                            if (isEditing) {
-                                // Sauvegarder les modifications
-                                android.util.Log.d("ActorProfileScreen", "Sauvegarde en cours...")
-                                
-                                // Valider l'email si fourni
-                                if (email.isNotBlank() && !android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
-                                    errorMessage = "L'email n'est pas valide"
-                                    return@clickable
-                                }
-                                
-                                scope.launch {
-                                    if (acteurRepository == null) return@launch
-                                    isLoading = true
-                                    errorMessage = null
-                                    successMessage = null
-                                    
-                                    try {
-                                        val updateRequest = com.example.projecct_mobile.data.model.UpdateActeurRequest(
-                                            nom = nom.takeIf { it.isNotBlank() },
-                                            prenom = prenom.takeIf { it.isNotBlank() },
-                                            email = email.takeIf { it.isNotBlank() && android.util.Patterns.EMAIL_ADDRESS.matcher(it).matches() },
-                                            tel = telephone.takeIf { it.isNotBlank() },
-                                            age = age.toIntOrNull(),
-                                            gouvernorat = gouvernorat.takeIf { it.isNotBlank() },
-                                            experience = experience.toIntOrNull(),
-                                            socialLinks = com.example.projecct_mobile.data.model.SocialLinks(
-                                                instagram = instagram.takeIf { it.isNotBlank() },
-                                                youtube = youtube.takeIf { it.isNotBlank() },
-                                                tiktok = tiktok.takeIf { it.isNotBlank() }
-                                            )
-                                        )
-                                        
-                                        // IMPORTANT: Ne pas passer l'ID de l'acteur depuis le profil chargé
-                                        // Le backend vérifie que l'ID dans le token (sub) correspond à l'ID de l'acteur dans l'URL
-                                        // Utiliser null pour que updateCurrentActeur utilise l'ID du token (sub) directement
-                                        // Cela garantit que l'ID utilisé correspond exactement à celui dans le token
-                                        android.util.Log.e("ActorProfileScreen", "📞 Mise à jour du profil (utilisation de l'ID du token)")
-                                        
-                                        // 1. Mettre à jour les informations du profil
-                                        // Passer null pour utiliser l'ID du token (sub) directement
-                                        val result = acteurRepository?.updateCurrentActeur(updateRequest, null)
-                                        
-                                        result?.onSuccess { updatedProfile ->
-                                            android.util.Log.e("ActorProfileScreen", "✅ Profil mis à jour avec succès")
-                                            android.util.Log.e("ActorProfileScreen", "✅ Profil mis à jour - ID depuis réponse: ${updatedProfile.actualId}")
-                                            android.util.Log.e("ActorProfileScreen", "✅ Profil mis à jour - ID depuis id: ${updatedProfile.id}")
-                                            android.util.Log.e("ActorProfileScreen", "✅ Profil mis à jour - ID depuis idAlt: ${updatedProfile.idAlt}")
-                                            
-                                            // Mettre à jour le profil avec la réponse
-                                            acteurProfile = updatedProfile
-                                            
-                                            // IMPORTANT: Utiliser l'ID de l'acteur depuis le profil mis à jour
-                                            // Utiliser le même ID que celui utilisé pour la mise à jour du profil
-                                            // Le backend vérifie que l'ID dans le token (sub) correspond à l'ID de l'acteur dans l'URL
-                                            val uploadId = updatedProfile.actualId
-                                            android.util.Log.e("ActorProfileScreen", "✅✅✅ ID pour l'upload photo depuis le profil: $uploadId ✅✅✅")
-                                            android.util.Log.e("ActorProfileScreen", "📤 ID depuis updatedProfile.actualId: ${updatedProfile.actualId}")
-                                            android.util.Log.e("ActorProfileScreen", "📤 ID depuis updatedProfile.id: ${updatedProfile.id}")
-                                            android.util.Log.e("ActorProfileScreen", "📤 ID depuis updatedProfile.idAlt: ${updatedProfile.idAlt}")
-                                            
-                                            // 2. Si une nouvelle photo ou un nouveau document PDF a été sélectionné, les uploader
-                                            val photoFile = selectedPhotoFile
-                                            val documentFile = selectedDocumentFile
-                                            
-                                            // Vérifier si au moins un fichier a été sélectionné
-                                            if ((photoFile != null || documentFile != null) && uploadId != null && uploadId.isNotBlank()) {
-                                                // Uploader les fichiers
-                                                if (photoFile != null) isUploadingPhoto = true
-                                                if (documentFile != null) isUploadingDocument = true
-                                                
-                                                try {
-                                                    // Vérifier que les fichiers existent
-                                                    if (photoFile != null && !photoFile.exists()) {
-                                                        android.util.Log.e("ActorProfileScreen", "❌❌❌ Le fichier photo n'existe pas! ❌❌❌")
-                                                        errorMessage = "Le fichier photo n'existe plus. Veuillez sélectionner une nouvelle photo."
-                                                        isUploadingPhoto = false
-                                                        isUploadingDocument = false
-                                                        isLoading = false
-                                                        return@launch
-                                                    }
-                                                    
-                                                    if (documentFile != null && !documentFile.exists()) {
-                                                        android.util.Log.e("ActorProfileScreen", "❌❌❌ Le fichier PDF n'existe pas! ❌❌❌")
-                                                        errorMessage = "Le fichier PDF n'existe plus. Veuillez sélectionner un nouveau fichier."
-                                                        isUploadingPhoto = false
-                                                        isUploadingDocument = false
-                                                        isLoading = false
-                                                        return@launch
-                                                    }
-                                                    
-                                                    android.util.Log.e("ActorProfileScreen", "📤📤📤 Upload des médias avec l'ID: $uploadId 📤📤📤")
-                                                    android.util.Log.e("ActorProfileScreen", "📤 Photo: ${photoFile != null}")
-                                                    android.util.Log.e("ActorProfileScreen", "📤 Document: ${documentFile != null}")
-                                                    
-                                                    // Uploader la photo et/ou le document en une seule requête
-                                                    val mediaResult = acteurRepository?.updateProfileMedia(
-                                                        id = uploadId,
-                                                        photoFile = photoFile,
-                                                        documentFile = documentFile
-                                                    )
-                                                    
-                                                    mediaResult?.onSuccess { profileWithMedia ->
-                                                        android.util.Log.e("ActorProfileScreen", "✅✅✅ Médias uploadés avec succès! ✅✅✅")
-                                                        
-                                                        // Mettre à jour le profil avec les nouveaux médias
-                                                        acteurProfile = profileWithMedia
-                                                        
-                                                        // Réinitialiser les états
-                                                        selectedPhotoFile = null
-                                                        selectedDocumentFile = null
-                                                        lastDownloadedPhotoFileId = null // Forcer le rechargement de la photo
-                                                        lastDownloadedDocumentFileId = null // Forcer le rechargement du document
-                                                        isUploadingPhoto = false
-                                                        isUploadingDocument = false
-                                                        
-                                                        // Message de succès
-                                                        val filesUpdated = mutableListOf<String>()
-                                                        if (photoFile != null) filesUpdated.add("photo")
-                                                        if (documentFile != null) filesUpdated.add("CV PDF")
-                                                        successMessage = "Profil et ${filesUpdated.joinToString(", ")} mis à jour avec succès"
-                                                        
-                                                        isLoading = false
-                                                        isEditing = false
-                                                    }
-                                                    
-                                                    mediaResult?.onFailure { mediaException ->
-                                                        android.util.Log.e("ActorProfileScreen", "❌ Erreur upload médias: ${mediaException.message}")
-                                                        isUploadingPhoto = false
-                                                        isUploadingDocument = false
-                                                        
-                                                        // Message d'erreur
-                                                        val filesAttempted = mutableListOf<String>()
-                                                        if (photoFile != null) filesAttempted.add("photo")
-                                                        if (documentFile != null) filesAttempted.add("CV PDF")
-                                                        successMessage = "Profil mis à jour, mais erreur lors de l'upload du/de la ${filesAttempted.joinToString("/")}: ${getErrorMessage(mediaException)}"
-                                                        
-                                                        isLoading = false
-                                                        isEditing = false
-                                                    }
-                                                } catch (e: Exception) {
-                                                    android.util.Log.e("ActorProfileScreen", "❌ Exception upload médias: ${e.message}", e)
-                                                    isUploadingPhoto = false
-                                                    isUploadingDocument = false
-                                                    
-                                                    val filesAttempted = mutableListOf<String>()
-                                                    if (photoFile != null) filesAttempted.add("photo")
-                                                    if (documentFile != null) filesAttempted.add("CV PDF")
-                                                    successMessage = "Profil mis à jour, mais erreur lors de l'upload du/de la ${filesAttempted.joinToString("/")}: ${e.message}"
-                                                    
-                                                    isLoading = false
-                                                    isEditing = false
-                                                }
-                                            } else {
-                                                // Pas de nouveaux fichiers, juste mettre à jour le profil
-                                                acteurProfile = updatedProfile
-                                                successMessage = "Profil mis à jour avec succès"
-                                                isLoading = false
-                                                isEditing = false
-                                            }
-                                        }
-                                        
-                                        result?.onFailure { exception ->
-                                            errorMessage = getErrorMessage(exception)
-                                            isLoading = false
-                                            android.util.Log.e("ActorProfileScreen", "Erreur lors de la sauvegarde: ${exception.message}")
-                                        }
-                                    } catch (e: Exception) {
-                                        errorMessage = getErrorMessage(e)
-                                        isLoading = false
-                                        android.util.Log.e("ActorProfileScreen", "Exception lors de la sauvegarde: ${e.message}", e)
-                                    }
-                                }
-                            } else {
-                                // Activer le mode édition
-                                android.util.Log.d("ActorProfileScreen", "Activation du mode édition")
-                                isEditing = true
-                            }
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = if (isEditing) Icons.Default.Check else Icons.Default.Edit,
-                        contentDescription = if (isEditing) "Sauvegarder" else "Modifier",
-                        tint = White,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-            }
-        }
-        
-        // Contenu
-        if (isLoading && !isEditing) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .weight(1f),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(color = DarkBlue)
-            }
-        } else if (errorMessage != null && !isEditing) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .weight(1f),
-                contentAlignment = Alignment.Center
-            ) {
-                ErrorMessage(
-                    message = errorMessage ?: "Erreur",
-                    onRetry = {
-                        scope.launch {
-                            if (acteurRepository == null) return@launch
-                            isLoading = true
-                            errorMessage = null
-                            try {
-                                val result = acteurRepository.getCurrentActeur()
-                                result.onSuccess { acteur ->
-                                    nom = acteur.nom ?: ""
-                                    prenom = acteur.prenom ?: ""
-                                    email = acteur.email ?: ""
-                                    telephone = acteur.tel ?: ""
-                                    age = acteur.age?.toString() ?: ""
-                                    gouvernorat = acteur.gouvernorat ?: ""
-                                    experience = acteur.experience?.toString() ?: ""
-                                    instagram = acteur.socialLinks?.instagram ?: ""
-                                    youtube = acteur.socialLinks?.youtube ?: ""
-                                    tiktok = acteur.socialLinks?.tiktok ?: ""
-                                    isLoading = false
-                                }
-                                result.onFailure { exception ->
-                                    errorMessage = getErrorMessage(exception)
-                                    isLoading = false
-                                }
-                            } catch (e: Exception) {
-                                errorMessage = getErrorMessage(e)
-                                isLoading = false
-                            }
-                        }
-                    }
-                )
-            }
-        } else {
+            )
+            
+            // Contenu du header
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .weight(1f)
-                    .background(White)
+                    .padding(horizontal = 20.dp, vertical = 18.dp)
             ) {
-                // Contenu scrollable
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState())
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                // Bouton retour
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                // Message de succès
-                successMessage?.let { message ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = LightBlue),
-                        shape = RoundedCornerShape(12.dp)
+                    IconButton(
+                        onClick = onBackClick,
+                        modifier = Modifier
+                            .size(46.dp)
+                            .clip(CircleShape)
+                            .background(White.copy(alpha = 0.18f))
                     ) {
-                        Text(
-                            text = message,
-                            modifier = Modifier.padding(16.dp),
-                            color = DarkBlue,
-                            fontWeight = FontWeight.Medium
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Retour",
+                            tint = White,
+                            modifier = Modifier.size(24.dp)
                         )
                     }
-                    LaunchedEffect(message) {
-                        kotlinx.coroutines.delay(3000)
-                        successMessage = null
+                    
+                    // Bouton Edit/Save
+                    Box(
+                        modifier = Modifier
+                            .size(46.dp)
+                            .clip(CircleShape)
+                            .background(White.copy(alpha = 0.18f))
+                            .clickable {
+                                android.util.Log.d("ActorProfileScreen", "Bouton cliqué, isEditing actuel: $isEditing")
+                                if (isEditing) {
+                                    // Sauvegarder les modifications
+                                    android.util.Log.d("ActorProfileScreen", "Sauvegarde en cours...")
+                                    
+                                    // Valider l'email si fourni
+                                    if (email.isNotBlank() && !android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                                        errorMessage = "L'email n'est pas valide"
+                                        return@clickable
+                                    }
+                                    
+                                    scope.launch {
+                                        if (acteurRepository == null) return@launch
+                                        isLoading = true
+                                        errorMessage = null
+                                        successMessage = null
+                                        
+                                        try {
+                                            val updateRequest = com.example.projecct_mobile.data.model.UpdateActeurRequest(
+                                                nom = nom.takeIf { it.isNotBlank() },
+                                                prenom = prenom.takeIf { it.isNotBlank() },
+                                                email = email.takeIf { it.isNotBlank() && android.util.Patterns.EMAIL_ADDRESS.matcher(it).matches() },
+                                                tel = telephone.takeIf { it.isNotBlank() },
+                                                age = age.toIntOrNull(),
+                                                gouvernorat = gouvernorat.takeIf { it.isNotBlank() },
+                                                experience = experience.toIntOrNull(),
+                                                socialLinks = com.example.projecct_mobile.data.model.SocialLinks(
+                                                    instagram = instagram.takeIf { it.isNotBlank() },
+                                                    youtube = youtube.takeIf { it.isNotBlank() },
+                                                    tiktok = tiktok.takeIf { it.isNotBlank() }
+                                                )
+                                            )
+                                            
+                                            android.util.Log.e("ActorProfileScreen", "📞 Mise à jour du profil (utilisation de l'ID du token)")
+                                            
+                                            val result = acteurRepository?.updateCurrentActeur(updateRequest, null)
+                                            
+                                            result?.onSuccess { updatedProfile ->
+                                                android.util.Log.e("ActorProfileScreen", "✅ Profil mis à jour avec succès")
+                                                
+                                                acteurProfile = updatedProfile
+                                                
+                                                val uploadId = updatedProfile.actualId
+                                                
+                                                val photoFile = selectedPhotoFile
+                                                val documentFile = selectedDocumentFile
+                                                
+                                                if ((photoFile != null || documentFile != null) && uploadId != null && uploadId.isNotBlank()) {
+                                                    if (photoFile != null) isUploadingPhoto = true
+                                                    if (documentFile != null) isUploadingDocument = true
+                                                    
+                                                    try {
+                                                        if (photoFile != null && !photoFile.exists()) {
+                                                            errorMessage = "Le fichier photo n'existe plus. Veuillez sélectionner une nouvelle photo."
+                                                            isUploadingPhoto = false
+                                                            isUploadingDocument = false
+                                                            isLoading = false
+                                                            return@launch
+                                                        }
+                                                        
+                                                        if (documentFile != null && !documentFile.exists()) {
+                                                            errorMessage = "Le fichier PDF n'existe plus. Veuillez sélectionner un nouveau fichier."
+                                                            isUploadingPhoto = false
+                                                            isUploadingDocument = false
+                                                            isLoading = false
+                                                            return@launch
+                                                        }
+                                                        
+                                                        val mediaResult = acteurRepository?.updateProfileMedia(
+                                                            id = uploadId,
+                                                            photoFile = photoFile,
+                                                            documentFile = documentFile
+                                                        )
+                                                        
+                                                        mediaResult?.onSuccess { profileWithMedia ->
+                                                            acteurProfile = profileWithMedia
+                                                            selectedPhotoFile = null
+                                                            selectedDocumentFile = null
+                                                            lastDownloadedPhotoFileId = null
+                                                            lastDownloadedDocumentFileId = null
+                                                            isUploadingPhoto = false
+                                                            isUploadingDocument = false
+                                                            
+                                                            val filesUpdated = mutableListOf<String>()
+                                                            if (photoFile != null) filesUpdated.add("photo")
+                                                            if (documentFile != null) filesUpdated.add("CV PDF")
+                                                            successMessage = "Profil et ${filesUpdated.joinToString(", ")} mis à jour avec succès"
+                                                            
+                                                            isLoading = false
+                                                            isEditing = false
+                                                        }
+                                                        
+                                                        mediaResult?.onFailure { mediaException ->
+                                                            isUploadingPhoto = false
+                                                            isUploadingDocument = false
+                                                            val filesAttempted = mutableListOf<String>()
+                                                            if (photoFile != null) filesAttempted.add("photo")
+                                                            if (documentFile != null) filesAttempted.add("CV PDF")
+                                                            successMessage = "Profil mis à jour, mais erreur lors de l'upload du/de la ${filesAttempted.joinToString("/")}: ${getErrorMessage(mediaException)}"
+                                                            isLoading = false
+                                                            isEditing = false
+                                                        }
+                                                    } catch (e: Exception) {
+                                                        isUploadingPhoto = false
+                                                        isUploadingDocument = false
+                                                        val filesAttempted = mutableListOf<String>()
+                                                        if (photoFile != null) filesAttempted.add("photo")
+                                                        if (documentFile != null) filesAttempted.add("CV PDF")
+                                                        successMessage = "Profil mis à jour, mais erreur lors de l'upload du/de la ${filesAttempted.joinToString("/")}: ${e.message}"
+                                                        isLoading = false
+                                                        isEditing = false
+                                                    }
+                                                } else {
+                                                    acteurProfile = updatedProfile
+                                                    successMessage = "Profil mis à jour avec succès"
+                                                    isLoading = false
+                                                    isEditing = false
+                                                }
+                                            }
+                                            
+                                            result?.onFailure { exception ->
+                                                errorMessage = getErrorMessage(exception)
+                                                isLoading = false
+                                                android.util.Log.e("ActorProfileScreen", "Erreur lors de la sauvegarde: ${exception.message}")
+                                            }
+                                        } catch (e: Exception) {
+                                            errorMessage = getErrorMessage(e)
+                                            isLoading = false
+                                            android.util.Log.e("ActorProfileScreen", "Exception lors de la sauvegarde: ${e.message}", e)
+                                        }
+                                    }
+                                } else {
+                                    android.util.Log.d("ActorProfileScreen", "Activation du mode édition")
+                                    isEditing = true
+                                }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (isEditing) Icons.Default.Check else Icons.Default.Edit,
+                            contentDescription = if (isEditing) "Sauvegarder" else "Modifier",
+                            tint = White,
+                            modifier = Modifier.size(24.dp)
+                        )
                     }
                 }
                 
-                // Message informatif si le profil n'a pas pu être chargé
-                if (errorMessage == null && nom.isEmpty() && prenom.isEmpty() && email.isNotEmpty()) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = LightBlue.copy(alpha = 0.3f)),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text(
-                            text = "Remplissez vos informations pour compléter votre profil",
-                            modifier = Modifier.padding(16.dp),
-                            color = DarkBlue,
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 14.sp
-                        )
-                    }
-                }
+                Spacer(modifier = Modifier.height(20.dp))
                 
-                // Photo de profil
-                Box(
+                // Row avec nom/Castings à gauche et photo à droite
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 16.dp),
-                    contentAlignment = Alignment.Center
+                        .padding(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Colonne à gauche : Nom et Castings
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.Start
+                    ) {
+                        // Nom
+                        Text(
+                            text = "${prenom.ifBlank { "" }} ${nom.ifBlank { "" }}".trim().ifBlank { "Acteur" },
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = White,
+                            textAlign = TextAlign.Start
+                        )
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        // Castings
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = projectsCount.toString(),
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = White
+                            )
+                            Text(
+                                text = "Castings",
+                                fontSize = 16.sp,
+                                color = White.copy(alpha = 0.9f)
+                            )
+                        }
+                    }
+                    
+                    // Photo de profil à droite
                     Box(
                         modifier = Modifier
                             .size(100.dp)
                             .clip(CircleShape)
-                            .background(LightGray)
+                            .background(White.copy(alpha = 0.2f))
+                            .shadow(
+                                elevation = 12.dp,
+                                shape = CircleShape,
+                                spotColor = White.copy(alpha = 0.25f)
+                            )
                             .then(
                                 if (isEditing) {
                                     Modifier.clickable {
@@ -607,303 +594,411 @@ fun ActorProfileScreen(
                             ),
                         contentAlignment = Alignment.Center
                     ) {
-                        when {
-                            profileImage != null -> {
-                                Image(
-                                    bitmap = profileImage!!,
-                                    contentDescription = "Photo de profil",
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .clip(CircleShape),
-                                    contentScale = ContentScale.Crop
-                                )
-                                // Badge pour indiquer qu'on peut changer la photo en mode édition
-                                if (isEditing) {
-                                    Box(
+                        Box(
+                            modifier = Modifier
+                                .size(90.dp)
+                                .clip(CircleShape)
+                                .background(White.copy(alpha = 0.9f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            when {
+                                profileImage != null -> {
+                                    Image(
+                                        bitmap = profileImage!!,
+                                        contentDescription = "Photo de profil",
                                         modifier = Modifier
-                                            .align(Alignment.BottomEnd)
-                                            .size(32.dp)
-                                            .clip(CircleShape)
-                                            .background(DarkBlue)
-                                            .padding(4.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.CameraAlt,
-                                            contentDescription = "Changer la photo",
-                                            tint = White,
-                                            modifier = Modifier.size(20.dp)
-                                        )
+                                            .fillMaxSize()
+                                            .clip(CircleShape),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                    if (isEditing) {
+                                        Box(
+                                            modifier = Modifier
+                                                .align(Alignment.BottomEnd)
+                                                .size(32.dp)
+                                                .clip(CircleShape)
+                                                .background(DarkBlue)
+                                                .padding(6.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.CameraAlt,
+                                                contentDescription = "Changer la photo",
+                                                tint = White,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
                                     }
                                 }
-                            }
-                            else -> {
-                                Icon(
-                                    imageVector = if (isEditing) Icons.Default.CameraAlt else Icons.Default.Person,
-                                    contentDescription = "Photo de profil",
-                                    tint = DarkBlue,
-                                    modifier = Modifier.size(60.dp)
-                                )
+                                else -> {
+                                    Icon(
+                                        imageVector = if (isEditing) Icons.Default.CameraAlt else Icons.Default.Person,
+                                        contentDescription = "Photo de profil",
+                                        tint = DarkBlue,
+                                        modifier = Modifier.size(48.dp)
+                                    )
+                                }
                             }
                         }
                     }
-                    if (isEditing && selectedPhotoFile != null) {
-                        Text(
-                            text = "Nouvelle photo sélectionnée",
-                            fontSize = 12.sp,
-                            color = DarkBlue,
-                            modifier = Modifier.padding(top = 108.dp)
-                        )
-                    }
                 }
-                
-                // Message d'édition
-                if (isEditing) {
+            }
+        }
+        
+        // Contenu principal scrollable
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .weight(1f)
+                .background(White)
+        ) {
+            if (isLoading && !isEditing) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = DarkBlue)
+                }
+            } else if (errorMessage != null && !isEditing) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    ErrorMessage(
+                        message = errorMessage ?: "Erreur",
+                        onRetry = {
+                            scope.launch {
+                                if (acteurRepository == null) return@launch
+                                isLoading = true
+                                errorMessage = null
+                                try {
+                                    val result = acteurRepository.getCurrentActeur()
+                                    result.onSuccess { acteur ->
+                                        nom = acteur.nom ?: ""
+                                        prenom = acteur.prenom ?: ""
+                                        email = acteur.email ?: ""
+                                        telephone = acteur.tel ?: ""
+                                        age = acteur.age?.toString() ?: ""
+                                        gouvernorat = acteur.gouvernorat ?: ""
+                                        experience = acteur.experience?.toString() ?: ""
+                                        instagram = acteur.socialLinks?.instagram ?: ""
+                                        youtube = acteur.socialLinks?.youtube ?: ""
+                                        tiktok = acteur.socialLinks?.tiktok ?: ""
+                                        isLoading = false
+                                    }
+                                    result.onFailure { exception ->
+                                        errorMessage = getErrorMessage(exception)
+                                        isLoading = false
+                                    }
+                                } catch (e: Exception) {
+                                    errorMessage = getErrorMessage(e)
+                                    isLoading = false
+                                }
+                            }
+                        }
+                    )
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // Icônes de réseaux sociaux
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 16.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (instagramValue != null) {
+                            SocialMediaIcon(
+                                painter = painterResource(id = R.drawable.instagram),
+                                onClick = {
+                                    try {
+                                        val url = finalInstagramUrl ?: "https://www.instagram.com"
+                                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                                        context.startActivity(intent)
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("ActorProfileScreen", "Erreur ouverture Instagram: ${e.message}", e)
+                                    }
+                                }
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                        }
+                        
+                        // Note: YouTube et TikTok n'ont pas d'icônes dans drawables pour l'instant
+                        // On utilise des icônes Material pour l'instant
+                        if (youtubeValue != null) {
+                            SocialMediaIconWithVector(
+                                imageVector = Icons.Default.PlayCircle,
+                                onClick = {
+                                    try {
+                                        val url = finalYouTubeUrl ?: "https://www.youtube.com"
+                                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                                        context.startActivity(intent)
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("ActorProfileScreen", "Erreur ouverture YouTube: ${e.message}", e)
+                                    }
+                                }
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                        }
+                        
+                        if (tiktokValue != null) {
+                            SocialMediaIconWithVector(
+                                imageVector = Icons.Default.MusicNote,
+                                onClick = {
+                                    try {
+                                        val url = finalTikTokUrl ?: "https://www.tiktok.com"
+                                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                                        context.startActivity(intent)
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("ActorProfileScreen", "Erreur ouverture TikTok: ${e.message}", e)
+                                    }
+                                }
+                            )
+                        }
+                    }
+                    
+                    // Message de succès
+                    successMessage?.let { message ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = LightBlue),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text(
+                                text = message,
+                                modifier = Modifier.padding(16.dp),
+                                color = DarkBlue,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        LaunchedEffect(message) {
+                            kotlinx.coroutines.delay(3000)
+                            successMessage = null
+                        }
+                    }
+                    
+                    // Message d'erreur
+                    errorMessage?.let { message ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = Red.copy(alpha = 0.1f)),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text(
+                                text = message,
+                                modifier = Modifier.padding(16.dp),
+                                color = Red,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                    
+                    // Message informatif si le profil n'a pas pu être chargé
+                    if (errorMessage == null && nom.isEmpty() && prenom.isEmpty() && email.isNotEmpty()) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = LightBlue.copy(alpha = 0.3f)),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text(
+                                text = "Remplissez vos informations pour compléter votre profil",
+                                modifier = Modifier.padding(16.dp),
+                                color = DarkBlue,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 14.sp
+                            )
+                        }
+                    }
+                    
+                    // Message d'édition
+                    if (isEditing) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = LightBlue),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text(
+                                text = "Mode édition activé - Modifiez vos informations",
+                                modifier = Modifier.padding(12.dp),
+                                color = DarkBlue,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 14.sp
+                            )
+                        }
+                    }
+                    
+                    // Section Galerie de photos (placeholder - à implémenter plus tard)
+                    // TODO: Implémenter la galerie de photos pour l'acteur
+                    Text(
+                        text = "Galerie de photos",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1A1A1A),
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = LightBlue),
+                        colors = CardDefaults.cardColors(containerColor = LightGray.copy(alpha = 0.3f)),
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Text(
-                            text = "Mode édition activé - Modifiez vos informations",
-                            modifier = Modifier.padding(12.dp),
-                            color = DarkBlue,
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 14.sp
+                            text = "Fonctionnalité à venir : Ajouter une galerie de photos",
+                            modifier = Modifier.padding(16.dp),
+                            color = GrayBorder,
+                            fontSize = 14.sp,
+                            textAlign = TextAlign.Center
                         )
                     }
-                }
-                
-                // Informations personnelles
-                Text(
-                    text = "Informations personnelles",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = DarkBlue,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-                
-                OutlinedTextField(
-                    value = nom,
-                    onValueChange = { if (isEditing) nom = it },
-                    label = { Text("Nom") },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = true,
-                    readOnly = !isEditing,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = if (isEditing) DarkBlue else GrayBorder,
-                        unfocusedBorderColor = if (isEditing) DarkBlue else GrayBorder,
-                        focusedTextColor = Black,
-                        unfocusedTextColor = Black,
-                        disabledTextColor = Black,
-                        focusedLabelColor = DarkBlue,
-                        unfocusedLabelColor = if (isEditing) DarkBlue else GrayBorder,
-                        disabledLabelColor = GrayBorder,
-                        disabledContainerColor = White
+                    
+                    // Informations personnelles - Section PROFILE
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(
+                        text = "PROFILE",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1A1A1A),
+                        modifier = Modifier.padding(bottom = 16.dp)
                     )
-                )
-                
-                OutlinedTextField(
-                    value = prenom,
-                    onValueChange = { if (isEditing) prenom = it },
-                    label = { Text("Prénom") },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = true,
-                    readOnly = !isEditing,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = if (isEditing) DarkBlue else GrayBorder,
-                        unfocusedBorderColor = if (isEditing) DarkBlue else GrayBorder,
-                        focusedTextColor = Black,
-                        unfocusedTextColor = Black,
-                        disabledTextColor = Black,
-                        focusedLabelColor = DarkBlue,
-                        unfocusedLabelColor = if (isEditing) DarkBlue else GrayBorder,
-                        disabledLabelColor = GrayBorder,
-                        disabledContainerColor = White
-                    )
-                )
-                
-                OutlinedTextField(
-                    value = email,
-                    onValueChange = { if (isEditing) email = it },
-                    label = { Text("Email") },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = true,
-                    readOnly = !isEditing,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = if (isEditing) DarkBlue else GrayBorder,
-                        unfocusedBorderColor = if (isEditing) DarkBlue else GrayBorder,
-                        focusedTextColor = Black,
-                        unfocusedTextColor = Black,
-                        disabledTextColor = Black,
-                        focusedLabelColor = DarkBlue,
-                        unfocusedLabelColor = if (isEditing) DarkBlue else GrayBorder,
-                        disabledLabelColor = GrayBorder,
-                        disabledContainerColor = White
-                    )
-                )
-                
-                OutlinedTextField(
-                    value = telephone,
-                    onValueChange = { if (isEditing) telephone = it },
-                    label = { Text("Téléphone") },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = true,
-                    readOnly = !isEditing,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = if (isEditing) DarkBlue else GrayBorder,
-                        unfocusedBorderColor = if (isEditing) DarkBlue else GrayBorder,
-                        focusedTextColor = Black,
-                        unfocusedTextColor = Black,
-                        disabledTextColor = Black,
-                        focusedLabelColor = DarkBlue,
-                        unfocusedLabelColor = if (isEditing) DarkBlue else GrayBorder,
-                        disabledLabelColor = GrayBorder,
-                        disabledContainerColor = White
-                    )
-                )
-                
-                OutlinedTextField(
-                    value = age,
-                    onValueChange = { if (isEditing) age = it },
-                    label = { Text("Âge") },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = true,
-                    readOnly = !isEditing,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = if (isEditing) DarkBlue else GrayBorder,
-                        unfocusedBorderColor = if (isEditing) DarkBlue else GrayBorder,
-                        focusedTextColor = Black,
-                        unfocusedTextColor = Black,
-                        disabledTextColor = Black,
-                        focusedLabelColor = DarkBlue,
-                        unfocusedLabelColor = if (isEditing) DarkBlue else GrayBorder,
-                        disabledLabelColor = GrayBorder,
-                        disabledContainerColor = White
-                    )
-                )
-                
-                OutlinedTextField(
-                    value = gouvernorat,
-                    onValueChange = { if (isEditing) gouvernorat = it },
-                    label = { Text("Gouvernorat") },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = true,
-                    readOnly = !isEditing,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = if (isEditing) DarkBlue else GrayBorder,
-                        unfocusedBorderColor = if (isEditing) DarkBlue else GrayBorder,
-                        focusedTextColor = Black,
-                        unfocusedTextColor = Black,
-                        disabledTextColor = Black,
-                        focusedLabelColor = DarkBlue,
-                        unfocusedLabelColor = if (isEditing) DarkBlue else GrayBorder,
-                        disabledLabelColor = GrayBorder,
-                        disabledContainerColor = White
-                    )
-                )
-                
-                OutlinedTextField(
-                    value = experience,
-                    onValueChange = { if (isEditing) experience = it },
-                    label = { Text("Années d'expérience") },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = true,
-                    readOnly = !isEditing,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = if (isEditing) DarkBlue else GrayBorder,
-                        unfocusedBorderColor = if (isEditing) DarkBlue else GrayBorder,
-                        focusedTextColor = Black,
-                        unfocusedTextColor = Black,
-                        disabledTextColor = Black,
-                        focusedLabelColor = DarkBlue,
-                        unfocusedLabelColor = if (isEditing) DarkBlue else GrayBorder,
-                        disabledLabelColor = GrayBorder,
-                        disabledContainerColor = White
-                    )
-                )
-                
-                // Liens sociaux
-                Text(
-                    text = "Réseaux sociaux",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = DarkBlue,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-                
-                OutlinedTextField(
-                    value = instagram,
-                    onValueChange = { if (isEditing) instagram = it },
-                    label = { Text("Instagram") },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = true,
-                    readOnly = !isEditing,
-                    leadingIcon = { Icon(Icons.Default.Photo, null) },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = if (isEditing) DarkBlue else GrayBorder,
-                        unfocusedBorderColor = if (isEditing) DarkBlue else GrayBorder,
-                        focusedTextColor = Black,
-                        unfocusedTextColor = Black,
-                        disabledTextColor = Black,
-                        focusedLabelColor = DarkBlue,
-                        unfocusedLabelColor = if (isEditing) DarkBlue else GrayBorder,
-                        disabledLabelColor = GrayBorder,
-                        disabledContainerColor = White
-                    )
-                )
-                
-                OutlinedTextField(
-                    value = youtube,
-                    onValueChange = { if (isEditing) youtube = it },
-                    label = { Text("YouTube") },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = true,
-                    readOnly = !isEditing,
-                    leadingIcon = { Icon(Icons.Default.VideoLibrary, null) },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = if (isEditing) DarkBlue else GrayBorder,
-                        unfocusedBorderColor = if (isEditing) DarkBlue else GrayBorder,
-                        focusedTextColor = Black,
-                        unfocusedTextColor = Black,
-                        disabledTextColor = Black,
-                        focusedLabelColor = DarkBlue,
-                        unfocusedLabelColor = if (isEditing) DarkBlue else GrayBorder,
-                        disabledLabelColor = GrayBorder,
-                        disabledContainerColor = White
-                    )
-                )
-                
-                OutlinedTextField(
-                    value = tiktok,
-                    onValueChange = { if (isEditing) tiktok = it },
-                    label = { Text("TikTok") },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = true,
-                    readOnly = !isEditing,
-                    leadingIcon = { Icon(Icons.Default.MusicNote, null) },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = if (isEditing) DarkBlue else GrayBorder,
-                        unfocusedBorderColor = if (isEditing) DarkBlue else GrayBorder,
-                        focusedTextColor = Black,
-                        unfocusedTextColor = Black,
-                        disabledTextColor = Black,
-                        focusedLabelColor = DarkBlue,
-                        unfocusedLabelColor = if (isEditing) DarkBlue else GrayBorder,
-                        disabledLabelColor = GrayBorder,
-                        disabledContainerColor = White
-                    )
-                )
+                    
+                    if (isEditing) {
+                        // Mode édition - champs éditables
+                        EditableField(
+                            label = "Nom",
+                            value = nom,
+                            onValueChange = { nom = it }
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        EditableField(
+                            label = "Prénom",
+                            value = prenom,
+                            onValueChange = { prenom = it }
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        EditableField(
+                            label = "Email",
+                            value = email,
+                            onValueChange = { email = it }
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        EditableField(
+                            label = "Téléphone",
+                            value = telephone,
+                            onValueChange = { telephone = it }
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        EditableField(
+                            label = "Âge",
+                            value = age,
+                            onValueChange = { age = it }
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        EditableField(
+                            label = "Gouvernorat",
+                            value = gouvernorat,
+                            onValueChange = { gouvernorat = it }
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        EditableField(
+                            label = "Années d'expérience",
+                            value = experience,
+                            onValueChange = { experience = it }
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        // Liens sociaux en mode édition
+                        Text(
+                            text = "Réseaux sociaux",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF1A1A1A),
+                            modifier = Modifier.padding(top = 8.dp, bottom = 12.dp)
+                        )
+                        
+                        EditableField(
+                            label = "Instagram",
+                            value = instagram,
+                            onValueChange = { instagram = it },
+                            placeholder = "https://instagram.com/votre-compte"
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        EditableField(
+                            label = "YouTube",
+                            value = youtube,
+                            onValueChange = { youtube = it },
+                            placeholder = "https://youtube.com/votre-chaine"
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        EditableField(
+                            label = "TikTok",
+                            value = tiktok,
+                            onValueChange = { tiktok = it },
+                            placeholder = "https://tiktok.com/@votre-compte"
+                        )
+                    } else {
+                        // Mode affichage - ProfileInfoRow
+                        ProfileInfoRow(
+                            icon = Icons.Filled.Person,
+                            label = "Nom",
+                            value = nom.ifBlank { "Non renseigné" }
+                        )
+                        HorizontalDivider(color = GrayBorder.copy(alpha = 0.3f), thickness = 1.dp)
+                        
+                        ProfileInfoRow(
+                            icon = Icons.Filled.Person,
+                            label = "Prénom",
+                            value = prenom.ifBlank { "Non renseigné" }
+                        )
+                        HorizontalDivider(color = GrayBorder.copy(alpha = 0.3f), thickness = 1.dp)
+                        
+                        ProfileInfoRow(
+                            icon = Icons.Filled.Email,
+                            label = "Email",
+                            value = email.ifBlank { "Non renseigné" }
+                        )
+                        HorizontalDivider(color = GrayBorder.copy(alpha = 0.3f), thickness = 1.dp)
+                        
+                        ProfileInfoRow(
+                            icon = Icons.Filled.Phone,
+                            label = "Téléphone",
+                            value = telephone.ifBlank { "Non renseigné" }
+                        )
+                        HorizontalDivider(color = GrayBorder.copy(alpha = 0.3f), thickness = 1.dp)
+                        
+                        ProfileInfoRow(
+                            icon = Icons.Filled.Cake,
+                            label = "Âge",
+                            value = age.ifBlank { "Non renseigné" }
+                        )
+                        HorizontalDivider(color = GrayBorder.copy(alpha = 0.3f), thickness = 1.dp)
+                        
+                        ProfileInfoRow(
+                            icon = Icons.Filled.LocationOn,
+                            label = "Gouvernorat",
+                            value = gouvernorat.ifBlank { "Non renseigné" }
+                        )
+                        HorizontalDivider(color = GrayBorder.copy(alpha = 0.3f), thickness = 1.dp)
+                        
+                        ProfileInfoRow(
+                            icon = Icons.Filled.Work,
+                            label = "Années d'expérience",
+                            value = experience.ifBlank { "Non renseigné" }
+                        )
+                    }
                 
                 // Section CV PDF
                 Text(
@@ -1075,46 +1170,20 @@ fun ActorProfileScreen(
                     }
                 }
                 
-                // Bouton de déconnexion
-                Button(
-                    onClick = onLogoutClick,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                        .padding(top = 16.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Red
-                    )
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.PowerSettingsNew,
-                        contentDescription = "Déconnexion",
-                        tint = White
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Déconnexion",
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = White
-                    )
-                }
-                
-                // Espace en bas pour le scroll
-                Spacer(modifier = Modifier.height(16.dp))
+                    // Espace en bas pour le scroll
+                    Spacer(modifier = Modifier.height(16.dp))
                 }
             }
-            
-            // Navbar en bas
-            ProfileBottomNavigationBar(
-                onHomeClick = onHomeClick,
-                onAgendaClick = onAgendaClick,
-                onHistoryClick = { showComingSoon = "Historique" },
-                onProfileClick = { /* Déjà sur le profil */ },
-                onAdvancedClick = { showComingSoon = "Fonctionnalité avancée" }
-            )
         }
+        
+        // Navbar en bas - en dehors du contenu scrollable
+        ProfileBottomNavigationBar(
+            onHomeClick = onHomeClick,
+            onAgendaClick = onAgendaClick,
+            onHistoryClick = { showComingSoon = "Historique" },
+            onProfileClick = { /* Déjà sur le profil */ },
+            onAdvancedClick = { showComingSoon = "Fonctionnalité avancée" }
+        )
     }
     
     // Alerte Coming Soon
@@ -1167,6 +1236,144 @@ private fun resolveFileName(context: Context, uri: Uri): String? {
             null
         }
     }
+}
+
+@Composable
+private fun SocialMediaIcon(
+    painter: androidx.compose.ui.graphics.painter.Painter,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(56.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(White)
+            .clickable(onClick = onClick)
+            .border(1.dp, GrayBorder.copy(alpha = 0.3f), RoundedCornerShape(8.dp)),
+        contentAlignment = Alignment.Center
+    ) {
+        Image(
+            painter = painter,
+            contentDescription = null,
+            modifier = Modifier.size(32.dp),
+            contentScale = ContentScale.Fit
+        )
+    }
+}
+
+@Composable
+private fun SocialMediaIconWithVector(
+    imageVector: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(56.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(White)
+            .clickable(onClick = onClick)
+            .border(1.dp, GrayBorder.copy(alpha = 0.3f), RoundedCornerShape(8.dp)),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = imageVector,
+            contentDescription = null,
+            tint = DarkBlue,
+            modifier = Modifier.size(32.dp)
+        )
+    }
+}
+
+@Composable
+private fun StatisticItem(
+    label: String,
+    value: String
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(
+            text = value,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF1A1A1A)
+        )
+        Text(
+            text = label,
+            fontSize = 14.sp,
+            color = GrayBorder
+        )
+    }
+}
+
+@Composable
+private fun ProfileInfoRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    value: String
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = Color(0xFF1A1A1A),
+                modifier = Modifier.size(24.dp)
+            )
+            Column {
+                Text(
+                    text = label,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF1A1A1A)
+                )
+                Text(
+                    text = value,
+                    fontSize = 16.sp,
+                    color = Color(0xFF1A1A1A),
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EditableField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    minLines: Int = 1,
+    maxLines: Int = 1,
+    placeholder: String? = null
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text(label) },
+        placeholder = placeholder?.let { { Text(it, color = LightGray) } },
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = DarkBlue,
+            unfocusedBorderColor = GrayBorder,
+            cursorColor = DarkBlue,
+            focusedLabelColor = DarkBlue
+        ),
+        minLines = minLines,
+        maxLines = maxLines,
+        singleLine = minLines == 1 && maxLines == 1,
+        shape = RoundedCornerShape(12.dp)
+    )
 }
 
 @Preview(showBackground = true)

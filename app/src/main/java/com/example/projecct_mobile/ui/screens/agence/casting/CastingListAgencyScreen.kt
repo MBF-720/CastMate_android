@@ -495,14 +495,8 @@ private fun EmptyCastingState(onCreateCastingClick: () -> Unit) {
 }
 
 private fun Casting.belongsToRecruiter(recruiterId: String): Boolean {
-    val recruiterValue = recruteur ?: return false
-    return when (recruiterValue) {
-        is String -> recruiterValue.equals(recruiterId, ignoreCase = true)
-        is Map<*, *> -> recruiterValue.values.any { value ->
-            value?.toString()?.equals(recruiterId, ignoreCase = true) == true
-        }
-        else -> recruiterValue.toString().contains(recruiterId, ignoreCase = true)
-    }
+    // Selon la documentation, recruteur est maintenant un objet RecruteurInfo
+    return recruteur?.id?.equals(recruiterId, ignoreCase = true) == true
 }
 
 @Composable

@@ -250,44 +250,44 @@ fun AgencyProfileScreen(
                 // Fallback vers UserRepository si AgenceRepository échoue
                 val userResult = userRepository?.getCurrentUser()
                 userResult?.onSuccess {
-                    user = it
-                    agencyName = it.nom ?: agencyName
-                    responsableName = it.prenom ?: responsableName
-                    agencyEmail = it.email
-                    agencyDescription = it.bio ?: agencyDescription
-                    isLoading = false
-                }
+                user = it
+                agencyName = it.nom ?: agencyName
+                responsableName = it.prenom ?: responsableName
+                agencyEmail = it.email
+                agencyDescription = it.bio ?: agencyDescription
+                isLoading = false
+            }
                 userResult?.onFailure {
-                    if (exception is ApiException.NotFoundException) {
-                        try {
-                            val tokenManagerLocal = tokenManager
-                            val fallbackEmail = tokenManagerLocal?.getUserEmailSync()
-                            val storedName = tokenManagerLocal?.getUserNomSync()
-                            val storedResponsable = tokenManagerLocal?.getUserResponsableSync()
-                            val storedRole = tokenManagerLocal?.getUserRoleSync()
-                            val storedDescription = tokenManagerLocal?.getUserDescriptionSync()
-                            user = User(
-                                id = tokenManagerLocal?.getUserIdSync(),
-                                nom = storedName ?: "Agence",
-                                prenom = storedResponsable,
-                                email = fallbackEmail ?: "",
-                                role = storedRole?.let { role ->
-                                    runCatching { UserRole.valueOf(role.uppercase()) }.getOrNull()
-                                },
-                                bio = storedDescription
-                            )
-                            agencyName = storedName ?: "Agence"
-                            responsableName = storedResponsable ?: ""
-                            agencyEmail = fallbackEmail ?: ""
-                            agencyPhone = tokenManagerLocal?.getUserPhoneSync() ?: ""
-                            agencyDescription = storedDescription ?: ""
-                            isLoading = false
-                        } catch (e: Exception) {
-                            errorMessage = "Profil indisponible"
-                            isLoading = false
-                        }
-                    } else {
-                        errorMessage = "Erreur lors du chargement: ${exception.message}"
+                if (exception is ApiException.NotFoundException) {
+                    try {
+                        val tokenManagerLocal = tokenManager
+                        val fallbackEmail = tokenManagerLocal?.getUserEmailSync()
+                        val storedName = tokenManagerLocal?.getUserNomSync()
+                        val storedResponsable = tokenManagerLocal?.getUserResponsableSync()
+                        val storedRole = tokenManagerLocal?.getUserRoleSync()
+                        val storedDescription = tokenManagerLocal?.getUserDescriptionSync()
+                        user = User(
+                            id = tokenManagerLocal?.getUserIdSync(),
+                            nom = storedName ?: "Agence",
+                            prenom = storedResponsable,
+                            email = fallbackEmail ?: "",
+                            role = storedRole?.let { role ->
+                                runCatching { UserRole.valueOf(role.uppercase()) }.getOrNull()
+                            },
+                            bio = storedDescription
+                        )
+                        agencyName = storedName ?: "Agence"
+                        responsableName = storedResponsable ?: ""
+                        agencyEmail = fallbackEmail ?: ""
+                        agencyPhone = tokenManagerLocal?.getUserPhoneSync() ?: ""
+                        agencyDescription = storedDescription ?: ""
+                        isLoading = false
+                    } catch (e: Exception) {
+                        errorMessage = "Profil indisponible"
+                        isLoading = false
+                    }
+                } else {
+                    errorMessage = "Erreur lors du chargement: ${exception.message}"
                         isLoading = false
                     }
                 }
@@ -353,45 +353,45 @@ fun AgencyProfileScreen(
                 .background(White)
                 .padding(bottom = 24.dp)
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onBackClick) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Retour",
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onBackClick) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Retour",
                         tint = Color(0xFF1A1A1A)
+                        )
+                    }
+
+                    Text(
+                        text = "Profil Agence",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                    color = Color(0xFF1A1A1A)
+                    )
+
+                    Icon(
+                        imageVector = Icons.Filled.Business,
+                        contentDescription = "Agence",
+                    tint = Color(0xFF1A1A1A)
                     )
                 }
 
-                Text(
-                    text = "Profil Agence",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1A1A1A)
-                )
-
-                Icon(
-                    imageVector = Icons.Filled.Business,
-                    contentDescription = "Agence",
-                    tint = Color(0xFF1A1A1A)
-                )
-            }
-
             Spacer(modifier = Modifier.height(24.dp))
 
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Box(
-                    modifier = Modifier
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(
+                        modifier = Modifier
                         .size(120.dp)
-                        .clip(CircleShape)
+                            .clip(CircleShape)
                         .background(DarkBlue)
                         .then(
                             if (isEditing) {
@@ -420,8 +420,8 @@ fun AgencyProfileScreen(
                                         .fillMaxSize()
                                         .background(Color.Black.copy(alpha = 0.3f))
                                         .clip(CircleShape),
-                                    contentAlignment = Alignment.Center
-                                ) {
+                        contentAlignment = Alignment.Center
+                    ) {
                                     Icon(
                                         imageVector = Icons.Filled.PersonAdd,
                                         contentDescription = "Modifier le logo",
@@ -439,32 +439,32 @@ fun AgencyProfileScreen(
                             )
                         }
                         else -> {
-                            Icon(
-                                imageVector = Icons.Filled.Business,
-                                contentDescription = "Logo agence",
-                                tint = White,
-                                modifier = Modifier.size(48.dp)
-                            )
+                        Icon(
+                            imageVector = Icons.Filled.Business,
+                            contentDescription = "Logo agence",
+                            tint = White,
+                            modifier = Modifier.size(48.dp)
+                        )
                         }
                     }
-                }
+                    }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                Text(
-                    text = displayName,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
+                    Text(
+                        text = displayName,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
                     color = Color(0xFF1A1A1A)
-                )
+                    )
 
-                Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
 
-                Text(
-                    text = displayEmail,
-                    fontSize = 14.sp,
+                    Text(
+                        text = displayEmail,
+                        fontSize = 14.sp,
                     color = GrayBorder
-                )
+                    )
             }
         }
 
@@ -615,7 +615,7 @@ fun AgencyProfileScreen(
                                 )
                                 val documentFileIdEdit = agenceProfile?.media?.documentFileId
                                 val hasDocumentEdit = !documentFileIdEdit.isNullOrBlank()
-                                Card(
+                        Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable {
@@ -625,10 +625,10 @@ fun AgencyProfileScreen(
                                     colors = CardDefaults.cardColors(
                                         containerColor = if (hasDocumentEdit || selectedDocumentFile != null) LightBlue else LightGray
                                     )
-                                ) {
+                        ) {
                                     Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
+                                modifier = Modifier
+                                    .fillMaxWidth()
                                             .padding(16.dp),
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
@@ -696,7 +696,7 @@ fun AgencyProfileScreen(
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
+                            ) {
                                     TextButton(
                                         onClick = {
                                             formMessage = null

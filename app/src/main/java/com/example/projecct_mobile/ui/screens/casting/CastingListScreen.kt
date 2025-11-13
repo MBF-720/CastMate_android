@@ -45,22 +45,28 @@ data class CastingItem(
     val role: String,
     val age: String,
     val compensation: String,
-    val isFavorite: Boolean = false
+    val isFavorite: Boolean = false,
+    val afficheFileId: String? = null
 )
 
 /**
  * Extension function pour convertir un Casting de l'API en CastingItem pour l'UI
  */
 fun com.example.projecct_mobile.data.model.Casting.toCastingItem(isFavorite: Boolean = false): CastingItem {
+    val castingId = this.actualId
+    if (castingId.isNullOrBlank()) {
+        android.util.Log.w("CastingListScreen", "⚠️ Casting sans ID: titre='${this.titre}', id='${this.id}', idAlt='${this.idAlt}'")
+    }
     return CastingItem(
-        id = this.actualId ?: "",
+        id = castingId ?: "",
         title = this.titre ?: "Sans titre",
         date = this.dateDebut ?: this.dateFin ?: "Date non spécifiée",
         description = this.descriptionRole ?: this.synopsis ?: "Aucune description",
         role = this.descriptionRole ?: "Rôle non spécifié",
         age = this.age ?: "",
         compensation = this.prix?.toString() ?: "Non spécifié",
-        isFavorite = isFavorite
+        isFavorite = isFavorite,
+        afficheFileId = this.actualAfficheFileId // Utiliser actualAfficheFileId qui gère media.afficheFileId
     )
 }
 

@@ -467,11 +467,18 @@ class ActeurRepository {
             } else {
                 val errorBody = response.errorBody()?.string()
                 android.util.Log.e("ActeurRepository", "Erreur HTTP ${response.code()}: $errorBody")
-                Result.failure(
-                    ApiException.NotFoundException(
+                val exception = when (response.code()) {
+                    403 -> ApiException.ForbiddenException(
+                        errorBody ?: "Accès refusé à ce fichier"
+                    )
+                    404 -> ApiException.NotFoundException(
                         errorBody ?: "Média introuvable"
                     )
-                )
+                    else -> ApiException.UnknownException(
+                        errorBody ?: "Erreur HTTP ${response.code()}"
+                    )
+                }
+                Result.failure(exception)
             }
         } catch (e: ApiException) {
             android.util.Log.e("ActeurRepository", "ApiException lors du téléchargement: ${e.message}", e)
