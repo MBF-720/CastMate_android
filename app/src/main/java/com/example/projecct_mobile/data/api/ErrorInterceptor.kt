@@ -66,8 +66,15 @@ class ErrorInterceptor(
             }
             
             404 -> {
+                // IMPORTANT: Ne pas lancer l'exception ici pour éviter le crash dans le thread OkHttp
+                // Laisser la réponse être retournée avec le code 404
+                // L'erreur sera gérée correctement dans le repository (loginWithGoogle, etc.)
                 val error = parseError(response)
-                throw ApiException.NotFoundException(error?.message ?: "Ressource non trouvée")
+                val errorMessage = error?.message ?: "Ressource non trouvée"
+                android.util.Log.d("ErrorInterceptor", "⚠️ Erreur 404: $errorMessage - URL: ${request.url}")
+                // Retourner la réponse pour que le repository puisse la gérer
+                // Le repository convertira l'erreur 404 en Result.failure(ApiException.NotFoundException)
+                return response
             }
             
             409 -> {

@@ -1,7 +1,6 @@
 package com.example.projecct_mobile
 
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -51,6 +50,8 @@ import com.example.projecct_mobile.ui.screens.acteur.MyCandidaturesScreen
 import com.example.projecct_mobile.ui.components.getErrorMessage
 import com.example.projecct_mobile.ui.theme.Projecct_MobileTheme
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import java.io.File
 
 class MainActivity : ComponentActivity() {
@@ -112,11 +113,42 @@ fun NavigationScreen() {
         }
     }
     
-    LaunchedEffect(googleSignInError) {
-        googleSignInError?.let {
-            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
-            googleSignInError = null
-        }
+    // Dialogue d'erreur pour Google Sign-In
+    googleSignInError?.let { error ->
+        AlertDialog(
+            onDismissRequest = {
+                googleSignInError = null
+            },
+            title = {
+                Text(
+                    text = "Erreur de connexion Google",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Text(
+                    text = error,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        googleSignInError = null
+                    }
+                ) {
+                    Text(
+                        "OK",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            textContentColor = MaterialTheme.colorScheme.onSurface
+        )
     }
     
     val googleSignInLauncher = rememberLauncherForActivityResult(
@@ -135,54 +167,241 @@ fun NavigationScreen() {
             }
         }.onSuccess { account ->
             val idToken = account.idToken
+            // Si l'ID token n'est pas disponible, rediriger directement vers l'inscription
+            // (Fallback si la configuration OAuth n'est pas complète)
             if (idToken.isNullOrBlank()) {
                 googleSignInLoading = false
-                googleSignInError = "Impossible de récupérer le token Google"
+                val prenom = account.givenName
+                    ?: account.displayName?.split(" ")?.firstOrNull().orEmpty()
+                val nom = account.familyName
+                    ?: account.displayName
+                        ?.takeIf { it.contains(" ") }
+                        ?.split(" ")
+                        ?.drop(1)
+                        ?.joinToString(" ")
+                        .orEmpty()
+                
+                actorSignupData = ActorSignupData(
+                    nom = nom,
+                    prenom = prenom,
+                    age = 0,
+                    email = account.email.orEmpty(),
+                    motDePasse = "",
+                    telephone = "",
+                    gouvernorat = "",
+                    photoProfil = account.photoUrl?.toString()
+                )
+                googleSignInError = null
+                navController.navigate("signUpActorStep1")
                 return@rememberLauncherForActivityResult
             }
             
             scope.launch {
-                val resultLogin = sharedAuthRepository.loginWithGoogle(idToken)
-                resultLogin.onSuccess {
-                    googleSignInLoading = false
-                    actorSignupData = null
-                    googleSignInError = null
-                    navController.navigate("actorHome") {
-                        popUpTo("home") { inclusive = true }
-                    }
-                }
-                resultLogin.onFailure { exception ->
-                    googleSignInLoading = false
-                    when (exception) {
-                        is ApiException.NotFoundException,
-                        is ApiException.BadRequestException -> {
-                            val prenom = account.givenName
-                                ?: account.displayName?.split(" ")?.firstOrNull().orEmpty()
-                            val nom = account.familyName
-                                ?: account.displayName
-                                    ?.takeIf { it.contains(" ") }
-                                    ?.split(" ")
-                                    ?.drop(1)
-                                    ?.joinToString(" ")
-                                    .orEmpty()
-                            
-                            actorSignupData = ActorSignupData(
-                                nom = nom,
-                                prenom = prenom,
-                                age = 0,
-                                email = account.email.orEmpty(),
-                                motDePasse = "",
-                                telephone = "",
-                                gouvernorat = "",
-                                photoProfil = account.photoUrl?.toString()
-                            )
-                            googleSignInError = "Complétez votre inscription"
-                            navController.navigate("signUpActorStep1")
-                        }
-                        else -> {
-                            googleSignInError = getErrorMessage(exception)
+                try {
+                    val resultLogin = sharedAuthRepository.loginWithGoogle(idToken)
+                    resultLogin.onSuccess {
+                        googleSignInLoading = false
+                        actorSignupData = null
+                        googleSignInError = null
+                        navController.navigate("actorHome") {
+                            popUpTo("home") { inclusive = true }
                         }
                     }
+                    resultLogin.onFailure { exception ->
+                        // Si le compte n'existe pas, créer automatiquement le compte
+                        when (exception) {
+                            is ApiException.NotFoundException,
+                            is ApiException.BadRequestException -> {
+                                try {
+                                    // Vérifier que l'email est disponible (obligatoire)
+                                    val email = account.email
+                                    if (email.isNullOrBlank()) {
+                                        googleSignInLoading = false
+                                        googleSignInError = "Email Google non disponible. Veuillez utiliser un compte Google avec email."
+                                        return@onFailure
+                                    }
+                                    
+                                    android.util.Log.d("GoogleSignIn", "📧 Email Google: $email")
+                                    
+                                    // Extraire les données de Google
+                                    val prenom = account.givenName
+                                        ?: account.displayName?.split(" ")?.firstOrNull()
+                                        ?: "Utilisateur"
+                                    val nom = account.familyName
+                                        ?: account.displayName
+                                            ?.takeIf { it.contains(" ") }
+                                            ?.split(" ")
+                                            ?.drop(1)
+                                            ?.joinToString(" ")
+                                        ?: "Google"
+                                    
+                                    android.util.Log.d("GoogleSignIn", "👤 Nom: $nom, Prénom: $prenom")
+                                    
+                                    // Générer un mot de passe aléatoire (non utilisé pour Google Sign-In)
+                                    val randomPassword = "Google${System.currentTimeMillis()}"
+                                    
+                                    // Télécharger la photo de profil si disponible (sur un thread IO)
+                                    var photoFile: File? = null
+                                    account.photoUrl?.toString()?.let { photoUrl ->
+                                        try {
+                                            android.util.Log.d("GoogleSignIn", "📷 Téléchargement photo depuis: $photoUrl")
+                                            photoFile = withContext(Dispatchers.IO) {
+                                                try {
+                                                    // Télécharger l'image depuis l'URL
+                                                    val url = java.net.URL(photoUrl)
+                                                    val connection = url.openConnection() as java.net.HttpURLConnection
+                                                    connection.connectTimeout = 10000 // 10 secondes
+                                                    connection.readTimeout = 10000 // 10 secondes
+                                                    connection.connect()
+                                                    val inputStream = connection.inputStream
+                                                    val photoCacheFile = File(context.cacheDir, "google_photo_${System.currentTimeMillis()}.jpg")
+                                                    photoCacheFile.outputStream().use { output ->
+                                                        inputStream.copyTo(output)
+                                                    }
+                                                    inputStream.close()
+                                                    connection.disconnect()
+                                                    android.util.Log.d("GoogleSignIn", "✅ Photo téléchargée: ${photoCacheFile.absolutePath}")
+                                                    photoCacheFile
+                                                } catch (e: Exception) {
+                                                    android.util.Log.e("GoogleSignIn", "❌ Erreur téléchargement photo: ${e.message}", e)
+                                                    throw e
+                                                }
+                                            }
+                                        } catch (e: Exception) {
+                                            // Si le téléchargement échoue, continuer sans photo
+                                            android.util.Log.e("GoogleSignIn", "⚠️ Téléchargement photo échoué, continuation sans photo: ${e.message}")
+                                            photoFile = null
+                                        }
+                                    }
+                                    
+                                    android.util.Log.d("GoogleSignIn", "🔄 Création du compte acteur...")
+                                    
+                                    // Créer automatiquement le compte avec des valeurs par défaut
+                                    val resultSignup = sharedAuthRepository.signupActeur(
+                                        nom = nom,
+                                        prenom = prenom,
+                                        email = email,
+                                        motDePasse = randomPassword,
+                                        tel = "00000000", // Valeur par défaut
+                                        age = 18, // Valeur par défaut
+                                        gouvernorat = "Tunis", // Valeur par défaut
+                                        experience = 0, // Valeur par défaut
+                                        centresInteret = null,
+                                        photoFile = photoFile,
+                                        documentFile = null,
+                                        instagram = null,
+                                        youtube = null,
+                                        tiktok = null
+                                    )
+                                    
+                                    resultSignup.onSuccess { authResponse ->
+                                        // Le compte a été créé avec succès
+                                        // Vérifier si un token a été retourné dans la réponse
+                                        if (!authResponse.accessToken.isNullOrBlank()) {
+                                            // Si un token est retourné, on est déjà connecté
+                                            android.util.Log.d("GoogleSignIn", "✅ Compte créé et connecté avec succès (token reçu)")
+                                            googleSignInLoading = false
+                                            actorSignupData = null
+                                            googleSignInError = null
+                                            navController.navigate("actorHome") {
+                                                popUpTo("home") { inclusive = true }
+                                            }
+                                        } else {
+                                            // Si aucun token n'est retourné, essayer de se connecter avec email/mot de passe
+                                            android.util.Log.d("GoogleSignIn", "⚠️ Compte créé sans token, tentative de connexion avec email/mot de passe...")
+                                            val resultLoginAfterSignup = sharedAuthRepository.login(email, randomPassword, expectedRole = "ACTEUR")
+                                            resultLoginAfterSignup.onSuccess {
+                                                googleSignInLoading = false
+                                                actorSignupData = null
+                                                googleSignInError = null
+                                                android.util.Log.d("GoogleSignIn", "✅ Connexion réussie après création du compte")
+                                                navController.navigate("actorHome") {
+                                                    popUpTo("home") { inclusive = true }
+                                                }
+                                            }
+                                            resultLoginAfterSignup.onFailure { loginException ->
+                                                // Si la connexion échoue, informer l'utilisateur qu'il doit se connecter manuellement
+                                                googleSignInLoading = false
+                                                val errorMsg = "Compte créé avec succès ! Veuillez vous connecter avec votre email et mot de passe. Note : ce compte n'est pas encore lié à Google."
+                                                android.util.Log.e("GoogleSignIn", "⚠️ $errorMsg", loginException)
+                                                googleSignInError = errorMsg
+                                            }
+                                        }
+                                    }
+                                    
+                                    resultSignup.onFailure { signupException ->
+                                        val errorMsg = getErrorMessage(signupException)
+                                        // Vérifier si c'est une erreur 409 (Conflict) - compte existe déjà
+                                        val isConflict = signupException is ApiException.ConflictException || 
+                                                       errorMsg.contains("409", ignoreCase = true) ||
+                                                       errorMsg.contains("Conflict", ignoreCase = true) ||
+                                                       errorMsg.contains("existe déjà", ignoreCase = true) ||
+                                                       errorMsg.contains("already exists", ignoreCase = true) ||
+                                                       (signupException.message?.contains("409", ignoreCase = true) == true) ||
+                                                       (signupException.message?.contains("Conflict", ignoreCase = true) == true) ||
+                                                       (signupException.message?.contains("existe déjà", ignoreCase = true) == true)
+                                        
+                                        if (isConflict) {
+                                            android.util.Log.d("GoogleSignIn", "⚠️ Compte existe déjà (409), tentative de connexion automatique avec Google...")
+                                            // Le compte existe déjà, essayer de se connecter directement avec Google
+                                            // Ne pas réinitialiser googleSignInLoading ici, le garder en loading pendant la tentative
+                                            val resultLoginExisting = sharedAuthRepository.loginWithGoogle(idToken)
+                                            resultLoginExisting.onSuccess {
+                                                googleSignInLoading = false
+                                                actorSignupData = null
+                                                googleSignInError = null
+                                                android.util.Log.d("GoogleSignIn", "✅ Connexion réussie avec compte existant")
+                                                navController.navigate("actorHome") {
+                                                    popUpTo("home") { inclusive = true }
+                                                }
+                                            }
+                                            resultLoginExisting.onFailure { loginException ->
+                                                googleSignInLoading = false
+                                                // Si la connexion Google échoue aussi, vérifier si c'est une erreur 404 ou autre
+                                                val loginErrorMsg = getErrorMessage(loginException)
+                                                val finalErrorMsg = when {
+                                                    // Si c'est toujours une erreur 404, le compte n'est pas lié à Google
+                                                    loginException is ApiException.NotFoundException ||
+                                                    loginErrorMsg.contains("404", ignoreCase = true) ||
+                                                    loginErrorMsg.contains("non trouvé", ignoreCase = true) ||
+                                                    loginErrorMsg.contains("not found", ignoreCase = true) -> {
+                                                        "Un compte existe déjà avec cet email. Ce compte n'est pas encore lié à Google. Veuillez vous connecter avec votre mot de passe, puis liez votre compte Google dans les paramètres."
+                                                    }
+                                                    // Autre erreur
+                                                    else -> {
+                                                        "Un compte existe déjà avec cet email. Erreur de connexion Google: $loginErrorMsg"
+                                                    }
+                                                }
+                                                android.util.Log.e("GoogleSignIn", "❌ $finalErrorMsg", loginException)
+                                                googleSignInError = finalErrorMsg
+                                            }
+                                        } else {
+                                            googleSignInLoading = false
+                                            val finalErrorMsg = "Erreur lors de la création du compte: $errorMsg"
+                                            android.util.Log.e("GoogleSignIn", "❌ $finalErrorMsg", signupException)
+                                            googleSignInError = finalErrorMsg
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    googleSignInLoading = false
+                                    val errorMsg = "Erreur lors de la création automatique du compte: ${e.message}"
+                                    android.util.Log.e("GoogleSignIn", "❌ $errorMsg", e)
+                                    googleSignInError = errorMsg
+                                }
+                            }
+                            else -> {
+                                googleSignInLoading = false
+                                val errorMsg = getErrorMessage(exception)
+                                android.util.Log.e("GoogleSignIn", "❌ Erreur de connexion Google: $errorMsg", exception)
+                                googleSignInError = errorMsg
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    googleSignInLoading = false
+                    val errorMsg = "Erreur inattendue lors de la connexion Google: ${e.message}"
+                    android.util.Log.e("GoogleSignIn", "❌ $errorMsg", e)
+                    googleSignInError = errorMsg
                 }
             }
         }
@@ -824,12 +1043,12 @@ fun NavigationScreen() {
             LaunchedEffect(castingId) {
                 android.util.Log.d("MainActivity", "🔍 Chargement du casting avec ID: '$castingId'")
                 if (castingId.isNotEmpty()) {
-                        isLoading = true
+                    isLoading = true
                     errorMessage = null
                         try {
-                            scope.launch {
-                                val result = castingRepository.getCastingById(castingId)
-                                result.onSuccess { apiCasting ->
+                    scope.launch {
+                        val result = castingRepository.getCastingById(castingId)
+                        result.onSuccess { apiCasting ->
                                 casting = apiCasting
                                     isLoading = false
                                 errorMessage = null
@@ -846,7 +1065,7 @@ fun NavigationScreen() {
                         errorMessage = getErrorMessage(e)
                     }
                 } else {
-                    isLoading = false
+                            isLoading = false
                     errorMessage = "ID de casting invalide"
                 }
             }
@@ -912,34 +1131,34 @@ fun NavigationScreen() {
                                             errorMessage = null
                                         }
                                         result.onFailure { exception ->
-                                            isLoading = false
+                            isLoading = false
                                             errorMessage = getErrorMessage(exception)
                                         }
                                     }
                                 }
                             ) {
                                 Text("Réessayer")
-                            }
                         }
                     }
                 }
+            }
             } else {
-                // Afficher l'écran de détails seulement si le casting est chargé
-                val currentCasting = casting
-                if (currentCasting != null) {
-                    CastingDetailScreen(
-                        casting = currentCasting,
-                        onBackClick = {
-                            navController.popBackStack()
-                        },
-                        onMapClick = {
-                            navController.navigate("map")
-                        },
-                        onSubmitClick = {
+            // Afficher l'écran de détails seulement si le casting est chargé
+            val currentCasting = casting
+            if (currentCasting != null) {
+                CastingDetailScreen(
+                    casting = currentCasting,
+                    onBackClick = {
+                        navController.popBackStack()
+                    },
+                    onMapClick = {
+                        navController.navigate("map")
+                    },
+                    onSubmitClick = {
                             // L'appel API est géré directement dans CastingDetailScreen
                             android.util.Log.d("MainActivity", "Callback onSubmitClick appelé pour le casting: ${currentCasting.titre}")
-                        },
-                        onNavigateToProfile = {
+                    },
+                    onNavigateToProfile = {
                             // Navigue vers la page settings de l'acteur
                             navController.navigate("settings/actor")
                         },

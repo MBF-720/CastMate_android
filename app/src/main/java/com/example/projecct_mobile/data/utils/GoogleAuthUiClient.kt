@@ -18,9 +18,14 @@ class GoogleAuthUiClient(
     private val context: Context
 ) {
     private val signInClient by lazy {
+        val webClientId = context.getString(R.string.default_web_client_id)
+        
         val options = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
             .requestEmail()
-            .requestIdToken(context.getString(R.string.default_web_client_id))
+            .requestProfile()
+            // Utilise le Client ID Web OAuth 2.0 pour obtenir l'ID token
+            // Nécessaire pour l'authentification backend
+            .requestIdToken(webClientId)
             .build()
         GoogleSignIn.getClient(context, options)
     }
