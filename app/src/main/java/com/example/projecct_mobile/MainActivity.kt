@@ -48,6 +48,7 @@ import com.example.projecct_mobile.ui.screens.agence.profile.AgencyProfileScreen
 import com.example.projecct_mobile.ui.screens.settings.SettingsScreen
 import com.example.projecct_mobile.ui.screens.acteur.ActorSettingsScreen
 import com.example.projecct_mobile.ui.screens.acteur.MyCandidaturesScreen
+import com.example.projecct_mobile.ui.screens.acteur.FavoritesScreen
 import com.example.projecct_mobile.ui.components.getErrorMessage
 import com.example.projecct_mobile.ui.theme.Projecct_MobileTheme
 import kotlinx.coroutines.launch
@@ -483,8 +484,7 @@ fun NavigationScreen() {
                         navController.navigate("actorProfile")
                     },
                     onFavoritesClick = {
-                        // TODO: Naviguer vers la page des favoris
-                        android.util.Log.d("MainActivity", "Favoris - À implémenter")
+                        navController.navigate("favorites")
                     },
                     onMyCandidaturesClick = {
                         navController.navigate("myCandidatures")
@@ -1022,6 +1022,31 @@ fun NavigationScreen() {
                 },
                 onProfileClick = {
                     navController.navigate("settings/actor")
+                }
+            )
+        }
+        
+        composable("favorites") {
+            FavoritesScreen(
+                onBackClick = {
+                    navController.popBackStack()
+                },
+                onCastingClick = { casting ->
+                    if (casting.id.isNotBlank()) {
+                        android.util.Log.d("MainActivity", "🎬 Navigation vers castingDetail depuis favoris avec ID: '${casting.id}'")
+                        navController.navigate("castingDetail/${casting.id}")
+                    }
+                },
+                onProfileClick = {
+                    navController.navigate("settings/actor")
+                },
+                onHomeClick = {
+                    navController.navigate("actorHome") {
+                        popUpTo("actorHome") { inclusive = true }
+                    }
+                },
+                onMyCandidaturesClick = {
+                    navController.navigate("myCandidatures")
                 }
             )
         }

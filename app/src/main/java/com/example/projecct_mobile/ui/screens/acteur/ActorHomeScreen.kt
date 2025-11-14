@@ -40,6 +40,7 @@ import com.example.projecct_mobile.ui.components.ComingSoonAlert
 import com.example.projecct_mobile.ui.components.ErrorMessage
 import com.example.projecct_mobile.ui.components.getErrorMessage
 import com.example.projecct_mobile.data.model.Casting
+import com.example.projecct_mobile.data.repository.UserRepository
 import com.example.projecct_mobile.ui.screens.casting.CastingItem
 import com.example.projecct_mobile.ui.screens.casting.toCastingItem
 import com.example.projecct_mobile.ui.theme.*
@@ -85,8 +86,12 @@ fun ActorHomeScreen(
     val acteurRepository = remember(loadData) {
         if (loadData) ActeurRepository() else null
     }
+    val userRepository = remember(loadData) {
+        if (loadData) UserRepository() else null
+    }
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
+    var favoriteIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     
     // Charger les informations utilisateur
     LaunchedEffect(Unit, loadData) {
@@ -119,6 +124,27 @@ fun ActorHomeScreen(
         }
     }
     
+    // Charger les favoris
+    LaunchedEffect(Unit, loadData) {
+        if (!loadData) return@LaunchedEffect
+        
+        try {
+            val userResult = userRepository?.getCurrentUser()
+            if (userResult?.isSuccess == true) {
+                val user = userResult.getOrNull()
+                val userId = user?.actualId
+                if (!userId.isNullOrBlank()) {
+                    val favoritesResult = acteurRepository?.getFavorites(userId)
+                    favoritesResult?.onSuccess { favorites ->
+                        favoriteIds = favorites.mapNotNull { it.actualId }.toSet()
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("ActorHomeScreen", "Erreur chargement favoris: ${e.message}")
+        }
+    }
+    
     // Charger les castings
     LaunchedEffect(Unit, loadData) {
         if (!loadData) {
@@ -135,7 +161,11 @@ fun ActorHomeScreen(
             result?.onSuccess { apiCastings ->
                 // Trier les castings par date de création (les plus récents en haut)
                 val sortedCastings = apiCastings.sortedByDescending { it.getCreationTimestamp() }
-                castings = sortedCastings.map { it.toCastingItem() }
+                castings = sortedCastings.map { casting ->
+                    val item = casting.toCastingItem()
+                    // Mettre à jour isFavorite selon la liste des favoris
+                    item.copy(isFavorite = favoriteIds.contains(casting.actualId))
+                }
                 isLoading = false
             }
             
@@ -149,77 +179,85 @@ fun ActorHomeScreen(
         }
     }
     
-    Column(
-        modifier = Modifier
+    // Mettre à jour isFavorite quand favoriteIds change
+    LaunchedEffect(favoriteIds) {
+        if (!loadData) return@LaunchedEffect
+        castings = castings.map { casting ->
+            casting.copy(isFavorite = favoriteIds.contains(casting.id))
+        }
+    }
+    
+            Column(
+                modifier = Modifier
             .fillMaxSize()
             .background(DarkBlue)
-    ) {
+            ) {
         // Espacement en haut pour donner plus d'espace à la zone bleue
         Spacer(modifier = Modifier.height(24.dp))
         
         // Barre supérieure avec titre et champ de recherche
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
                 .padding(horizontal = 16.dp)
-        ) {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+                ) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
                 // Titre
-                Text(
+                            Text(
                     text = "CastMate",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = White,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = White,
                     textAlign = TextAlign.Start
-                )
-                
+                    )
+            
                 // Barre de recherche avec filtre
-                Row(
+            Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        modifier = Modifier.weight(1f),
+            ) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier.weight(1f),
                         placeholder = { Text("Search casting", color = GrayBorder) },
-                        leadingIcon = {
+                    leadingIcon = {
                             Icon(Icons.Default.Search, null, tint = GrayBorder)
-                        },
-                        shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = White,
                             unfocusedBorderColor = White.copy(alpha = 0.5f),
                             focusedTextColor = White,
                             unfocusedTextColor = White,
                             focusedPlaceholderColor = GrayBorder,
                             unfocusedPlaceholderColor = GrayBorder
-                        ),
-                        singleLine = true
-                    )
-                    
-                    IconButton(
+                    ),
+                    singleLine = true
+                )
+                
+                IconButton(
                         onClick = { onFilterClick() },
-                        modifier = Modifier
-                            .size(56.dp)
-                            .background(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .background(
                                 White.copy(alpha = 0.2f),
-                                RoundedCornerShape(12.dp)
-                            )
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Tune,
-                            contentDescription = "Filtres",
-                            tint = White
+                            RoundedCornerShape(12.dp)
                         )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Tune,
+                        contentDescription = "Filtres",
+                            tint = White
+                    )
                     }
                 }
+                }
             }
-        }
-        
+            
         // Espacement avant la liste (donner plus d'espace à la zone bleue)
         Spacer(modifier = Modifier.height(20.dp))
         
@@ -237,55 +275,55 @@ fun ActorHomeScreen(
                         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
                     )
             ) {
-            if (isLoading) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(color = DarkBlue)
-                }
-            } else if (errorMessage != null) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    ErrorMessage(
-                        message = errorMessage ?: "Erreur",
-                        onRetry = {
-                            scope.launch {
-                                if (castingRepository == null) return@launch
-                                isLoading = true
-                                errorMessage = null
-                                try {
-                                    val result = castingRepository.getAllCastings()
-                                    result.onSuccess { apiCastings ->
+                if (isLoading) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = DarkBlue)
+                    }
+                } else if (errorMessage != null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        ErrorMessage(
+                            message = errorMessage ?: "Erreur",
+                            onRetry = {
+                                scope.launch {
+                                    if (castingRepository == null) return@launch
+                                    isLoading = true
+                                    errorMessage = null
+                                    try {
+                                        val result = castingRepository.getAllCastings()
+                                        result.onSuccess { apiCastings ->
                                         // Trier les castings par date de création (les plus récents en haut)
                                         val sortedCastings = apiCastings.sortedByDescending { it.getCreationTimestamp() }
                                         castings = sortedCastings.map { it.toCastingItem() }
+                                            isLoading = false
+                                        }
+                                        result.onFailure { exception ->
+                                            errorMessage = getErrorMessage(exception)
+                                            isLoading = false
+                                        }
+                                    } catch (e: Exception) {
+                                        errorMessage = getErrorMessage(e)
                                         isLoading = false
                                     }
-                                    result.onFailure { exception ->
-                                        errorMessage = getErrorMessage(exception)
-                                        isLoading = false
-                                    }
-                                } catch (e: Exception) {
-                                    errorMessage = getErrorMessage(e)
-                                    isLoading = false
                                 }
                             }
-                        }
-                    )
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 16.dp),
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp),
                     contentPadding = PaddingValues(top = 16.dp, bottom = 90.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
                     items(castings.filter { 
                         it.title.contains(searchQuery, ignoreCase = true) ||
                         it.description.contains(searchQuery, ignoreCase = true)
@@ -293,13 +331,43 @@ fun ActorHomeScreen(
                         LocalCastingItemCard(
                             casting = casting,
                             onItemClick = { onCastingClick(casting) },
-                            onFavoriteClick = { 
-                                showComingSoon = "Favoris"
+                            onFavoriteClick = {
+                                scope.launch {
+                                    try {
+                                        val userResult = userRepository?.getCurrentUser()
+                                        if (userResult?.isSuccess == true) {
+                                            val user = userResult.getOrNull()
+                                            val userId = user?.actualId
+                                            if (!userId.isNullOrBlank()) {
+                                                val isCurrentlyFavorite = favoriteIds.contains(casting.id)
+                                                val result = if (isCurrentlyFavorite) {
+                                                    acteurRepository?.removeFavorite(userId, casting.id)
+                                                } else {
+                                                    acteurRepository?.addFavorite(userId, casting.id)
+                                                }
+                                                
+                                                result?.onSuccess {
+                                                    // Mettre à jour la liste locale
+                                                    if (isCurrentlyFavorite) {
+                                                        favoriteIds = favoriteIds - casting.id
+                                                    } else {
+                                                        favoriteIds = favoriteIds + casting.id
+                                                    }
+                                                }
+                                                result?.onFailure { exception ->
+                                                    android.util.Log.e("ActorHomeScreen", "Erreur favoris: ${exception.message}")
+                                                }
+                                            }
+                                        }
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("ActorHomeScreen", "Exception favoris: ${e.message}")
+                                    }
+                                }
                             }
                         )
                     }
                 }
-            }
+                }
             }
             
             // Barre de navigation positionnée au-dessus du contenu
@@ -312,9 +380,9 @@ fun ActorHomeScreen(
                 ActorBottomNavigationBar(
                     selectedItem = NavigationItem.HOME,
                     onCandidaturesClick = { onMyCandidaturesClick() },
-                    onHomeClick = { /* Déjà sur la page d'accueil */ },
+                onHomeClick = { /* Déjà sur la page d'accueil */ },
                     onProfileClick = { onProfileClick() }
-                )
+            )
             }
         }
     }
@@ -466,15 +534,15 @@ private fun LocalCastingItemCard(
             }
             
             // Informations du casting à droite
-            Column(
-                modifier = Modifier
+        Column(
+            modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight(),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
                 Column(
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
                     // Titre (sans date pour donner plus d'espace)
                     Text(
                         text = casting.title,
@@ -526,8 +594,8 @@ private fun LocalCastingItemCard(
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Black
-                                )
-                                Text(
+                    )
+                    Text(
                                     text = casting.age,
                                     fontSize = 13.sp,
                                     color = Color(0xFF555555)
@@ -550,18 +618,18 @@ private fun LocalCastingItemCard(
                         color = DarkBlue,
                         modifier = Modifier.padding(end = 8.dp)
                     )
-                    IconButton(
-                        onClick = onFavoriteClick,
+                IconButton(
+                    onClick = onFavoriteClick,
                         modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (casting.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                            contentDescription = "Favorite",
-                            tint = RedHeart,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
+                ) {
+                    Icon(
+                        imageVector = if (casting.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        contentDescription = "Favorite",
+                        tint = RedHeart,
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
+            }
             }
         }
     }
@@ -569,10 +637,10 @@ private fun LocalCastingItemCard(
 
 @Composable
 private fun InfoBadge(label: String, value: String) {
-    Row(
+            Row(
         horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+                verticalAlignment = Alignment.CenterVertically
+            ) {
         Text(
             text = label,
             fontSize = 11.sp,

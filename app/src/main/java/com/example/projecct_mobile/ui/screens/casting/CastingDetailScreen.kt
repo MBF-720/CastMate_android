@@ -45,11 +45,13 @@ import com.example.projecct_mobile.data.model.AgenceProfile
 import com.example.projecct_mobile.data.repository.ActeurRepository
 import com.example.projecct_mobile.data.repository.AgenceRepository
 import com.example.projecct_mobile.data.repository.CastingRepository
+import com.example.projecct_mobile.data.repository.UserRepository
 import com.example.projecct_mobile.ui.theme.*
-import com.example.projecct_mobile.ui.components.ComingSoonAlert
 import com.example.projecct_mobile.ui.components.CandidatureSuccessDialog
 import com.example.projecct_mobile.ui.components.CandidatureAlreadyAppliedDialog
 import com.example.projecct_mobile.ui.components.CastingClosedDialog
+import com.example.projecct_mobile.ui.components.ActorBottomNavigationBar
+import com.example.projecct_mobile.ui.components.NavigationItem
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -67,19 +69,41 @@ fun CastingDetailScreen(
     val context = LocalContext.current
     val acteurRepository = remember { ActeurRepository() }
     val castingRepository = remember { CastingRepository() }
+    val userRepository = remember { UserRepository() }
     val scope = rememberCoroutineScope()
     var afficheImage by remember { mutableStateOf<ImageBitmap?>(null) }
     var isLoadingImage by remember { mutableStateOf(false) }
     var isFavorite by remember { mutableStateOf(false) }
+    
+    // Charger l'état des favoris pour ce casting
+    LaunchedEffect(casting.actualId) {
+        val castingId = casting.actualId
+        if (castingId != null) {
+            try {
+                val userResult = userRepository.getCurrentUser()
+                if (userResult.isSuccess) {
+                    val user = userResult.getOrNull()
+                    val userId = user?.actualId
+                    if (!userId.isNullOrBlank()) {
+                        val favoritesResult = acteurRepository.getFavorites(userId)
+                        favoritesResult.onSuccess { favorites ->
+                            isFavorite = favorites.any { it.actualId == castingId }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("CastingDetailScreen", "Erreur chargement favoris: ${e.message}")
+            }
+        }
+    }
     var selectedTabIndex by remember { mutableStateOf(0) }
-    var showComingSoon by remember { mutableStateOf(false) }
     var showSuccessDialog by remember { mutableStateOf(false) }
     var showAlreadyAppliedDialog by remember { mutableStateOf(false) }
     var showCastingClosedDialog by remember { mutableStateOf(false) }
     var isSubmitting by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val tabs = listOf("overview", "Film", "production")
-    
+
     // Télécharger l'affiche si disponible
     LaunchedEffect(casting.actualAfficheFileId) {
         if (casting.actualAfficheFileId != null && afficheImage == null && !isLoadingImage) {
@@ -134,14 +158,14 @@ fun CastingDetailScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(
-                            brush = Brush.verticalGradient(
+                .background(
+                    brush = Brush.verticalGradient(
                                 colors = listOf(
                                     Color(0xFFE57373),
                                     Color(0xFFAD1457)
                                 )
-                            )
-                        )
+                    )
+                )
                 )
             }
             
@@ -158,37 +182,66 @@ fun CastingDetailScreen(
             }
             
             // Barre de navigation en haut
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
                     .padding(top = 40.dp, start = 16.dp, end = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                 IconButton(
                     onClick = onBackClick,
                     modifier = Modifier.size(40.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
-                        tint = White
-                    )
-                }
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = White
+                        )
+                    }
 
                 IconButton(
-                    onClick = { isFavorite = !isFavorite },
+                    onClick = {
+                        scope.launch {
+                            val castingId = casting.actualId
+                            if (castingId != null) {
+                                try {
+                                    val userResult = userRepository.getCurrentUser()
+                                    if (userResult.isSuccess) {
+                                        val user = userResult.getOrNull()
+                                        val userId = user?.actualId
+                                        if (!userId.isNullOrBlank()) {
+                                            val result = if (isFavorite) {
+                                                acteurRepository.removeFavorite(userId, castingId)
+                                            } else {
+                                                acteurRepository.addFavorite(userId, castingId)
+                                            }
+                                            
+                                            result.onSuccess {
+                        isFavorite = !isFavorite
+                                            }
+                                            result.onFailure { exception ->
+                                                android.util.Log.e("CastingDetailScreen", "Erreur favoris: ${exception.message}")
+                                            }
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    android.util.Log.e("CastingDetailScreen", "Exception favoris: ${e.message}")
+                                }
+                            }
+                        }
+                    },
                     modifier = Modifier.size(40.dp)
                 ) {
-                    Icon(
-                        imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                        contentDescription = "Favorite",
-                        tint = if (isFavorite) RedHeart else White,
+                        Icon(
+                            imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                            contentDescription = "Favorite",
+                            tint = if (isFavorite) RedHeart else White,
                         modifier = Modifier.size(24.dp)
-                    )
+                        )
                 }
-            }
-        }
+                    }
+                }
 
         // Contenu scrollable qui se superpose à l'image (overlap)
         Column(
@@ -198,13 +251,13 @@ fun CastingDetailScreen(
         ) {
             // Surface blanche arrondie qui se superpose
             Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
                     .weight(1f),
                 shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp),
                 color = White
-            ) {
-                Column(modifier = Modifier.fillMaxSize()) {
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
                     // Onglets personnalisés (style "pill")
                     Row(
                         modifier = Modifier
@@ -214,8 +267,8 @@ fun CastingDetailScreen(
                             .background(DarkBlue)
                             .padding(4.dp),
                         horizontalArrangement = Arrangement.SpaceEvenly
-                    ) {
-                        tabs.forEachIndexed { index, title ->
+                ) {
+                    tabs.forEachIndexed { index, title ->
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
@@ -235,18 +288,18 @@ fun CastingDetailScreen(
                                     color = if (selectedTabIndex == index) DarkBlue else White
                                 )
                             }
-                        }
                     }
+                }
 
                     // Contenu selon l'onglet sélectionné (avec espace pour le bouton fixe)
                     // Ajout de la détection de swipe gauche/droite
                     var dragOffset by remember { mutableStateOf(0f) }
                     
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                            .verticalScroll(rememberScrollState())
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
                             .pointerInput(Unit) {
                                 detectHorizontalDragGestures(
                                     onDragEnd = {
@@ -270,13 +323,13 @@ fun CastingDetailScreen(
                                 )
                             }
                             .padding(horizontal = 20.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        when (selectedTabIndex) {
-                            0 -> OverviewContent(casting, onMapClick)
-                            1 -> FilmContent(casting)
-                            2 -> ProductionContent(casting)
-                        }
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    when (selectedTabIndex) {
+                        0 -> OverviewContent(casting, onMapClick)
+                        1 -> FilmContent(casting)
+                        2 -> ProductionContent(casting)
+                    }
 
                         // Espace pour le bouton fixe + barre de navigation
                         Spacer(modifier = Modifier.height(140.dp))
@@ -307,7 +360,7 @@ fun CastingDetailScreen(
             }
             
             // Bouton Submit fixe
-            Button(
+                    Button(
                 onClick = {
                     val castingId = casting.actualId
                     
@@ -411,16 +464,16 @@ fun CastingDetailScreen(
                         showCastingClosedDialog = false
                     }
                 },
-                modifier = Modifier
-                    .fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
                     .height(52.dp)
                     .padding(horizontal = 20.dp),
                 shape = RoundedCornerShape(26.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = DarkBlue
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = DarkBlue
                 ),
                 enabled = !isSubmitting
-            ) {
+                    ) {
                 if (isSubmitting) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(20.dp),
@@ -428,10 +481,10 @@ fun CastingDetailScreen(
                         strokeWidth = 2.dp
                     )
                 } else {
-                    Text(
-                        text = "Submit",
+                        Text(
+                            text = "Submit",
                         fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.Bold,
                         color = White
                     )
                 }
@@ -439,11 +492,12 @@ fun CastingDetailScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Barre de navigation du bas (Favorite, Home, Profile)
-            HomeBottomNavigationBar(
-                onFavoriteClick = { 
-                    // Afficher "Coming Soon" pour la page Favoris
-                    showComingSoon = true
+        // Barre de navigation du bas (même que ActorHomeScreen)
+            ActorBottomNavigationBar(
+                selectedItem = NavigationItem.HOME,
+                onCandidaturesClick = {
+                    // Naviguer vers "Mes candidatures"
+                    onNavigateToCandidatures?.invoke()
                 },
                 onHomeClick = { 
                     // Retourner à la page d'accueil de l'acteur
@@ -455,14 +509,6 @@ fun CastingDetailScreen(
                 }
             )
         }
-    }
-    
-    // Alerte "Coming Soon" pour la page Favoris
-    if (showComingSoon) {
-        ComingSoonAlert(
-            onDismiss = { showComingSoon = false },
-            featureName = "Favoris"
-        )
     }
     
     // Dialogue de confirmation de candidature
@@ -520,7 +566,7 @@ fun OverviewContent(casting: Casting, onMapClick: () -> Unit) {
                                 if (isOpen) Color(0xFF4CAF50) else Color(0xFFF44336)
                             )
                     )
-                    Text(
+        Text(
                         text = if (isOpen) "Ouvert" else "Fermé",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -551,25 +597,25 @@ fun OverviewContent(casting: Casting, onMapClick: () -> Unit) {
         val dateFin = casting.dateFin
         if (!dateDebut.isNullOrBlank() || !dateFin.isNullOrBlank()) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
+            Text(
                     text = "dates",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color(0xFF1A1A1A)
                 )
                 if (!dateDebut.isNullOrBlank()) {
-                    Text(
+            Text(
                         text = formatDate(dateDebut),
-                        fontSize = 14.sp,
+                fontSize = 14.sp,
                         color = Color(0xFF666666)
-                    )
+            )
                 }
                 if (!dateFin.isNullOrBlank() && dateFin != dateDebut) {
-                    Text(
+            Text(
                         text = formatDate(dateFin),
-                        fontSize = 14.sp,
+                fontSize = 14.sp,
                         color = Color(0xFF666666)
-                    )
+            )
                 }
             }
         }
@@ -588,8 +634,8 @@ fun OverviewContent(casting: Casting, onMapClick: () -> Unit) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
+            ) {
+                Text(
                         text = "•",
                         fontSize = 14.sp,
                         color = Color(0xFF666666)
@@ -598,47 +644,47 @@ fun OverviewContent(casting: Casting, onMapClick: () -> Unit) {
                         text = "Character Type: ${casting.types.joinToString(", ")}",
                         fontSize = 14.sp,
                         color = Color(0xFF666666)
-                    )
-                }
+                )
             }
-            
+        }
+
             // Âge
             if (!casting.age.isNullOrBlank()) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
+                Text(
                         text = "•",
-                        fontSize = 14.sp,
+                    fontSize = 14.sp,
                         color = Color(0xFF666666)
-                    )
-                    Text(
+                )
+                Text(
                         text = "Gender/Age: ${casting.age}",
                         fontSize = 14.sp,
                         color = Color(0xFF666666)
-                    )
-                }
+                )
             }
-            
+        }
+
             // Conditions physiques/traits
             if (!casting.conditions.isNullOrBlank()) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.Top
                 ) {
-                    Text(
+            Text(
                         text = "•",
-                        fontSize = 14.sp,
+                fontSize = 14.sp,
                         color = Color(0xFF666666),
                         modifier = Modifier.padding(top = 2.dp)
-                    )
-                    Text(
+            )
+            Text(
                         text = "Physical Traits: ${casting.conditions}",
-                        fontSize = 14.sp,
+                fontSize = 14.sp,
                         color = Color(0xFF666666),
-                        lineHeight = 20.sp
-                    )
+                lineHeight = 20.sp
+            )
                 }
             }
         }
@@ -646,15 +692,15 @@ fun OverviewContent(casting: Casting, onMapClick: () -> Unit) {
         // Lieu
         if (!casting.lieu.isNullOrBlank()) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
+            Text(
                     text = "Lieu",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color(0xFF1A1A1A)
-                )
-                Text(
+            )
+            Text(
                     text = casting.lieu,
-                    fontSize = 14.sp,
+                fontSize = 14.sp,
                     color = Color(0xFF666666)
                 )
             }
@@ -674,10 +720,10 @@ fun OverviewContent(casting: Casting, onMapClick: () -> Unit) {
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = DarkBlue
-                )
-            }
+            )
         }
     }
+}
 }
 
 /**
@@ -817,38 +863,38 @@ fun FilmContent(casting: Casting) {
     Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
         // Synopsis
         if (!casting.synopsis.isNullOrBlank()) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
                     text = "Synopsis",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Black
-                )
-                Text(
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = Black
+            )
+            Text(
                     text = casting.synopsis,
-                    fontSize = 14.sp,
-                    color = GrayBorder,
-                    lineHeight = 20.sp
-                )
+                fontSize = 14.sp,
+                color = GrayBorder,
+                lineHeight = 20.sp
+            )
             }
         }
-        
+
         // Description du rôle
         if (!casting.descriptionRole.isNullOrBlank()) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
                     text = "Description du rôle",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Black
-                )
-                Text(
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = Black
+            )
+            Text(
                     text = casting.descriptionRole,
-                    fontSize = 14.sp,
-                    color = GrayBorder,
-                    lineHeight = 20.sp
-                )
-            }
+                fontSize = 14.sp,
+                color = GrayBorder,
+                lineHeight = 20.sp
+            )
+        }
         }
     }
 }
@@ -1053,47 +1099,47 @@ fun ProductionContent(casting: Casting) {
 
             // Nom de l'agence
             if (!agenceInfo.nomAgence.isNullOrBlank()) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
                         text = "Nom de l'agence",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Black
-                    )
-                    Text(
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = Black
+            )
+            Text(
                         text = agenceInfo.nomAgence,
                         fontSize = 16.sp,
                         color = Black,
                         fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
+            )
+        }
+    }
 
             // Responsable
             if (!agenceInfo.responsable.isNullOrBlank()) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
                         text = "Responsable",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Black
-                    )
-                    Text(
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = Black
+            )
+            Text(
                         text = agenceInfo.responsable,
-                        fontSize = 14.sp,
+                fontSize = 14.sp,
                         color = Color(0xFF555555)
-                    )
+            )
                 }
-            }
+        }
 
             // Téléphone
             if (!agenceInfo.tel.isNullOrBlank()) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
                         text = "Téléphone",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Black
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = Black
                     )
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1116,10 +1162,10 @@ fun ProductionContent(casting: Casting) {
                             contentDescription = "Appeler",
                             tint = DarkBlue,
                             modifier = Modifier.size(20.dp)
-                        )
-                        Text(
+            )
+            Text(
                             text = agenceInfo.tel,
-                            fontSize = 14.sp,
+                fontSize = 14.sp,
                             color = DarkBlue,
                             fontWeight = FontWeight.Medium
                         )
@@ -1130,7 +1176,7 @@ fun ProductionContent(casting: Casting) {
             // Email
             if (!agenceInfo.email.isNullOrBlank()) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
+            Text(
                         text = "Email",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
@@ -1156,10 +1202,10 @@ fun ProductionContent(casting: Casting) {
                             contentDescription = "Envoyer un email",
                             tint = DarkBlue,
                             modifier = Modifier.size(20.dp)
-                        )
-                        Text(
+            )
+            Text(
                             text = agenceInfo.email,
-                            fontSize = 14.sp,
+                fontSize = 14.sp,
                             color = DarkBlue,
                             fontWeight = FontWeight.Medium
                         )
@@ -1170,7 +1216,7 @@ fun ProductionContent(casting: Casting) {
             // Gouvernorat
             if (!agenceInfo.gouvernorat.isNullOrBlank()) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
+            Text(
                         text = "Gouvernorat",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
@@ -1188,7 +1234,7 @@ fun ProductionContent(casting: Casting) {
                         )
                         Text(
                             text = agenceInfo.gouvernorat,
-                            fontSize = 14.sp,
+                fontSize = 14.sp,
                             color = Color(0xFF555555)
                         )
                     }
@@ -1198,7 +1244,7 @@ fun ProductionContent(casting: Casting) {
             // Description
             if (!agenceInfo.description.isNullOrBlank()) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
+            Text(
                         text = "Description",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
@@ -1206,12 +1252,12 @@ fun ProductionContent(casting: Casting) {
                     )
                     Text(
                         text = agenceInfo.description,
-                        fontSize = 14.sp,
+                fontSize = 14.sp,
                         color = Color(0xFF555555),
-                        lineHeight = 20.sp
-                    )
-                }
-            }
+                lineHeight = 20.sp
+            )
+        }
+    }
 
             // Liens et réseaux sociaux
             val socialLinks = agenceInfo.socialLinks
@@ -1231,7 +1277,7 @@ fun ProductionContent(casting: Casting) {
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
+            Text(
                         text = "Liens",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
@@ -1239,11 +1285,11 @@ fun ProductionContent(casting: Casting) {
                     )
                     
                     // Icônes cliquables en ligne (style similaire aux autres écrans)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
+        Row(
+            modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.Start,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+            verticalAlignment = Alignment.CenterVertically
+        ) {
                         // Site web
                         if (hasSiteWeb) {
                             val siteWebUrl = agenceInfo.siteWeb!!.let { url ->
@@ -1296,8 +1342,8 @@ fun ProductionContent(casting: Casting) {
                                     }
                                 },
                                 backgroundColor = Color(0xFF1877F2).copy(alpha = 0.1f)
-                            )
-                        }
+            )
+        }
                         
                         // Instagram
                         if (hasInstagram) {
@@ -1331,122 +1377,31 @@ fun ProductionContent(casting: Casting) {
             }
         } else {
             // Aucune information sur l'agence
-            Column(
+    Column(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
+        horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.padding(vertical = 24.dp)
             ) {
                 Text(
                     text = "Aucune information sur l'agence disponible",
-                    fontSize = 14.sp,
+                fontSize = 14.sp,
                     color = Color(0xFF666666),
                     fontStyle = FontStyle.Italic,
                     textAlign = TextAlign.Center
                 )
                 if (recruteur == null) {
-                    Text(
+        Text(
                         text = "Les informations de l'agence n'ont pas été renvoyées par le backend",
-                        fontSize = 12.sp,
+            fontSize = 12.sp,
                         color = Color(0xFF999999),
                         textAlign = TextAlign.Center
-                    )
+        )
                 }
             }
         }
     }
 }
 
-@Composable
-private fun HomeBottomNavigationBar(
-    onFavoriteClick: () -> Unit,
-    onHomeClick: () -> Unit,
-    onProfileClick: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        // Navbar flottante avec transparence (même style que ProfileBottomNavigationBar)
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(70.dp)
-                .shadow(
-                    elevation = 12.dp,
-                    shape = RoundedCornerShape(24.dp),
-                    spotColor = DarkBlue.copy(alpha = 0.3f)
-                ),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = White.copy(alpha = 0.95f)
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp),
-                horizontalArrangement = Arrangement.SpaceAround,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Favorite
-                HomeNavigationItem(
-                    icon = Icons.Default.Favorite,
-                    label = "Favorite",
-                    onClick = onFavoriteClick,
-                    isSelected = false
-                )
-                
-                // Home - PAS sélectionné car on est sur la page détail
-                HomeNavigationItem(
-                    icon = Icons.Default.Home,
-                    label = "Home",
-                    onClick = onHomeClick,
-                    isSelected = false
-                )
-                
-                // Profile
-                HomeNavigationItem(
-                    icon = Icons.Default.Person,
-                    label = "Profile",
-                    onClick = onProfileClick,
-                    isSelected = false
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun HomeNavigationItem(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    onClick: () -> Unit,
-    isSelected: Boolean = false
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-        modifier = Modifier
-            .clickable { onClick() }
-            .padding(vertical = 8.dp, horizontal = 12.dp)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = if (isSelected) DarkBlue else GrayBorder,
-            modifier = Modifier.size(24.dp)
-        )
-        Text(
-            text = label,
-            fontSize = 11.sp,
-            color = if (isSelected) DarkBlue else GrayBorder,
-            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-        )
-    }
-}
 
 @Preview(showBackground = true)
 @Composable

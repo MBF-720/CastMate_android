@@ -502,5 +502,77 @@ class ActeurRepository {
     private fun guessMimeType(file: File): String? {
         return URLConnection.guessContentTypeFromName(file.name)
     }
+    
+    /**
+     * Ajoute un casting aux favoris d'un acteur.
+     */
+    suspend fun addFavorite(
+        id: String,
+        castingId: String
+    ): Result<Unit> {
+        return try {
+            val response = acteurService.addFavorite(id, castingId)
+            
+            if (response.isSuccessful) {
+                Result.success(Unit)
+            } else {
+                val message = response.errorBody()?.string() ?: response.message()
+                Result.failure(
+                    ApiException.BadRequestException(message ?: "Erreur lors de l'ajout aux favoris")
+                )
+            }
+        } catch (e: ApiException) {
+            Result.failure(e)
+        } catch (e: Exception) {
+            Result.failure(ApiException.UnknownException("Erreur inconnue: ${e.message}"))
+        }
+    }
+    
+    /**
+     * Retire un casting des favoris d'un acteur.
+     */
+    suspend fun removeFavorite(
+        id: String,
+        castingId: String
+    ): Result<Unit> {
+        return try {
+            val response = acteurService.removeFavorite(id, castingId)
+            
+            if (response.isSuccessful) {
+                Result.success(Unit)
+            } else {
+                val message = response.errorBody()?.string() ?: response.message()
+                Result.failure(
+                    ApiException.BadRequestException(message ?: "Erreur lors de la suppression des favoris")
+                )
+            }
+        } catch (e: ApiException) {
+            Result.failure(e)
+        } catch (e: Exception) {
+            Result.failure(ApiException.UnknownException("Erreur inconnue: ${e.message}"))
+        }
+    }
+    
+    /**
+     * Consulte la liste des favoris d'un acteur.
+     */
+    suspend fun getFavorites(id: String): Result<List<com.example.projecct_mobile.data.model.Casting>> {
+        return try {
+            val response = acteurService.getFavorites(id)
+            
+            if (response.isSuccessful && response.body() != null) {
+                Result.success(response.body()!!)
+            } else {
+                val message = response.errorBody()?.string() ?: response.message()
+                Result.failure(
+                    ApiException.BadRequestException(message ?: "Erreur lors de la récupération des favoris")
+                )
+            }
+        } catch (e: ApiException) {
+            Result.failure(e)
+        } catch (e: Exception) {
+            Result.failure(ApiException.UnknownException("Erreur inconnue: ${e.message}"))
+        }
+    }
 }
 

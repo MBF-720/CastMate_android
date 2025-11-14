@@ -3,7 +3,10 @@ package com.example.projecct_mobile.ui.screens.acteur
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,7 +41,13 @@ import android.net.Uri
 import android.content.Context
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import com.example.projecct_mobile.data.cache.GalleryPhotoCache
 import com.example.projecct_mobile.data.local.TokenManager
 import com.example.projecct_mobile.data.model.ActeurProfile
 import com.example.projecct_mobile.data.model.ApiException
@@ -47,10 +56,13 @@ import com.example.projecct_mobile.ui.components.ComingSoonAlert
 import com.example.projecct_mobile.ui.components.ErrorMessage
 import com.example.projecct_mobile.ui.components.getErrorMessage
 import com.example.projecct_mobile.ui.theme.*
+import com.example.projecct_mobile.utils.SocialLinkValidator
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
@@ -106,6 +118,15 @@ fun ActorProfileScreen(
     var isDownloadingDocument by remember { mutableStateOf(false) }
     var lastDownloadedDocumentFileId by remember { mutableStateOf<String?>(null) }
     
+    // État pour la galerie de photos
+    var galleryPhotos by remember { mutableStateOf<List<Pair<String, ImageBitmap>>>(emptyList()) }
+    var isUploadingGalleryPhotos by remember { mutableStateOf(false) }
+    var isLoadingGallery by remember { mutableStateOf(false) }
+    var isSelectionMode by remember { mutableStateOf(false) }
+    var selectedPhotoIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var isDeletingPhotos by remember { mutableStateOf(false) }
+    var selectedPhotoIndex by remember { mutableStateOf<Int?>(null) } // Index de la photo affichée en plein écran
+    
     val acteurRepository = remember(loadData) {
         if (loadData) ActeurRepository() else null
     }
@@ -144,6 +165,58 @@ fun ActorProfileScreen(
         } else {
             android.util.Log.e("ActorProfileScreen", "❌ Impossible de copier le fichier PDF")
             errorMessage = "Impossible de copier le fichier PDF. Veuillez réessayer."
+        }
+    }
+    
+    // File picker pour sélectionner plusieurs photos pour la galerie
+    val galleryPhotosPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetMultipleContents()
+    ) { uris: List<Uri> ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        
+        scope.launch {
+            isUploadingGalleryPhotos = true
+            errorMessage = null
+            
+            try {
+                val photoFiles = mutableListOf<File>()
+                uris.forEach { uri ->
+                    val copiedFile = copyUriToCache(context, uri, "gallery_photo")
+                    if (copiedFile != null) {
+                        photoFiles.add(copiedFile)
+                    }
+                }
+                
+                if (photoFiles.isEmpty()) {
+                    errorMessage = "Impossible de copier les photos sélectionnées."
+                    isUploadingGalleryPhotos = false
+                    return@launch
+                }
+                
+                // Upload des photos
+                val acteurId = acteurRepository?.getCurrentActeurId()
+                if (acteurId == null) {
+                    errorMessage = "Impossible de récupérer l'ID de l'acteur."
+                    isUploadingGalleryPhotos = false
+                    return@launch
+                }
+                
+                val result = acteurRepository.addGalleryPhotos(acteurId, photoFiles)
+                result.onSuccess { updatedProfile ->
+                    acteurProfile = updatedProfile
+                    successMessage = "${photoFiles.size} photo(s) ajoutée(s) avec succès!"
+                    // Le LaunchedEffect se déclenchera automatiquement quand acteurProfile changera
+                }
+                result.onFailure { exception ->
+                    errorMessage = getErrorMessage(exception)
+                    android.util.Log.e("ActorProfileScreen", "❌ Erreur upload galerie: ${exception.message}")
+                }
+            } catch (e: Exception) {
+                errorMessage = "Erreur lors de l'ajout des photos: ${e.message}"
+                android.util.Log.e("ActorProfileScreen", "❌ Exception upload galerie: ${e.message}", e)
+            } finally {
+                isUploadingGalleryPhotos = false
+            }
         }
     }
     
@@ -213,6 +286,7 @@ fun ActorProfileScreen(
     // Utiliser un état pour suivre le dernier photoFileId téléchargé
     var lastDownloadedPhotoFileId by remember { mutableStateOf<String?>(null) }
     
+    
     LaunchedEffect(acteurProfile?.media?.photoFileId) {
         val photoFileId = acteurProfile?.media?.photoFileId
         android.util.Log.e("ActorProfileScreen", "🔵 LaunchedEffect(photoFileId) déclenché: '$photoFileId', dernier téléchargé: '$lastDownloadedPhotoFileId'")
@@ -255,6 +329,54 @@ fun ActorProfileScreen(
                 e.printStackTrace()
             }
         }
+    }
+    
+    // Charger la galerie quand le profil est chargé
+    LaunchedEffect(acteurProfile?.media?.gallery) {
+        val gallery = acteurProfile?.media?.gallery
+        if (gallery.isNullOrEmpty()) {
+            galleryPhotos = emptyList()
+            return@LaunchedEffect
+        }
+        
+        isLoadingGallery = true
+        
+        // Extraire les fileIds
+        val photos = gallery.mapNotNull { mediaRef ->
+            mediaRef.fileId?.takeIf { it.isNotBlank() }
+        }
+        
+        // Charger les photos en utilisant le cache (en parallèle)
+        val loadedPhotos = photos.map { fileId ->
+            async {
+                try {
+                    // Vérifier d'abord le cache
+                    val cachedBitmap = GalleryPhotoCache.get(context, fileId)
+                    if (cachedBitmap != null) {
+                        android.util.Log.d("ActorProfileScreen", "✅ Photo $fileId chargée depuis le cache")
+                        Pair(fileId, cachedBitmap)
+                    } else {
+                        // Si pas en cache, télécharger
+                        android.util.Log.d("ActorProfileScreen", "📥 Téléchargement photo $fileId...")
+                        val mediaResult = acteurRepository?.downloadMedia(fileId)
+                        mediaResult?.getOrNull()?.let { bytes ->
+                            if (bytes.isNotEmpty()) {
+                                // Mettre en cache et décoder
+                                val imageBitmap = GalleryPhotoCache.put(context, fileId, bytes)
+                                imageBitmap?.let { Pair(fileId, it) }
+                            } else null
+                        } ?: null
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("ActorProfileScreen", "❌ Erreur chargement photo galerie $fileId: ${e.message}")
+                    null
+                }
+            }
+        }.awaitAll().filterNotNull()
+        
+        galleryPhotos = loadedPhotos
+        isLoadingGallery = false
+        android.util.Log.d("ActorProfileScreen", "✅ Galerie chargée: ${loadedPhotos.size}/${photos.size} photos")
     }
     
     // Fonction helper pour convertir un nom d'utilisateur ou URL en URL complète
@@ -355,61 +477,112 @@ fun ActorProfileScreen(
                 // Bouton retour
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = onBackClick,
+                        modifier = Modifier
+                            .size(46.dp)
+                            .clip(CircleShape)
+                            .background(White.copy(alpha = 0.18f))
                 ) {
-                    IconButton(
-                        onClick = onBackClick,
-                        modifier = Modifier
-                            .size(46.dp)
-                            .clip(CircleShape)
-                            .background(White.copy(alpha = 0.18f))
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Retour",
-                            tint = White,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                    
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Retour",
+                        tint = White,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                
                     // Bouton Edit/Save
-                    Box(
-                        modifier = Modifier
+                Box(
+                    modifier = Modifier
                             .size(46.dp)
                             .clip(CircleShape)
                             .background(White.copy(alpha = 0.18f))
-                            .clickable {
-                                android.util.Log.d("ActorProfileScreen", "Bouton cliqué, isEditing actuel: $isEditing")
-                                if (isEditing) {
-                                    // Sauvegarder les modifications
-                                    android.util.Log.d("ActorProfileScreen", "Sauvegarde en cours...")
-                                    
-                                    // Valider l'email si fourni
-                                    if (email.isNotBlank() && !android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
-                                        errorMessage = "L'email n'est pas valide"
-                                        return@clickable
-                                    }
-                                    
-                                    scope.launch {
-                                        if (acteurRepository == null) return@launch
-                                        isLoading = true
-                                        errorMessage = null
-                                        successMessage = null
+                        .clickable {
+                            android.util.Log.d("ActorProfileScreen", "Bouton cliqué, isEditing actuel: $isEditing")
+                            if (isEditing) {
+                                // Sauvegarder les modifications
+                                android.util.Log.d("ActorProfileScreen", "Sauvegarde en cours...")
+                                
+                                    try {
+                                // Valider l'email si fourni
+                                if (email.isNotBlank() && !android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                                    errorMessage = "L'email n'est pas valide"
+                                            isEditing = true // Garder le mode édition pour afficher l'erreur
+                                            return@clickable
+                                        }
                                         
-                                        try {
-                                            val updateRequest = com.example.projecct_mobile.data.model.UpdateActeurRequest(
-                                                nom = nom.takeIf { it.isNotBlank() },
-                                                prenom = prenom.takeIf { it.isNotBlank() },
-                                                email = email.takeIf { it.isNotBlank() && android.util.Patterns.EMAIL_ADDRESS.matcher(it).matches() },
-                                                tel = telephone.takeIf { it.isNotBlank() },
-                                                age = age.toIntOrNull(),
-                                                gouvernorat = gouvernorat.takeIf { it.isNotBlank() },
-                                                experience = experience.toIntOrNull(),
-                                                socialLinks = com.example.projecct_mobile.data.model.SocialLinks(
-                                                    instagram = instagram.takeIf { it.isNotBlank() },
-                                                    youtube = youtube.takeIf { it.isNotBlank() },
-                                                    tiktok = tiktok.takeIf { it.isNotBlank() }
+                                        // Validation des liens Instagram
+                                        android.util.Log.d("ActorProfileScreen", "🔍 Validation Instagram: '$instagram'")
+                                        val instagramValidation = SocialLinkValidator.validateInstagram(instagram)
+                                        if (instagramValidation is SocialLinkValidator.ValidationResult.Error) {
+                                            android.util.Log.e("ActorProfileScreen", "❌ Erreur validation Instagram: ${instagramValidation.message}")
+                                            errorMessage = instagramValidation.message
+                                            isEditing = true // Garder le mode édition pour afficher l'erreur
+                                            return@clickable
+                                        }
+                                        
+                                        // Validation des liens YouTube
+                                        android.util.Log.d("ActorProfileScreen", "🔍 Validation YouTube: '$youtube'")
+                                        val youtubeValidation = SocialLinkValidator.validateYouTube(youtube)
+                                        if (youtubeValidation is SocialLinkValidator.ValidationResult.Error) {
+                                            android.util.Log.e("ActorProfileScreen", "❌ Erreur validation YouTube: ${youtubeValidation.message}")
+                                            errorMessage = youtubeValidation.message
+                                            isEditing = true // Garder le mode édition pour afficher l'erreur
+                                            return@clickable
+                                        }
+                                        
+                                        // Validation des liens TikTok
+                                        android.util.Log.d("ActorProfileScreen", "🔍 Validation TikTok: '$tiktok'")
+                                        val tiktokValidation = SocialLinkValidator.validateTikTok(tiktok)
+                                        if (tiktokValidation is SocialLinkValidator.ValidationResult.Error) {
+                                            android.util.Log.e("ActorProfileScreen", "❌ Erreur validation TikTok: ${tiktokValidation.message}")
+                                            errorMessage = tiktokValidation.message
+                                            isEditing = true // Garder le mode édition pour afficher l'erreur
+                                            return@clickable
+                                        }
+                                        
+                                        android.util.Log.d("ActorProfileScreen", "✅ Toutes les validations passées, lancement de la sauvegarde...")
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("ActorProfileScreen", "❌ Exception lors de la validation: ${e.message}", e)
+                                        errorMessage = "Erreur lors de la validation: ${e.message}"
+                                        isEditing = true
+                                    return@clickable
+                                }
+                                
+                                scope.launch {
+                                    if (acteurRepository == null) return@launch
+                                    isLoading = true
+                                    errorMessage = null
+                                    successMessage = null
+                                    
+                                    try {
+                                            // Normaliser les liens avant l'envoi
+                                            val normalizedInstagram = instagram.takeIf { it.isNotBlank() }?.let { 
+                                                SocialLinkValidator.normalizeInstagram(it.trim()) 
+                                            }
+                                            val normalizedYouTube = youtube.takeIf { it.isNotBlank() }?.let { 
+                                                SocialLinkValidator.normalizeYouTube(it.trim()) 
+                                            }
+                                            val normalizedTikTok = tiktok.takeIf { it.isNotBlank() }?.let { 
+                                                SocialLinkValidator.normalizeTikTok(it.trim()) 
+                                            }
+                                            
+                                        val updateRequest = com.example.projecct_mobile.data.model.UpdateActeurRequest(
+                                            nom = nom.takeIf { it.isNotBlank() },
+                                            prenom = prenom.takeIf { it.isNotBlank() },
+                                            email = email.takeIf { it.isNotBlank() && android.util.Patterns.EMAIL_ADDRESS.matcher(it).matches() },
+                                            tel = telephone.takeIf { it.isNotBlank() },
+                                            age = age.toIntOrNull(),
+                                            gouvernorat = gouvernorat.takeIf { it.isNotBlank() },
+                                            experience = experience.toIntOrNull(),
+                                            socialLinks = com.example.projecct_mobile.data.model.SocialLinks(
+                                                    instagram = normalizedInstagram,
+                                                    youtube = normalizedYouTube,
+                                                    tiktok = normalizedTikTok
                                                 )
                                             )
                                             
@@ -494,37 +667,37 @@ fun ActorProfileScreen(
                                                     }
                                                 } else {
                                                     acteurProfile = updatedProfile
-                                                    successMessage = "Profil mis à jour avec succès"
-                                                    isLoading = false
-                                                    isEditing = false
-                                                }
-                                            }
-                                            
-                                            result?.onFailure { exception ->
-                                                errorMessage = getErrorMessage(exception)
-                                                isLoading = false
-                                                android.util.Log.e("ActorProfileScreen", "Erreur lors de la sauvegarde: ${exception.message}")
-                                            }
-                                        } catch (e: Exception) {
-                                            errorMessage = getErrorMessage(e)
+                                            successMessage = "Profil mis à jour avec succès"
                                             isLoading = false
-                                            android.util.Log.e("ActorProfileScreen", "Exception lors de la sauvegarde: ${e.message}", e)
+                                            isEditing = false
+                                                }
                                         }
+                                        
+                                        result?.onFailure { exception ->
+                                            errorMessage = getErrorMessage(exception)
+                                            isLoading = false
+                                            android.util.Log.e("ActorProfileScreen", "Erreur lors de la sauvegarde: ${exception.message}")
+                                        }
+                                    } catch (e: Exception) {
+                                        errorMessage = getErrorMessage(e)
+                                        isLoading = false
+                                        android.util.Log.e("ActorProfileScreen", "Exception lors de la sauvegarde: ${e.message}", e)
                                     }
-                                } else {
-                                    android.util.Log.d("ActorProfileScreen", "Activation du mode édition")
-                                    isEditing = true
                                 }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = if (isEditing) Icons.Default.Check else Icons.Default.Edit,
-                            contentDescription = if (isEditing) "Sauvegarder" else "Modifier",
-                            tint = White,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
+                            } else {
+                                android.util.Log.d("ActorProfileScreen", "Activation du mode édition")
+                                isEditing = true
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (isEditing) Icons.Default.Check else Icons.Default.Edit,
+                        contentDescription = if (isEditing) "Sauvegarder" else "Modifier",
+                        tint = White,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
                 }
                 
                 Spacer(modifier = Modifier.height(20.dp))
@@ -606,8 +779,8 @@ fun ActorProfileScreen(
                                     Image(
                                         bitmap = profileImage!!,
                                         contentDescription = "Photo de profil",
-                                        modifier = Modifier
-                                            .fillMaxSize()
+                modifier = Modifier
+                    .fillMaxSize()
                                             .clip(CircleShape),
                                         contentScale = ContentScale.Crop
                                     )
@@ -619,8 +792,8 @@ fun ActorProfileScreen(
                                                 .clip(CircleShape)
                                                 .background(DarkBlue)
                                                 .padding(6.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
+                contentAlignment = Alignment.Center
+            ) {
                                             Icon(
                                                 imageVector = Icons.Default.CameraAlt,
                                                 contentDescription = "Changer la photo",
@@ -646,9 +819,9 @@ fun ActorProfileScreen(
         }
         
         // Contenu principal scrollable
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
                 .weight(1f)
                 .background(White)
         ) {
@@ -662,18 +835,18 @@ fun ActorProfileScreen(
             } else if (errorMessage != null && !isEditing) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    ErrorMessage(
-                        message = errorMessage ?: "Erreur",
-                        onRetry = {
-                            scope.launch {
-                                if (acteurRepository == null) return@launch
-                                isLoading = true
-                                errorMessage = null
-                                try {
-                                    val result = acteurRepository.getCurrentActeur()
-                                    result.onSuccess { acteur ->
+                contentAlignment = Alignment.Center
+            ) {
+                ErrorMessage(
+                    message = errorMessage ?: "Erreur",
+                    onRetry = {
+                        scope.launch {
+                            if (acteurRepository == null) return@launch
+                            isLoading = true
+                            errorMessage = null
+                            try {
+                                val result = acteurRepository.getCurrentActeur()
+                                result.onSuccess { acteur ->
                                         nom = acteur.nom ?: ""
                                         prenom = acteur.prenom ?: ""
                                         email = acteur.email ?: ""
@@ -681,27 +854,27 @@ fun ActorProfileScreen(
                                         age = acteur.age?.toString() ?: ""
                                         gouvernorat = acteur.gouvernorat ?: ""
                                         experience = acteur.experience?.toString() ?: ""
-                                        instagram = acteur.socialLinks?.instagram ?: ""
-                                        youtube = acteur.socialLinks?.youtube ?: ""
-                                        tiktok = acteur.socialLinks?.tiktok ?: ""
-                                        isLoading = false
-                                    }
-                                    result.onFailure { exception ->
-                                        errorMessage = getErrorMessage(exception)
-                                        isLoading = false
-                                    }
-                                } catch (e: Exception) {
-                                    errorMessage = getErrorMessage(e)
+                                    instagram = acteur.socialLinks?.instagram ?: ""
+                                    youtube = acteur.socialLinks?.youtube ?: ""
+                                    tiktok = acteur.socialLinks?.tiktok ?: ""
                                     isLoading = false
                                 }
+                                result.onFailure { exception ->
+                                    errorMessage = getErrorMessage(exception)
+                                    isLoading = false
+                                }
+                            } catch (e: Exception) {
+                                errorMessage = getErrorMessage(e)
+                                isLoading = false
                             }
                         }
-                    )
-                }
-            } else {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
+                    }
+                )
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
                         .verticalScroll(rememberScrollState())
                         .padding(horizontal = 20.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -764,25 +937,25 @@ fun ActorProfileScreen(
                         }
                     }
                     
-                    // Message de succès
-                    successMessage?.let { message ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = LightBlue),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text(
-                                text = message,
-                                modifier = Modifier.padding(16.dp),
-                                color = DarkBlue,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                        LaunchedEffect(message) {
-                            kotlinx.coroutines.delay(3000)
-                            successMessage = null
-                        }
+                // Message de succès
+                successMessage?.let { message ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = LightBlue),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(
+                            text = message,
+                            modifier = Modifier.padding(16.dp),
+                            color = DarkBlue,
+                            fontWeight = FontWeight.Medium
+                        )
                     }
+                    LaunchedEffect(message) {
+                        kotlinx.coroutines.delay(3000)
+                        successMessage = null
+                    }
+                }
                     
                     // Message d'erreur
                     errorMessage?.let { message ->
@@ -799,137 +972,231 @@ fun ActorProfileScreen(
                             )
                         }
                     }
-                    
-                    // Message informatif si le profil n'a pas pu être chargé
-                    if (errorMessage == null && nom.isEmpty() && prenom.isEmpty() && email.isNotEmpty()) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = LightBlue.copy(alpha = 0.3f)),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text(
-                                text = "Remplissez vos informations pour compléter votre profil",
-                                modifier = Modifier.padding(16.dp),
-                                color = DarkBlue,
-                                fontWeight = FontWeight.Medium,
-                                fontSize = 14.sp
-                            )
-                        }
-                    }
-                    
-                    // Message d'édition
-                    if (isEditing) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = LightBlue),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text(
-                                text = "Mode édition activé - Modifiez vos informations",
-                                modifier = Modifier.padding(12.dp),
-                                color = DarkBlue,
-                                fontWeight = FontWeight.Medium,
-                                fontSize = 14.sp
-                            )
-                        }
-                    }
-                    
-                    // Section Galerie de photos (placeholder - à implémenter plus tard)
-                    // TODO: Implémenter la galerie de photos pour l'acteur
-                    Text(
-                        text = "Galerie de photos",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1A1A1A),
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
+                
+                // Message informatif si le profil n'a pas pu être chargé
+                if (errorMessage == null && nom.isEmpty() && prenom.isEmpty() && email.isNotEmpty()) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = LightGray.copy(alpha = 0.3f)),
+                        colors = CardDefaults.cardColors(containerColor = LightBlue.copy(alpha = 0.3f)),
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Text(
-                            text = "Fonctionnalité à venir : Ajouter une galerie de photos",
+                            text = "Remplissez vos informations pour compléter votre profil",
                             modifier = Modifier.padding(16.dp),
-                            color = GrayBorder,
-                            fontSize = 14.sp,
-                            textAlign = TextAlign.Center
+                            color = DarkBlue,
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 14.sp
                         )
                     }
+                }
+                
+                // Message d'édition
+                if (isEditing) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = LightBlue),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(
+                            text = "Mode édition activé - Modifiez vos informations",
+                            modifier = Modifier.padding(12.dp),
+                            color = DarkBlue,
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+                
+                    // Message d'erreur (affiché en mode édition pour les erreurs de validation)
+                    if (isEditing && errorMessage != null) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = Red.copy(alpha = 0.1f)),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Error,
+                                    contentDescription = "Erreur",
+                                    tint = Red,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                Text(
+                                    text = errorMessage ?: "",
+                                    color = Red,
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 14.sp
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                    
+                    // Section Galerie de photos
+                    GallerySection(
+                        galleryPhotos = galleryPhotos,
+                        isLoadingGallery = isLoadingGallery,
+                        isUploadingGalleryPhotos = isUploadingGalleryPhotos,
+                        isSelectionMode = isSelectionMode,
+                        selectedPhotoIds = selectedPhotoIds,
+                        isDeletingPhotos = isDeletingPhotos,
+                        onAddPhotosClick = {
+                            galleryPhotosPicker.launch("image/*")
+                        },
+                        onPhotoLongPress = { fileId ->
+                            isSelectionMode = true
+                            selectedPhotoIds = selectedPhotoIds + fileId
+                        },
+                        onPhotoClick = { fileId ->
+                            if (isSelectionMode) {
+                                selectedPhotoIds = if (selectedPhotoIds.contains(fileId)) {
+                                    selectedPhotoIds - fileId
+                                } else {
+                                    selectedPhotoIds + fileId
+                                }
+                                if (selectedPhotoIds.isEmpty()) {
+                                    isSelectionMode = false
+                                }
+                            }
+                        },
+                        onPhotoViewClick = { index ->
+                            selectedPhotoIndex = index
+                        },
+                        onDeleteSelected = {
+                            scope.launch {
+                                if (acteurRepository == null || selectedPhotoIds.isEmpty()) return@launch
+                                
+                                isDeletingPhotos = true
+                                errorMessage = null
+                                
+                                val acteurId = acteurRepository.getCurrentActeurId()
+                                if (acteurId == null) {
+                                    errorMessage = "Impossible de récupérer l'ID de l'acteur."
+                                    isDeletingPhotos = false
+                                    return@launch
+                                }
+                                
+                                var successCount = 0
+                                var failureCount = 0
+                                
+                                selectedPhotoIds.forEach { fileId ->
+                                    try {
+                                        val result = acteurRepository.deleteGalleryPhoto(acteurId, fileId)
+                                        result.onSuccess {
+                                            successCount++
+                                            acteurProfile = it
+                                            // Supprimer du cache
+                                            GalleryPhotoCache.remove(context, fileId)
+                                        }
+                                        result.onFailure {
+                                            failureCount++
+                                            android.util.Log.e("ActorProfileScreen", "❌ Erreur suppression photo $fileId: ${it.message}")
+                                        }
+                                    } catch (e: Exception) {
+                                        failureCount++
+                                        android.util.Log.e("ActorProfileScreen", "❌ Exception suppression photo $fileId: ${e.message}", e)
+                                    }
+                                }
+                                
+                                if (successCount > 0) {
+                                    successMessage = "$successCount photo(s) supprimée(s) avec succès!"
+                                    if (failureCount > 0) {
+                                        successMessage += " ($failureCount erreur(s))"
+                                    }
+                                } else {
+                                    errorMessage = "Erreur lors de la suppression des photos."
+                                }
+                                
+                                selectedPhotoIds = emptySet()
+                                isSelectionMode = false
+                                isDeletingPhotos = false
+                            }
+                        },
+                        onCancelSelection = {
+                            selectedPhotoIds = emptySet()
+                            isSelectionMode = false
+                        }
+                    )
                     
                     // Informations personnelles - Section PROFILE
                     Spacer(modifier = Modifier.height(24.dp))
                     Text(
                         text = "PROFILE",
                         fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.Bold,
                         color = Color(0xFF1A1A1A),
                         modifier = Modifier.padding(bottom = 16.dp)
-                    )
-                    
+                )
+                
                     if (isEditing) {
                         // Mode édition - champs éditables
                         EditableField(
                             label = "Nom",
-                            value = nom,
+                    value = nom,
                             onValueChange = { nom = it }
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         
                         EditableField(
                             label = "Prénom",
-                            value = prenom,
+                    value = prenom,
                             onValueChange = { prenom = it }
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         
                         EditableField(
                             label = "Email",
-                            value = email,
+                    value = email,
                             onValueChange = { email = it }
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         
                         EditableField(
                             label = "Téléphone",
-                            value = telephone,
+                    value = telephone,
                             onValueChange = { telephone = it }
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         
                         EditableField(
                             label = "Âge",
-                            value = age,
+                    value = age,
                             onValueChange = { age = it }
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         
                         EditableField(
                             label = "Gouvernorat",
-                            value = gouvernorat,
+                    value = gouvernorat,
                             onValueChange = { gouvernorat = it }
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         
                         EditableField(
                             label = "Années d'expérience",
-                            value = experience,
+                    value = experience,
                             onValueChange = { experience = it }
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         
                         // Liens sociaux en mode édition
-                        Text(
-                            text = "Réseaux sociaux",
+                Text(
+                    text = "Réseaux sociaux",
                             fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.Bold,
                             color = Color(0xFF1A1A1A),
                             modifier = Modifier.padding(top = 8.dp, bottom = 12.dp)
-                        )
-                        
+                )
+                
                         EditableField(
                             label = "Instagram",
-                            value = instagram,
+                    value = instagram,
                             onValueChange = { instagram = it },
                             placeholder = "https://instagram.com/votre-compte"
                         )
@@ -937,7 +1204,7 @@ fun ActorProfileScreen(
                         
                         EditableField(
                             label = "YouTube",
-                            value = youtube,
+                    value = youtube,
                             onValueChange = { youtube = it },
                             placeholder = "https://youtube.com/votre-chaine"
                         )
@@ -945,7 +1212,7 @@ fun ActorProfileScreen(
                         
                         EditableField(
                             label = "TikTok",
-                            value = tiktok,
+                    value = tiktok,
                             onValueChange = { tiktok = it },
                             placeholder = "https://tiktok.com/@votre-compte"
                         )
@@ -1115,14 +1382,14 @@ fun ActorProfileScreen(
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Icon(
+                ) {
+                    Icon(
                                 imageVector = if (hasDocument) Icons.Default.Description else Icons.Default.UploadFile,
                                 contentDescription = "CV PDF",
                                 tint = DarkBlue
                             )
                             Column {
-                                Text(
+                    Text(
                                     text = if (hasDocument) "CV téléchargé" else if (isEditing) "Télécharger votre CV (PDF)" else "Aucun CV",
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Medium,
@@ -1170,20 +1437,20 @@ fun ActorProfileScreen(
                     }
                 }
                 
-                    // Espace en bas pour le scroll
-                    Spacer(modifier = Modifier.height(16.dp))
+                // Espace en bas pour le scroll
+                Spacer(modifier = Modifier.height(16.dp))
+                }
                 }
             }
-        }
-        
+            
         // Navbar en bas - en dehors du contenu scrollable
-        ProfileBottomNavigationBar(
-            onHomeClick = onHomeClick,
-            onAgendaClick = onAgendaClick,
-            onHistoryClick = { showComingSoon = "Historique" },
-            onProfileClick = { /* Déjà sur le profil */ },
-            onAdvancedClick = { showComingSoon = "Fonctionnalité avancée" }
-        )
+            ProfileBottomNavigationBar(
+                onHomeClick = onHomeClick,
+                onAgendaClick = onAgendaClick,
+                onHistoryClick = { showComingSoon = "Historique" },
+                onProfileClick = { /* Déjà sur le profil */ },
+                onAdvancedClick = { showComingSoon = "Fonctionnalité avancée" }
+            )
     }
     
     // Alerte Coming Soon
@@ -1192,6 +1459,23 @@ fun ActorProfileScreen(
             onDismiss = { showComingSoon = null },
             featureName = feature
         )
+    }
+    
+    // Vue plein écran pour la galerie
+    selectedPhotoIndex?.let { index ->
+        if (galleryPhotos.isNotEmpty() && index in galleryPhotos.indices) {
+            android.util.Log.d("ActorProfileScreen", "🖼️ Ouverture vue plein écran: index=$index, totalPhotos=${galleryPhotos.size}")
+            FullScreenGalleryViewer(
+                photos = galleryPhotos,
+                initialIndex = index,
+                onDismiss = { 
+                    android.util.Log.d("ActorProfileScreen", "🖼️ Fermeture vue plein écran")
+                    selectedPhotoIndex = null 
+                }
+            )
+        } else {
+            android.util.Log.e("ActorProfileScreen", "❌ Index invalide: index=$index, galleryPhotos.size=${galleryPhotos.size}")
+        }
     }
 }
 
@@ -1529,6 +1813,489 @@ private fun ProfileNavigationItem(
             color = if (isSelected) DarkBlue else GrayBorder,
             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
         )
+    }
+}
+
+/**
+ * Composable pour afficher la section galerie de photos
+ */
+@Composable
+private fun GallerySection(
+    galleryPhotos: List<Pair<String, ImageBitmap>>,
+    isLoadingGallery: Boolean,
+    isUploadingGalleryPhotos: Boolean,
+    isSelectionMode: Boolean,
+    selectedPhotoIds: Set<String>,
+    isDeletingPhotos: Boolean,
+    onAddPhotosClick: () -> Unit,
+    onPhotoLongPress: (String) -> Unit,
+    onPhotoClick: (String) -> Unit,
+    onDeleteSelected: () -> Unit,
+    onCancelSelection: () -> Unit,
+    onPhotoViewClick: (Int) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Galerie de photos",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF1A1A1A)
+            )
+            
+            // Boutons d'action selon le mode
+            if (isSelectionMode) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Bouton annuler
+                    TextButton(
+                        onClick = onCancelSelection,
+                        enabled = !isDeletingPhotos
+                    ) {
+                        Text(
+                            text = "Annuler",
+                            fontSize = 14.sp,
+                            color = GrayBorder
+                        )
+                    }
+                    
+                    // Bouton supprimer
+                    Button(
+                        onClick = onDeleteSelected,
+                        enabled = !isDeletingPhotos && selectedPhotoIds.isNotEmpty(),
+                        modifier = Modifier.height(36.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Red
+                        ),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        if (isDeletingPhotos) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = White,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Supprimer",
+                                modifier = Modifier.size(18.dp),
+                                tint = White
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Supprimer (${selectedPhotoIds.size})",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            } else {
+                // Bouton pour ajouter des photos
+                Button(
+                    onClick = onAddPhotosClick,
+                    enabled = !isUploadingGalleryPhotos,
+                    modifier = Modifier.height(36.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = DarkBlue
+                    ),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    if (isUploadingGalleryPhotos) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = White,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Ajouter des photos",
+                            modifier = Modifier.size(18.dp),
+                            tint = White
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Ajouter",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(12.dp))
+        
+        if (isLoadingGallery) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = DarkBlue)
+            }
+        } else if (galleryPhotos.isEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = LightGray.copy(alpha = 0.3f)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PhotoLibrary,
+                        contentDescription = null,
+                        modifier = Modifier.size(48.dp),
+                        tint = GrayBorder
+                    )
+                    Text(
+                        text = "Aucune photo dans la galerie",
+                        color = GrayBorder,
+                        fontSize = 14.sp,
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        text = "Cliquez sur 'Ajouter' pour publier vos photos",
+                        color = GrayBorder.copy(alpha = 0.7f),
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(3),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 400.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(0.dp)
+            ) {
+                items(galleryPhotos.size) { index ->
+                    val (fileId, bitmap) = galleryPhotos[index]
+                    val isSelected = selectedPhotoIds.contains(fileId)
+                    GalleryPhotoItem(
+                        fileId = fileId,
+                        bitmap = bitmap,
+                        isSelected = isSelected,
+                        isSelectionMode = isSelectionMode,
+                        onLongPress = { onPhotoLongPress(fileId) },
+                        onClick = {
+                            if (isSelectionMode) {
+                                onPhotoClick(fileId)
+                            } else {
+                                onPhotoViewClick(index)
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Composable pour afficher un élément de photo dans la galerie avec support de sélection
+ */
+@Composable
+private fun GalleryPhotoItem(
+    fileId: String,
+    bitmap: ImageBitmap,
+    isSelected: Boolean,
+    isSelectionMode: Boolean,
+    onLongPress: () -> Unit,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .aspectRatio(1f)
+            .clip(RoundedCornerShape(8.dp))
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxSize()
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = onLongPress
+                )
+                .then(
+                    if (isSelected) {
+                        Modifier.border(
+                            width = 3.dp,
+                            color = DarkBlue,
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    } else {
+                        Modifier
+                    }
+                ),
+            shape = RoundedCornerShape(8.dp),
+            elevation = CardDefaults.cardElevation(
+                defaultElevation = if (isSelected) 8.dp else 2.dp
+            )
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                Image(
+                    bitmap = bitmap,
+                    contentDescription = "Photo galerie",
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .then(
+                            if (isSelected || isSelectionMode) {
+                                Modifier.background(
+                                    color = if (isSelected) DarkBlue.copy(alpha = 0.3f) else Color.Transparent
+                                )
+                            } else {
+                                Modifier
+                            }
+                        ),
+                    contentScale = ContentScale.Crop
+                )
+                
+                // Indicateur de sélection
+                if (isSelectionMode) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (isSelected) DarkBlue else White.copy(alpha = 0.7f)
+                                )
+                                .border(
+                                    width = 2.dp,
+                                    color = if (isSelected) White else GrayBorder,
+                                    shape = CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isSelected) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = "Sélectionné",
+                                    tint = White,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Composable pour afficher une photo de la galerie en plein écran avec navigation par swipe
+ */
+@Composable
+private fun FullScreenGalleryViewer(
+    photos: List<Pair<String, ImageBitmap>>,
+    initialIndex: Int,
+    onDismiss: () -> Unit
+) {
+    var currentIndex by remember { mutableStateOf(initialIndex) }
+    var offsetX by remember { mutableStateOf(0f) }
+    var isDragging by remember { mutableStateOf(false) }
+    
+    // Mettre à jour l'index initial si nécessaire
+    LaunchedEffect(initialIndex) {
+        currentIndex = initialIndex
+        android.util.Log.d("FullScreenGalleryViewer", "📸 Initialisé avec index: $initialIndex, photos: ${photos.size}")
+    }
+    
+    // Log quand l'index change
+    LaunchedEffect(currentIndex) {
+        android.util.Log.d("FullScreenGalleryViewer", "📸 Index changé: $currentIndex")
+        offsetX = 0f
+    }
+    
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .clickable { onDismiss() } // Fermer en cliquant sur le fond
+    ) {
+        // Navigation par swipe horizontal - Approche simplifiée avec une seule photo visible
+        BoxWithConstraints(
+            modifier = Modifier.fillMaxSize()
+        ) {
+            val screenWidth = with(LocalDensity.current) { maxWidth.toPx() }
+            
+            // Zone de swipe
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(screenWidth) {
+                        detectHorizontalDragGestures(
+                            onDragEnd = {
+                                isDragging = false
+                                // Quand le drag se termine, changer de photo si le déplacement est suffisant
+                                val threshold = screenWidth * 0.25f
+                                android.util.Log.d("FullScreenGalleryViewer", "🔄 Drag terminé: offsetX=$offsetX, threshold=$threshold, currentIndex=$currentIndex")
+                                when {
+                                    offsetX > threshold && currentIndex > 0 -> {
+                                        currentIndex--
+                                        android.util.Log.d("FullScreenGalleryViewer", "⬅️ Photo précédente: $currentIndex")
+                                    }
+                                    offsetX < -threshold && currentIndex < photos.size - 1 -> {
+                                        currentIndex++
+                                        android.util.Log.d("FullScreenGalleryViewer", "➡️ Photo suivante: $currentIndex")
+                                    }
+                                }
+                                offsetX = 0f
+                            }
+                        ) { change, dragAmount ->
+                            if (!isDragging) {
+                                isDragging = true
+                            }
+                            change.consume()
+                            val newOffset = offsetX + dragAmount
+                            // Limiter le déplacement selon la position
+                            when {
+                                currentIndex == 0 && newOffset > 0 -> {
+                                    // Réduire le déplacement à droite si on est à la première photo
+                                    offsetX = newOffset * 0.3f
+                                }
+                                currentIndex == photos.size - 1 && newOffset < 0 -> {
+                                    // Réduire le déplacement à gauche si on est à la dernière photo
+                                    offsetX = newOffset * 0.3f
+                                }
+                                else -> {
+                                    offsetX = newOffset
+                                }
+                            }
+                        }
+                    }
+            )
+            
+            // Afficher la photo actuelle avec transition
+            val density = LocalDensity.current
+            val currentPhoto = photos.getOrNull(currentIndex)
+            
+            android.util.Log.d("FullScreenGalleryViewer", "📐 screenWidth=$screenWidth, currentIndex=$currentIndex, offsetX=$offsetX, photosCount=${photos.size}")
+            
+            if (currentPhoto != null) {
+                val (fileId, bitmap) = currentPhoto
+                android.util.Log.d("FullScreenGalleryViewer", "🖼️ Affichage photo actuelle $currentIndex: fileId=$fileId, bitmap=${bitmap.width}x${bitmap.height}")
+                
+                // Photo actuelle
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .offset(x = with(density) { offsetX.toDp() })
+                ) {
+                    Image(
+                        bitmap = bitmap,
+                        contentDescription = "Photo galerie ${currentIndex + 1}",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit
+                    )
+                }
+                
+                // Photo suivante (si elle existe et qu'on swipe vers la gauche)
+                if (currentIndex < photos.size - 1 && offsetX < 0) {
+                    val nextPhoto = photos[currentIndex + 1]
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .offset(x = with(density) { (screenWidth + offsetX).toDp() })
+                    ) {
+                        Image(
+                            bitmap = nextPhoto.second,
+                            contentDescription = "Photo suivante",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
+                }
+                
+                // Photo précédente (si elle existe et qu'on swipe vers la droite)
+                if (currentIndex > 0 && offsetX > 0) {
+                    val prevPhoto = photos[currentIndex - 1]
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .offset(x = with(density) { (-screenWidth + offsetX).toDp() })
+                    ) {
+                        Image(
+                            bitmap = prevPhoto.second,
+                            contentDescription = "Photo précédente",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
+                }
+            }
+        }
+        
+        // Bouton de fermeture en haut à droite
+        IconButton(
+            onClick = onDismiss,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(16.dp)
+                .size(48.dp)
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = 0.6f))
+                .clickable { onDismiss() }
+        ) {
+            Icon(
+                imageVector = Icons.Default.Close,
+                contentDescription = "Fermer",
+                tint = White,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+        
+        // Indicateur de position (en bas)
+        if (photos.size > 1) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 32.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                photos.forEachIndexed { index, _ ->
+                    Box(
+                        modifier = Modifier
+                            .size(if (index == currentIndex) 10.dp else 6.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (index == currentIndex) White else White.copy(alpha = 0.5f)
+                            )
+                    )
+                }
+            }
+        }
+    }
+    
+    // Réinitialiser l'offset quand l'index change
+    LaunchedEffect(currentIndex) {
+        offsetX = 0f
     }
 }
 
