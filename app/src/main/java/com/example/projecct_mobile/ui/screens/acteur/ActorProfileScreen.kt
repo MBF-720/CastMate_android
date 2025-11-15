@@ -55,6 +55,8 @@ import com.example.projecct_mobile.data.repository.ActeurRepository
 import com.example.projecct_mobile.ui.components.ComingSoonAlert
 import com.example.projecct_mobile.ui.components.ErrorMessage
 import com.example.projecct_mobile.ui.components.getErrorMessage
+import com.example.projecct_mobile.ui.components.ActorBottomNavigationBar
+import com.example.projecct_mobile.ui.components.NavigationItem
 import com.example.projecct_mobile.ui.theme.*
 import com.example.projecct_mobile.utils.SocialLinkValidator
 import kotlinx.coroutines.launch
@@ -77,6 +79,8 @@ fun ActorProfileScreen(
     onHomeClick: () -> Unit = {},
     onAgendaClick: () -> Unit = {},
     onHistoryClick: () -> Unit = {},
+    onMyCandidaturesClick: () -> Unit = {},
+    onProfileClick: () -> Unit = {},
     loadData: Boolean = true,
     initialNom: String = "",
     initialPrenom: String = "",
@@ -698,7 +702,7 @@ fun ActorProfileScreen(
                         modifier = Modifier.size(24.dp)
                     )
                 }
-                }
+            }
                 
                 Spacer(modifier = Modifier.height(20.dp))
                 
@@ -800,7 +804,7 @@ fun ActorProfileScreen(
                                                 tint = White,
                                                 modifier = Modifier.size(18.dp)
                                             )
-                                        }
+            }
                                     }
                                 }
                                 else -> {
@@ -970,8 +974,8 @@ fun ActorProfileScreen(
                                 color = Red,
                                 fontWeight = FontWeight.Medium
                             )
-                        }
                     }
+                }
                 
                 // Message informatif si le profil n'a pas pu être chargé
                 if (errorMessage == null && nom.isEmpty() && prenom.isEmpty() && email.isNotEmpty()) {
@@ -1387,7 +1391,7 @@ fun ActorProfileScreen(
                                 imageVector = if (hasDocument) Icons.Default.Description else Icons.Default.UploadFile,
                                 contentDescription = "CV PDF",
                                 tint = DarkBlue
-                            )
+                    )
                             Column {
                     Text(
                                     text = if (hasDocument) "CV téléchargé" else if (isEditing) "Télécharger votre CV (PDF)" else "Aucun CV",
@@ -1438,19 +1442,25 @@ fun ActorProfileScreen(
                 }
                 
                 // Espace en bas pour le scroll
-                Spacer(modifier = Modifier.height(16.dp))
-                }
+                Spacer(modifier = Modifier.height(90.dp))
                 }
             }
             
-        // Navbar en bas - en dehors du contenu scrollable
-            ProfileBottomNavigationBar(
+            // Barre de navigation positionnée au-dessus du contenu
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 17.dp)
+            ) {
+                ActorBottomNavigationBar(
+                    selectedItem = NavigationItem.PROFILE,
+                    onCandidaturesClick = onMyCandidaturesClick,
                 onHomeClick = onHomeClick,
-                onAgendaClick = onAgendaClick,
-                onHistoryClick = { showComingSoon = "Historique" },
-                onProfileClick = { /* Déjà sur le profil */ },
-                onAdvancedClick = { showComingSoon = "Fonctionnalité avancée" }
+                    onProfileClick = onProfileClick
             )
+            }
+        }
     }
     
     // Alerte Coming Soon

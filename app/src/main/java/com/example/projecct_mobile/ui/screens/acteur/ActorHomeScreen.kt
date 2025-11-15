@@ -46,6 +46,7 @@ import com.example.projecct_mobile.ui.screens.casting.toCastingItem
 import com.example.projecct_mobile.ui.theme.*
 import com.example.projecct_mobile.ui.components.ActorBottomNavigationBar
 import com.example.projecct_mobile.ui.components.NavigationItem
+import com.example.projecct_mobile.data.model.CastingFilters
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -59,7 +60,7 @@ fun ActorHomeScreen(
     onCastingClick: (CastingItem) -> Unit = {},
     onProfileClick: () -> Unit = {},
     onAgendaClick: () -> Unit = {},
-    onFilterClick: () -> Unit = {},
+    onFilterClick: (CastingFilters) -> Unit = {},
     onHistoryClick: () -> Unit = {},
     onLogoutClick: () -> Unit = {},
     onMyCandidaturesClick: () -> Unit = {},
@@ -68,10 +69,14 @@ fun ActorHomeScreen(
     initialUserName: String = "",
     initialUserEmail: String = "",
     initialUserPrenom: String = "",
-    initialUserNom: String = ""
+    initialUserNom: String = "",
+    reloadKey: Int = 0,
+    initialFilters: CastingFilters = CastingFilters()
 ) {
-    var searchQuery by remember { mutableStateOf("") }
+    var filters by remember { mutableStateOf(initialFilters) }
+    var searchQuery by remember { mutableStateOf(filters.searchQuery) }
     var castings by remember { mutableStateOf(initialCastings) }
+    var allCastingsData by remember { mutableStateOf<List<Casting>>(emptyList()) } // Stocker les Casting originaux pour le filtrage
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showComingSoon by remember { mutableStateOf<String?>(null) }
@@ -92,6 +97,55 @@ fun ActorHomeScreen(
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
     var favoriteIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    
+    // Fonction pour appliquer tous les filtres
+    val applyFilters = remember { 
+        { castingsData: List<Casting>, currentFilters: CastingFilters, favoriteIdsSet: Set<String> ->
+            castingsData.filter { casting ->
+                // Filtre par recherche textuelle
+                val matchesSearch = currentFilters.searchQuery.isBlank() || 
+                    (casting.titre?.contains(currentFilters.searchQuery, ignoreCase = true) == true) ||
+                    (casting.descriptionRole?.contains(currentFilters.searchQuery, ignoreCase = true) == true) ||
+                    (casting.synopsis?.contains(currentFilters.searchQuery, ignoreCase = true) == true)
+                
+                // Filtre par types
+                val matchesTypes = currentFilters.selectedTypes.isEmpty() || 
+                    (casting.types?.any { type -> currentFilters.selectedTypes.contains(type) } == true)
+                
+                // Filtre par prix
+                val matchesPrice = when {
+                    currentFilters.minPrice != null && currentFilters.maxPrice != null -> {
+                        casting.prix != null && casting.prix >= currentFilters.minPrice && casting.prix <= currentFilters.maxPrice
+                    }
+                    currentFilters.minPrice != null -> {
+                        casting.prix != null && casting.prix >= currentFilters.minPrice
+                    }
+                    currentFilters.maxPrice != null -> {
+                        casting.prix != null && casting.prix <= currentFilters.maxPrice
+                    }
+                    else -> true
+                }
+                
+                // Filtre par lieu
+                val matchesLieu = currentFilters.lieu.isNullOrBlank() ||
+                    (casting.lieu?.contains(currentFilters.lieu ?: "", ignoreCase = true) == true)
+                
+                // Filtre par date début
+                val matchesDateDebut = currentFilters.dateDebut.isNullOrBlank() ||
+                    (casting.dateDebut?.let { it >= (currentFilters.dateDebut ?: "") } == true)
+                
+                // Filtre par date fin
+                val matchesDateFin = currentFilters.dateFin.isNullOrBlank() ||
+                    (casting.dateFin?.let { it <= (currentFilters.dateFin ?: "") } == true)
+                
+                matchesSearch && matchesTypes && matchesPrice && matchesLieu && matchesDateDebut && matchesDateFin
+            }.map { casting ->
+                val item = casting.toCastingItem()
+                val castingId = casting.actualId
+                item.copy(isFavorite = castingId != null && favoriteIdsSet.contains(castingId))
+            }
+        }
+    }
     
     // Charger les informations utilisateur
     LaunchedEffect(Unit, loadData) {
@@ -124,48 +178,78 @@ fun ActorHomeScreen(
         }
     }
     
-    // Charger les favoris
-    LaunchedEffect(Unit, loadData) {
-        if (!loadData) return@LaunchedEffect
-        
-        try {
-            val userResult = userRepository?.getCurrentUser()
-            if (userResult?.isSuccess == true) {
-                val user = userResult.getOrNull()
-                val userId = user?.actualId
-                if (!userId.isNullOrBlank()) {
-                    val favoritesResult = acteurRepository?.getFavorites(userId)
-                    favoritesResult?.onSuccess { favorites ->
-                        favoriteIds = favorites.mapNotNull { it.actualId }.toSet()
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("ActorHomeScreen", "Erreur chargement favoris: ${e.message}")
-        }
-    }
-    
-    // Charger les castings
+    // Charger les favoris et les castings - fusionné en un seul LaunchedEffect pour éviter les requêtes en double
+    // Ne pas utiliser reloadKey pour éviter les rechargements en boucle
     LaunchedEffect(Unit, loadData) {
         if (!loadData) {
             isLoading = false
             errorMessage = null
             return@LaunchedEffect
         }
-        isLoading = true
-        errorMessage = null
         
         try {
+            isLoading = true
+            errorMessage = null
+            
+            // Récupérer l'ID de l'acteur pour filtrer les candidatures
+            val acteurId = acteurRepository?.getCurrentActeurId()
+            
+            // Charger les favoris en premier
+            val userResult = userRepository?.getCurrentUser()
+            var loadedFavoriteIds = favoriteIds // Utiliser les favoris existants par défaut
+            
+            if (userResult?.isSuccess == true) {
+                val user = userResult.getOrNull()
+                val userId = user?.actualId
+                if (!userId.isNullOrBlank()) {
+                    try {
+                        val favoritesResult = acteurRepository?.getFavorites(userId)
+                        favoritesResult?.onSuccess { favorites ->
+                            loadedFavoriteIds = favorites.mapNotNull { it.actualId }.toSet()
+                            favoriteIds = loadedFavoriteIds
+                        }
+                        favoritesResult?.onFailure {
+                            // En cas d'erreur, utiliser les favoris existants
+                            android.util.Log.w("ActorHomeScreen", "Erreur chargement favoris, utilisation des favoris existants")
+                        }
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        // Requête annulée, c'est normal
+                        throw e
+                    } catch (e: Exception) {
+                        android.util.Log.e("ActorHomeScreen", "Erreur chargement favoris: ${e.message}")
+                    }
+                }
+            }
+            
+            // Ensuite charger les castings
             val result = castingRepository?.getAllCastings()
             
             result?.onSuccess { apiCastings ->
-                // Trier les castings par date de création (les plus récents en haut)
-                val sortedCastings = apiCastings.sortedByDescending { it.getCreationTimestamp() }
-                castings = sortedCastings.map { casting ->
-                    val item = casting.toCastingItem()
-                    // Mettre à jour isFavorite selon la liste des favoris
-                    item.copy(isFavorite = favoriteIds.contains(casting.actualId))
+                // Filtrer les castings où l'acteur a déjà postulé
+                val filteredCastings = if (acteurId != null) {
+                    apiCastings.filter { casting ->
+                        val candidats = casting.candidats ?: emptyList()
+                        // Exclure les castings où l'acteur a déjà postulé
+                        val hasApplied = candidats.any { candidat ->
+                            candidat.acteurId?.actualId == acteurId
+                        }
+                        !hasApplied
+                    }
+                } else {
+                    // Si on ne peut pas récupérer l'ID de l'acteur, afficher tous les castings
+                    apiCastings
                 }
+                
+                // Trier les castings par date de création (les plus récents en haut)
+                val sortedCastings = filteredCastings.sortedByDescending { it.getCreationTimestamp() }
+                
+                // Stocker les Casting originaux pour le filtrage
+                allCastingsData = sortedCastings
+                
+                // Appliquer les filtres et convertir en CastingItem
+                val filteredAndMapped = applyFilters(sortedCastings, filters, loadedFavoriteIds)
+                castings = filteredAndMapped
+                
                 isLoading = false
             }
             
@@ -173,18 +257,26 @@ fun ActorHomeScreen(
                 errorMessage = getErrorMessage(exception)
                 isLoading = false
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Requête annulée - c'est normal quand on navigue rapidement
+            android.util.Log.d("ActorHomeScreen", "⚠️ Requête annulée (normal)")
+            // Ne pas mettre à jour isLoading car la composition a peut-être changé
         } catch (e: Exception) {
             errorMessage = getErrorMessage(e)
             isLoading = false
         }
     }
     
-    // Mettre à jour isFavorite quand favoriteIds change
-    LaunchedEffect(favoriteIds) {
+    // Mettre à jour isFavorite quand favoriteIds change et réappliquer les filtres
+    LaunchedEffect(favoriteIds, filters) {
         if (!loadData) return@LaunchedEffect
-        castings = castings.map { casting ->
-            casting.copy(isFavorite = favoriteIds.contains(casting.id))
-        }
+        val filteredAndMapped = applyFilters(allCastingsData, filters, favoriteIds)
+        castings = filteredAndMapped
+    }
+    
+    // Synchroniser searchQuery avec filters
+    LaunchedEffect(searchQuery) {
+        filters = filters.copy(searchQuery = searchQuery)
     }
     
             Column(
@@ -240,7 +332,7 @@ fun ActorHomeScreen(
                 )
                 
                 IconButton(
-                        onClick = { onFilterClick() },
+                        onClick = { onFilterClick(filters) },
                     modifier = Modifier
                         .size(56.dp)
                         .background(
@@ -324,10 +416,37 @@ fun ActorHomeScreen(
                     contentPadding = PaddingValues(top = 16.dp, bottom = 90.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                    items(castings.filter { 
-                        it.title.contains(searchQuery, ignoreCase = true) ||
-                        it.description.contains(searchQuery, ignoreCase = true)
-                    }) { casting ->
+                    // Afficher un indicateur si des filtres sont actifs
+                    if (filters.hasActiveFilters()) {
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "${castings.size} casting(s) trouvé(s)",
+                                    fontSize = 14.sp,
+                                    color = GrayBorder,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                TextButton(onClick = {
+                                    filters = CastingFilters()
+                                    searchQuery = ""
+                                }) {
+                                    Text(
+                                        text = "Réinitialiser",
+                                        fontSize = 12.sp,
+                                        color = DarkBlue
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    
+                    items(castings) { casting ->
                         LocalCastingItemCard(
                             casting = casting,
                             onItemClick = { onCastingClick(casting) },
@@ -353,6 +472,8 @@ fun ActorHomeScreen(
                                                     } else {
                                                         favoriteIds = favoriteIds + casting.id
                                                     }
+                                                    // Mettre à jour l'état local des favoris
+                                                    // La liste se mettra à jour automatiquement via LaunchedEffect(favoriteIds)
                                                 }
                                                 result?.onFailure { exception ->
                                                     android.util.Log.e("ActorHomeScreen", "Erreur favoris: ${exception.message}")
@@ -375,7 +496,7 @@ fun ActorHomeScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 12.dp)
+                    .padding(bottom = 17.dp)
             ) {
                 ActorBottomNavigationBar(
                     selectedItem = NavigationItem.HOME,

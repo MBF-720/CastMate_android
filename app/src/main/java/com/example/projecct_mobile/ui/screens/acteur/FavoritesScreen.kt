@@ -287,7 +287,7 @@ fun FavoritesScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 12.dp)
+                    .padding(bottom = 17.dp)
             ) {
                 ActorBottomNavigationBar(
                     selectedItem = NavigationItem.PROFILE,

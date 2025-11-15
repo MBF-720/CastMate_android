@@ -492,22 +492,28 @@ fun CastingDetailScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-        // Barre de navigation du bas (même que ActorHomeScreen)
-            ActorBottomNavigationBar(
-                selectedItem = NavigationItem.HOME,
-                onCandidaturesClick = {
-                    // Naviguer vers "Mes candidatures"
-                    onNavigateToCandidatures?.invoke()
-                },
-                onHomeClick = { 
-                    // Retourner à la page d'accueil de l'acteur
-                    onNavigateToHome?.invoke() 
-                },
-                onProfileClick = { 
-                    // Naviguer vers les paramètres de l'acteur
-                    onNavigateToProfile?.invoke() 
-                }
-            )
+            // Barre de navigation du bas (même que ActorHomeScreen)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 17.dp)
+            ) {
+                ActorBottomNavigationBar(
+                    selectedItem = NavigationItem.HOME,
+                    onCandidaturesClick = {
+                        // Naviguer vers "Mes candidatures"
+                        onNavigateToCandidatures?.invoke()
+                    },
+                    onHomeClick = { 
+                        // Retourner à la page d'accueil de l'acteur
+                        onNavigateToHome?.invoke() 
+                    },
+                    onProfileClick = { 
+                        // Naviguer vers les paramètres de l'acteur
+                        onNavigateToProfile?.invoke() 
+                    }
+                )
+            }
         }
     }
     

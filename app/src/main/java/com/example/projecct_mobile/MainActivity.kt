@@ -51,6 +51,7 @@ import com.example.projecct_mobile.ui.screens.acteur.MyCandidaturesScreen
 import com.example.projecct_mobile.ui.screens.acteur.FavoritesScreen
 import com.example.projecct_mobile.ui.components.getErrorMessage
 import com.example.projecct_mobile.ui.theme.Projecct_MobileTheme
+import com.example.projecct_mobile.data.model.CastingFilters
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -92,6 +93,11 @@ fun NavigationScreen() {
 
     var agencySignupData by remember {
         mutableStateOf<AgencySignupData?>(null)
+    }
+    
+    // État pour les filtres de casting
+    var castingFilters by remember {
+        mutableStateOf(CastingFilters())
     }
     
     // Vérifier si l'utilisateur est déjà connecté (Remember Me)
@@ -712,6 +718,8 @@ fun NavigationScreen() {
         
         composable("actorHome") {
             ActorHomeScreen(
+                reloadKey = 0, // Ne pas utiliser reloadKey pour éviter les rechargements inutiles
+                initialFilters = castingFilters,
                 onCastingClick = { casting ->
                     if (casting.id.isNotBlank()) {
                         android.util.Log.d("MainActivity", "🎬 Navigation vers castingDetail avec ID: '${casting.id}'")
@@ -727,7 +735,8 @@ fun NavigationScreen() {
                 onAgendaClick = {
                     navController.navigate("settings/actor")
                 },
-                onFilterClick = {
+                onFilterClick = { filters ->
+                    castingFilters = filters
                     navController.navigate("filter")
                 },
                 onHistoryClick = {
@@ -798,10 +807,12 @@ fun NavigationScreen() {
         
         composable("filter") {
             FilterScreen(
+                initialFilters = castingFilters,
                 onBackClick = {
                     navController.popBackStack()
                 },
-                onApplyFilter = {
+                onApplyFilter = { filters ->
+                    castingFilters = filters
                     navController.popBackStack()
                 }
             )
@@ -1074,6 +1085,12 @@ fun NavigationScreen() {
                 },
                 onHistoryClick = {
                     // Géré par l'alerte "coming soon" dans la navbar
+                },
+                onMyCandidaturesClick = {
+                    navController.navigate("myCandidatures")
+                },
+                onProfileClick = {
+                    // Déjà sur la page de profil
                 }
             )
         }

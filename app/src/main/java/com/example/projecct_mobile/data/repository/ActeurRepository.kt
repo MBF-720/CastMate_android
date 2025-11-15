@@ -521,6 +521,16 @@ class ActeurRepository {
                     ApiException.BadRequestException(message ?: "Erreur lors de l'ajout aux favoris")
                 )
             }
+        } catch (e: java.io.IOException) {
+            // Gérer les erreurs de connexion réseau
+            if (e.message?.contains("Canceled", ignoreCase = true) == true || 
+                e.message?.contains("canceled", ignoreCase = true) == true) {
+                android.util.Log.d("ActeurRepository", "⚠️ Requête annulée (normal)")
+                Result.failure(ApiException.CanceledException("Requête annulée"))
+            } else {
+                android.util.Log.e("ActeurRepository", "❌ Erreur réseau: ${e.message}")
+                Result.failure(ApiException.NetworkException("Erreur de connexion réseau: ${e.message}"))
+            }
         } catch (e: ApiException) {
             Result.failure(e)
         } catch (e: Exception) {
@@ -546,6 +556,16 @@ class ActeurRepository {
                     ApiException.BadRequestException(message ?: "Erreur lors de la suppression des favoris")
                 )
             }
+        } catch (e: java.io.IOException) {
+            // Gérer les erreurs de connexion réseau
+            if (e.message?.contains("Canceled", ignoreCase = true) == true || 
+                e.message?.contains("canceled", ignoreCase = true) == true) {
+                android.util.Log.d("ActeurRepository", "⚠️ Requête annulée (normal)")
+                Result.failure(ApiException.CanceledException("Requête annulée"))
+            } else {
+                android.util.Log.e("ActeurRepository", "❌ Erreur réseau: ${e.message}")
+                Result.failure(ApiException.NetworkException("Erreur de connexion réseau: ${e.message}"))
+            }
         } catch (e: ApiException) {
             Result.failure(e)
         } catch (e: Exception) {
@@ -567,6 +587,16 @@ class ActeurRepository {
                 Result.failure(
                     ApiException.BadRequestException(message ?: "Erreur lors de la récupération des favoris")
                 )
+            }
+        } catch (e: java.io.IOException) {
+            // Gérer les erreurs de connexion réseau
+            if (e.message?.contains("Canceled", ignoreCase = true) == true || 
+                e.message?.contains("canceled", ignoreCase = true) == true) {
+                android.util.Log.d("ActeurRepository", "⚠️ Requête annulée (normal)")
+                Result.failure(ApiException.CanceledException("Requête annulée"))
+            } else {
+                android.util.Log.e("ActeurRepository", "❌ Erreur réseau: ${e.message}")
+                Result.failure(ApiException.NetworkException("Erreur de connexion réseau: ${e.message}"))
             }
         } catch (e: ApiException) {
             Result.failure(e)

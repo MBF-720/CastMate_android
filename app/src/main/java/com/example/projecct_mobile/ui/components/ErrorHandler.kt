@@ -20,11 +20,24 @@ fun getErrorMessage(exception: Throwable): String {
         is ApiException.CanceledException -> 
             "" // Les requêtes annulées ne doivent pas afficher de message d'erreur
         is ApiException.NetworkException -> 
-            "Pas de connexion internet. Vérifiez votre connexion et réessayez."
+            "Aucune connexion internet"
         is ApiException.UnauthorizedException -> 
             exception.message ?: "Session expirée. Veuillez vous reconnecter."
-        is ApiException.BadRequestException -> 
-            exception.message ?: "Vérifiez vos informations et réessayez."
+        is ApiException.BadRequestException -> {
+            // Vérifier si le message contient des indicateurs d'erreur réseau
+            val message = exception.message ?: ""
+            if (message.contains("vercel", ignoreCase = true) || 
+                message.contains("network", ignoreCase = true) ||
+                message.contains("connection", ignoreCase = true) ||
+                message.contains("connexion", ignoreCase = true) ||
+                message.contains("unreachable", ignoreCase = true) ||
+                message.contains("timeout", ignoreCase = true) ||
+                message.contains("failed to connect", ignoreCase = true)) {
+                "Aucune connexion internet"
+            } else {
+                message.ifBlank { "Vérifiez vos informations et réessayez." }
+            }
+        }
         is ApiException.NotFoundException -> 
             exception.message ?: "Ressource non trouvée."
         is ApiException.ServerException -> 
@@ -33,8 +46,23 @@ fun getErrorMessage(exception: Throwable): String {
             "Vous n'avez pas les permissions nécessaires."
         is ApiException.ConflictException -> 
             exception.message ?: "Cette ressource existe déjà."
-        else -> 
-            exception.message ?: "Une erreur est survenue. Veuillez réessayer."
+        else -> {
+            // Vérifier si le message d'exception contient des indicateurs d'erreur réseau
+            val message = exception.message ?: ""
+            if (message.contains("vercel", ignoreCase = true) || 
+                message.contains("network", ignoreCase = true) ||
+                message.contains("connection", ignoreCase = true) ||
+                message.contains("connexion", ignoreCase = true) ||
+                message.contains("unreachable", ignoreCase = true) ||
+                message.contains("timeout", ignoreCase = true) ||
+                message.contains("failed to connect", ignoreCase = true) ||
+                message.contains("Unable to resolve host", ignoreCase = true) ||
+                message.contains("No address associated with hostname", ignoreCase = true)) {
+                "Aucune connexion internet"
+            } else {
+                message.ifBlank { "Une erreur est survenue. Veuillez réessayer." }
+            }
+        }
     }
 }
 
