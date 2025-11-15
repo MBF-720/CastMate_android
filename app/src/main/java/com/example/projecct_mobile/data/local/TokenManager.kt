@@ -189,6 +189,39 @@ class TokenManager(private val context: Context) {
     }
     
     /**
+     * Stocke le mot de passe généré pour un compte créé via Google Sign-In
+     * @param email Email de l'utilisateur
+     * @param password Mot de passe généré pour ce compte
+     */
+    suspend fun saveGoogleAccountPassword(email: String, password: String) {
+        context.dataStore.edit { preferences ->
+            val key = stringPreferencesKey("google_password_${sanitizeEmail(email)}")
+            preferences[key] = password
+        }
+    }
+    
+    /**
+     * Récupère le mot de passe généré pour un compte créé via Google Sign-In
+     * @param email Email de l'utilisateur
+     * @return Mot de passe stocké ou null si aucun mot de passe n'est stocké
+     */
+    suspend fun getGoogleAccountPassword(email: String): String? {
+        val prefs = context.dataStore.data.first()
+        val key = stringPreferencesKey("google_password_${sanitizeEmail(email)}")
+        return prefs[key]
+    }
+    
+    /**
+     * Supprime le mot de passe stocké pour un compte Google (optionnel, pour nettoyer)
+     */
+    suspend fun clearGoogleAccountPassword(email: String) {
+        context.dataStore.edit { preferences ->
+            val key = stringPreferencesKey("google_password_${sanitizeEmail(email)}")
+            preferences.remove(key)
+        }
+    }
+    
+    /**
      * Décode le token JWT et extrait l'ID utilisateur depuis le payload
      */
     suspend fun getUserIdFromToken(): String? {

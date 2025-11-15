@@ -237,8 +237,22 @@ fun NavigationScreen() {
                                     
                                     android.util.Log.d("GoogleSignIn", "👤 Nom: $nom, Prénom: $prenom")
                                     
-                                    // Générer un mot de passe aléatoire (non utilisé pour Google Sign-In)
-                                    val randomPassword = "Google${System.currentTimeMillis()}"
+                                    // Vérifier si un mot de passe a déjà été stocké pour ce compte Google
+                                    val tokenManager = TokenManager(context)
+                                    var randomPassword = tokenManager.getGoogleAccountPassword(email)
+                                    
+                                    // Si aucun mot de passe n'est stocké, générer un nouveau mot de passe
+                                    if (randomPassword.isNullOrBlank()) {
+                                        // Générer un mot de passe déterministe basé sur l'email pour assurer la cohérence
+                                        // Utiliser un hash simple de l'email + un préfixe fixe pour créer un mot de passe unique mais constant
+                                        val emailHash = email.hashCode().toString()
+                                        randomPassword = "Google_${emailHash}_CastMate"
+                                        // Stocker le mot de passe pour les futures connexions
+                                        tokenManager.saveGoogleAccountPassword(email, randomPassword)
+                                        android.util.Log.d("GoogleSignIn", "🔑 Nouveau mot de passe généré et stocké pour: $email")
+                                    } else {
+                                        android.util.Log.d("GoogleSignIn", "🔑 Mot de passe récupéré depuis le stockage pour: $email")
+                                    }
                                     
                                     // Télécharger la photo de profil si disponible (sur un thread IO)
                                     var photoFile: File? = null
@@ -350,30 +364,63 @@ fun NavigationScreen() {
                                                 googleSignInLoading = false
                                                 actorSignupData = null
                                                 googleSignInError = null
-                                                android.util.Log.d("GoogleSignIn", "✅ Connexion réussie avec compte existant")
+                                                android.util.Log.d("GoogleSignIn", "✅ Connexion réussie avec compte existant lié à Google")
                                                 navController.navigate("actorHome") {
                                                     popUpTo("home") { inclusive = true }
                                                 }
                                             }
                                             resultLoginExisting.onFailure { loginException ->
-                                                googleSignInLoading = false
-                                                // Si la connexion Google échoue aussi, vérifier si c'est une erreur 404 ou autre
+                                                // Si la connexion Google échoue, vérifier si c'est une erreur 404 (compte non lié à Google)
                                                 val loginErrorMsg = getErrorMessage(loginException)
-                                                val finalErrorMsg = when {
-                                                    // Si c'est toujours une erreur 404, le compte n'est pas lié à Google
-                                                    loginException is ApiException.NotFoundException ||
-                                                    loginErrorMsg.contains("404", ignoreCase = true) ||
-                                                    loginErrorMsg.contains("non trouvé", ignoreCase = true) ||
-                                                    loginErrorMsg.contains("not found", ignoreCase = true) -> {
-                                                        "Un compte existe déjà avec cet email. Ce compte n'est pas encore lié à Google. Veuillez vous connecter avec votre mot de passe, puis liez votre compte Google dans les paramètres."
+                                                val isNotFound = loginException is ApiException.NotFoundException ||
+                                                                loginErrorMsg.contains("404", ignoreCase = true) ||
+                                                                loginErrorMsg.contains("non trouvé", ignoreCase = true) ||
+                                                                loginErrorMsg.contains("not found", ignoreCase = true)
+                                                
+                                                if (isNotFound) {
+                                                    // Le compte existe mais n'est pas lié à Google
+                                                    // Essayer de se connecter avec email/mot de passe en récupérant le mot de passe stocké
+                                                    // (cas où le compte a été créé via ce flow Google précédemment)
+                                                    android.util.Log.d("GoogleSignIn", "⚠️ Compte non lié à Google (404), tentative de connexion avec email/mot de passe...")
+                                                    
+                                                    // Récupérer le mot de passe stocké pour ce compte Google
+                                                    val tokenManager = TokenManager(context)
+                                                    val storedPassword = tokenManager.getGoogleAccountPassword(email)
+                                                    
+                                                    if (storedPassword.isNullOrBlank()) {
+                                                        // Aucun mot de passe stocké, le compte a probablement été créé manuellement
+                                                        googleSignInLoading = false
+                                                        val finalErrorMsg = "Un compte existe déjà avec cet email. Ce compte n'est pas encore lié à Google. Veuillez vous connecter avec votre mot de passe, puis liez votre compte Google dans les paramètres."
+                                                        android.util.Log.e("GoogleSignIn", "❌ $finalErrorMsg")
+                                                        googleSignInError = finalErrorMsg
+                                                        return@onFailure
                                                     }
-                                                    // Autre erreur
-                                                    else -> {
-                                                        "Un compte existe déjà avec cet email. Erreur de connexion Google: $loginErrorMsg"
+                                                    
+                                                    android.util.Log.d("GoogleSignIn", "🔑 Utilisation du mot de passe stocké pour la connexion...")
+                                                    val resultLoginWithPassword = sharedAuthRepository.login(email, storedPassword, expectedRole = "ACTEUR")
+                                                    resultLoginWithPassword.onSuccess {
+                                                        googleSignInLoading = false
+                                                        actorSignupData = null
+                                                        googleSignInError = null
+                                                        android.util.Log.d("GoogleSignIn", "✅ Connexion réussie avec email/mot de passe (compte créé via Google)")
+                                                        navController.navigate("actorHome") {
+                                                            popUpTo("home") { inclusive = true }
+                                                        }
                                                     }
+                                                    resultLoginWithPassword.onFailure { passwordLoginException ->
+                                                        // Si la connexion avec mot de passe échoue aussi, le compte a probablement été créé manuellement
+                                                        googleSignInLoading = false
+                                                        val finalErrorMsg = "Un compte existe déjà avec cet email. Ce compte n'est pas encore lié à Google. Veuillez vous connecter avec votre mot de passe, puis liez votre compte Google dans les paramètres."
+                                                        android.util.Log.e("GoogleSignIn", "❌ $finalErrorMsg", passwordLoginException)
+                                                        googleSignInError = finalErrorMsg
+                                                    }
+                                                } else {
+                                                    // Autre erreur lors de la connexion Google
+                                                    googleSignInLoading = false
+                                                    val finalErrorMsg = "Un compte existe déjà avec cet email. Erreur de connexion Google: $loginErrorMsg"
+                                                    android.util.Log.e("GoogleSignIn", "❌ $finalErrorMsg", loginException)
+                                                    googleSignInError = finalErrorMsg
                                                 }
-                                                android.util.Log.e("GoogleSignIn", "❌ $finalErrorMsg", loginException)
-                                                googleSignInError = finalErrorMsg
                                             }
                                         } else {
                                             googleSignInLoading = false
