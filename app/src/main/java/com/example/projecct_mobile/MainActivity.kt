@@ -84,6 +84,7 @@ fun NavigationScreen() {
     val googleAuthClient = remember { GoogleAuthUiClient(context) }
     var googleSignInLoading by remember { mutableStateOf(false) }
     var googleSignInError by remember { mutableStateOf<String?>(null) }
+    var isGoogleSignInForAgency by remember { mutableStateOf(false) }
     
     // Stockage temporaire des données d'inscription acteur
     var actorSignupData by remember {
@@ -199,10 +200,60 @@ fun NavigationScreen() {
             scope.launch {
                 try {
                     val resultLogin = sharedAuthRepository.loginWithGoogle(idToken)
-                    resultLogin.onSuccess {
+                    resultLogin.onSuccess { authResponse ->
+                        // Vérifier le rôle du compte
+                        val userRole = authResponse.user?.role?.name
+                        android.util.Log.d("GoogleSignIn", "🔍 Rôle récupéré: $userRole (user: ${authResponse.user}, role enum: ${authResponse.user?.role})")
+                        
+                        // Vérifier que le rôle est ACTEUR (acteur) et non RECRUTEUR (agence)
+                        var finalRole = userRole
+                        
+                        // Si le rôle n'est pas disponible dans la réponse, vérifier depuis le TokenManager
+                        if (finalRole.isNullOrBlank()) {
+                            android.util.Log.w("GoogleSignIn", "⚠️ Rôle non disponible dans la réponse, vérification depuis TokenManager...")
+                            val tokenManager = TokenManager(context)
+                            finalRole = tokenManager.getUserRoleSync()
+                            android.util.Log.d("GoogleSignIn", "🔍 Rôle depuis TokenManager: $finalRole")
+                        }
+                        
+                        if (!finalRole.isNullOrBlank()) {
+                            val isActeur = finalRole.equals("ACTEUR", ignoreCase = true)
+                            val isRecruteur = finalRole.equals("RECRUTEUR", ignoreCase = true)
+                            
+                            android.util.Log.d("GoogleSignIn", "🔍 isActeur: $isActeur, isRecruteur: $isRecruteur")
+                            
+                            if (!isActeur) {
+                                // Le compte connecté n'est pas un compte acteur
+                                // IMPORTANT: Nettoyer le TokenManager car le rôle a été sauvegardé avant la vérification
+                                val tokenManager = TokenManager(context)
+                                tokenManager.clearToken()
+                                android.util.Log.d("GoogleSignIn", "🧹 TokenManager nettoyé car rôle incorrect: '$finalRole'")
+                                
+                                googleSignInLoading = false
+                                val errorMsg = if (isRecruteur) {
+                                    "Ce compte Google est associé à un compte agence. Veuillez vous connecter depuis la page agence ou créer un nouveau compte acteur."
+                                } else {
+                                    "Ce compte Google n'est pas associé à un compte acteur. Veuillez créer un nouveau compte acteur."
+                                }
+                                googleSignInError = errorMsg
+                                android.util.Log.e("GoogleSignIn", "❌ ERREUR: $errorMsg - Rôle: '$finalRole'")
+                                // Ne pas naviguer, juste afficher l'erreur
+                                return@onSuccess
+                            }
+                        } else {
+                            // Si le rôle n'est toujours pas disponible après vérification, bloquer la connexion
+                            googleSignInLoading = false
+                            val errorMsg = "Impossible de déterminer le type de compte. Veuillez réessayer."
+                            googleSignInError = errorMsg
+                            android.util.Log.e("GoogleSignIn", "❌ ERREUR: Rôle non disponible - $errorMsg")
+                            return@onSuccess
+                        }
+                        
+                        // Seulement naviguer si le rôle est ACTEUR
                         googleSignInLoading = false
                         actorSignupData = null
                         googleSignInError = null
+                        android.util.Log.d("GoogleSignIn", "✅ Connexion réussie - Rôle ACTEUR confirmé")
                         navController.navigate("actorHome") {
                             popUpTo("home") { inclusive = true }
                         }
@@ -223,6 +274,63 @@ fun NavigationScreen() {
                                     
                                     android.util.Log.d("GoogleSignIn", "📧 Email Google: $email")
                                     
+                                    // IMPORTANT: Vérifier d'abord si un mot de passe a été stocké pour ce compte Google
+                                    // Si OUI, cela signifie qu'un compte existe déjà (acteur OU agence)
+                                    // Dans ce cas, NE PAS créer un nouveau compte, mais essayer de se connecter
+                                    val tokenManager = TokenManager(context)
+                                    val existingPassword = tokenManager.getGoogleAccountPassword(email)
+                                    
+                                    if (!existingPassword.isNullOrBlank()) {
+                                        // Un compte existe déjà avec cet email Google
+                                        android.util.Log.d("GoogleSignIn", "⚠️ Un compte existe déjà avec cet email. Tentative de connexion avec mot de passe stocké...")
+                                        
+                                        // Essayer de se connecter avec le mot de passe stocké
+                                        val resultLoginWithPassword = sharedAuthRepository.login(email, existingPassword, expectedRole = "ACTEUR")
+                                        resultLoginWithPassword.onSuccess { authResponse ->
+                                            // Vérifier le rôle du compte
+                                            val userRole = authResponse.user?.role?.name
+                                            android.util.Log.d("GoogleSignIn", "🔍 Rôle du compte existant: $userRole")
+                                            
+                                            if (userRole != null && !userRole.equals("ACTEUR", ignoreCase = true)) {
+                                                // Le compte existe mais avec un autre rôle (probablement RECRUTEUR)
+                                                val tokenManager = TokenManager(context)
+                                                tokenManager.clearToken()
+                                                android.util.Log.e("GoogleSignIn", "❌ ERREUR: Ce compte a le rôle '$userRole' au lieu de 'ACTEUR'")
+                                                
+                                                googleSignInLoading = false
+                                                val errorMsg = if (userRole.equals("RECRUTEUR", ignoreCase = true)) {
+                                                    "Ce compte Google est associé à un compte agence. Veuillez vous connecter depuis la page agence."
+                                                } else {
+                                                    "Ce compte Google est associé à un compte avec un rôle différent ($userRole). Veuillez utiliser la page de connexion appropriée."
+                                                }
+                                                googleSignInError = errorMsg
+                                                android.util.Log.e("GoogleSignIn", "❌ $errorMsg")
+                                                return@onFailure
+                                            }
+                                            
+                                            // Le compte existe et le rôle est correct (ACTEUR)
+                                            googleSignInLoading = false
+                                            actorSignupData = null
+                                            googleSignInError = null
+                                            android.util.Log.d("GoogleSignIn", "✅ Connexion réussie avec le compte existant")
+                                            navController.navigate("actorHome") {
+                                                popUpTo("home") { inclusive = true }
+                                            }
+                                        }
+                                        resultLoginWithPassword.onFailure { loginException ->
+                                            googleSignInLoading = false
+                                            val errorMsg = "Un compte existe avec cet email mais la connexion a échoué. Veuillez vous connecter manuellement avec votre mot de passe."
+                                            android.util.Log.e("GoogleSignIn", "❌ $errorMsg", loginException)
+                                            googleSignInError = errorMsg
+                                        }
+                                        
+                                        // Ne pas continuer vers la création du compte
+                                        return@onFailure
+                                    }
+                                    
+                                    // Aucun compte n'existe avec cet email, on peut créer un nouveau compte
+                                    android.util.Log.d("GoogleSignIn", "✅ Aucun compte existant détecté, création d'un nouveau compte acteur...")
+                                    
                                     // Extraire les données de Google
                                     val prenom = account.givenName
                                         ?: account.displayName?.split(" ")?.firstOrNull()
@@ -237,22 +345,12 @@ fun NavigationScreen() {
                                     
                                     android.util.Log.d("GoogleSignIn", "👤 Nom: $nom, Prénom: $prenom")
                                     
-                                    // Vérifier si un mot de passe a déjà été stocké pour ce compte Google
-                                    val tokenManager = TokenManager(context)
-                                    var randomPassword = tokenManager.getGoogleAccountPassword(email)
-                                    
-                                    // Si aucun mot de passe n'est stocké, générer un nouveau mot de passe
-                                    if (randomPassword.isNullOrBlank()) {
-                                        // Générer un mot de passe déterministe basé sur l'email pour assurer la cohérence
-                                        // Utiliser un hash simple de l'email + un préfixe fixe pour créer un mot de passe unique mais constant
-                                        val emailHash = email.hashCode().toString()
-                                        randomPassword = "Google_${emailHash}_CastMate"
-                                        // Stocker le mot de passe pour les futures connexions
-                                        tokenManager.saveGoogleAccountPassword(email, randomPassword)
-                                        android.util.Log.d("GoogleSignIn", "🔑 Nouveau mot de passe généré et stocké pour: $email")
-                                    } else {
-                                        android.util.Log.d("GoogleSignIn", "🔑 Mot de passe récupéré depuis le stockage pour: $email")
-                                    }
+                                    // Générer un nouveau mot de passe déterministe
+                                    val emailHash = email.hashCode().toString()
+                                    val randomPassword = "Google_${emailHash}_CastMate"
+                                    // Stocker le mot de passe pour les futures connexions
+                                    tokenManager.saveGoogleAccountPassword(email, randomPassword)
+                                    android.util.Log.d("GoogleSignIn", "🔑 Nouveau mot de passe généré et stocké pour: $email")
                                     
                                     // Télécharger la photo de profil si disponible (sur un thread IO)
                                     var photoFile: File? = null
@@ -309,11 +407,32 @@ fun NavigationScreen() {
                                     )
                                     
                                     resultSignup.onSuccess { authResponse ->
+                                        // IMPORTANT: Vérifier le rôle après la création du compte
+                                        val userRole = authResponse.user?.role?.name
+                                        android.util.Log.d("GoogleSignIn", "🔍 Rôle retourné après création: $userRole (user: ${authResponse.user}, role enum: ${authResponse.user?.role})")
+                                        
+                                        // Vérifier que le rôle est ACTEUR (acteur) et non RECRUTEUR (agence)
+                                        if (!userRole.isNullOrBlank() && !userRole.equals("ACTEUR", ignoreCase = true)) {
+                                            // Le backend a créé le compte avec un mauvais rôle
+                                            val tokenManager = TokenManager(context)
+                                            tokenManager.clearToken()
+                                            android.util.Log.e("GoogleSignIn", "❌ ERREUR: Backend a créé le compte avec le mauvais rôle: '$userRole' au lieu de 'ACTEUR'")
+                                            
+                                            googleSignInLoading = false
+                                            val errorMsg = if (userRole.equals("RECRUTEUR", ignoreCase = true)) {
+                                                "Ce compte Google est associé à un compte agence. Veuillez vous connecter depuis la page agence ou créer un nouveau compte acteur."
+                                            } else {
+                                                "Erreur: Le compte a été créé avec un rôle incorrect ($userRole). Veuillez contacter le support ou créer le compte manuellement."
+                                            }
+                                            googleSignInError = errorMsg
+                                            return@onSuccess
+                                        }
+                                        
                                         // Le compte a été créé avec succès
                                         // Vérifier si un token a été retourné dans la réponse
                                         if (!authResponse.accessToken.isNullOrBlank()) {
                                             // Si un token est retourné, on est déjà connecté
-                                            android.util.Log.d("GoogleSignIn", "✅ Compte créé et connecté avec succès (token reçu)")
+                                            android.util.Log.d("GoogleSignIn", "✅ Compte créé et connecté avec succès (token reçu, rôle: $userRole)")
                                             googleSignInLoading = false
                                             actorSignupData = null
                                             googleSignInError = null
@@ -324,11 +443,31 @@ fun NavigationScreen() {
                                             // Si aucun token n'est retourné, essayer de se connecter avec email/mot de passe
                                             android.util.Log.d("GoogleSignIn", "⚠️ Compte créé sans token, tentative de connexion avec email/mot de passe...")
                                             val resultLoginAfterSignup = sharedAuthRepository.login(email, randomPassword, expectedRole = "ACTEUR")
-                                            resultLoginAfterSignup.onSuccess {
+                                            resultLoginAfterSignup.onSuccess { loginAuthResponse ->
+                                                // Vérifier aussi le rôle après la connexion
+                                                val loginRole = loginAuthResponse.user?.role?.name
+                                                android.util.Log.d("GoogleSignIn", "🔍 Rôle retourné après login: $loginRole")
+                                                
+                                                if (!loginRole.isNullOrBlank() && !loginRole.equals("ACTEUR", ignoreCase = true)) {
+                                                    // Le rôle n'est pas correct après la connexion
+                                                    val tokenManager = TokenManager(context)
+                                                    tokenManager.clearToken()
+                                                    android.util.Log.e("GoogleSignIn", "❌ ERREUR: Rôle incorrect après login: '$loginRole' au lieu de 'ACTEUR'")
+                                                    
+                                                    googleSignInLoading = false
+                                                    val errorMsg = if (loginRole.equals("RECRUTEUR", ignoreCase = true)) {
+                                                        "Ce compte Google est associé à un compte agence. Veuillez vous connecter depuis la page agence ou créer un nouveau compte acteur."
+                                                    } else {
+                                                        "Erreur: Le compte a le mauvais rôle ($loginRole). Veuillez contacter le support."
+                                                    }
+                                                    googleSignInError = errorMsg
+                                                    return@onSuccess
+                                                }
+                                                
                                                 googleSignInLoading = false
                                                 actorSignupData = null
                                                 googleSignInError = null
-                                                android.util.Log.d("GoogleSignIn", "✅ Connexion réussie après création du compte")
+                                                android.util.Log.d("GoogleSignIn", "✅ Connexion réussie après création du compte (rôle: $loginRole)")
                                                 navController.navigate("actorHome") {
                                                     popUpTo("home") { inclusive = true }
                                                 }
@@ -360,7 +499,26 @@ fun NavigationScreen() {
                                             // Le compte existe déjà, essayer de se connecter directement avec Google
                                             // Ne pas réinitialiser googleSignInLoading ici, le garder en loading pendant la tentative
                                             val resultLoginExisting = sharedAuthRepository.loginWithGoogle(idToken)
-                                            resultLoginExisting.onSuccess {
+                                            resultLoginExisting.onSuccess { authResponse ->
+                                                // Vérifier le rôle du compte
+                                                val userRole = authResponse.user?.role?.name
+                                                if (userRole != null && !userRole.equals("ACTEUR", ignoreCase = true)) {
+                                                    // IMPORTANT: Nettoyer le TokenManager car le rôle a été sauvegardé avant la vérification
+                                                    val tokenManager = TokenManager(context)
+                                                    tokenManager.clearToken()
+                                                    android.util.Log.d("GoogleSignIn", "🧹 TokenManager nettoyé car rôle incorrect: '$userRole'")
+                                                    
+                                                    googleSignInLoading = false
+                                                    val errorMsg = if (userRole.equals("RECRUTEUR", ignoreCase = true)) {
+                                                        "Ce compte Google est associé à un compte agence. Veuillez vous connecter depuis la page agence ou créer un nouveau compte acteur."
+                                                    } else {
+                                                        "Ce compte Google n'est pas associé à un compte acteur. Veuillez créer un nouveau compte acteur."
+                                                    }
+                                                    googleSignInError = errorMsg
+                                                    android.util.Log.e("GoogleSignIn", "❌ $errorMsg - Rôle: $userRole")
+                                                    return@onSuccess
+                                                }
+                                                
                                                 googleSignInLoading = false
                                                 actorSignupData = null
                                                 googleSignInError = null
@@ -398,7 +556,26 @@ fun NavigationScreen() {
                                                     
                                                     android.util.Log.d("GoogleSignIn", "🔑 Utilisation du mot de passe stocké pour la connexion...")
                                                     val resultLoginWithPassword = sharedAuthRepository.login(email, storedPassword, expectedRole = "ACTEUR")
-                                                    resultLoginWithPassword.onSuccess {
+                                                    resultLoginWithPassword.onSuccess { authResponse ->
+                                                        // Vérifier le rôle du compte
+                                                        val userRole = authResponse.user?.role?.name
+                                                        if (userRole != null && !userRole.equals("ACTEUR", ignoreCase = true)) {
+                                                            // IMPORTANT: Nettoyer le TokenManager car le rôle a été sauvegardé avant la vérification
+                                                            val tokenManager = TokenManager(context)
+                                                            tokenManager.clearToken()
+                                                            android.util.Log.d("GoogleSignIn", "🧹 TokenManager nettoyé car rôle incorrect: '$userRole'")
+                                                            
+                                                            googleSignInLoading = false
+                                                            val errorMsg = if (userRole.equals("RECRUTEUR", ignoreCase = true)) {
+                                                                "Ce compte Google est associé à un compte agence. Veuillez vous connecter depuis la page agence ou créer un nouveau compte acteur."
+                                                            } else {
+                                                                "Ce compte Google n'est pas associé à un compte acteur. Veuillez créer un nouveau compte acteur."
+                                                            }
+                                                            googleSignInError = errorMsg
+                                                            android.util.Log.e("GoogleSignIn", "❌ $errorMsg - Rôle: $userRole")
+                                                            return@onSuccess
+                                                        }
+                                                        
                                                         googleSignInLoading = false
                                                         actorSignupData = null
                                                         googleSignInError = null
@@ -452,7 +629,453 @@ fun NavigationScreen() {
                 }
             }
         }
-        
+    }
+    
+    // Launcher séparé pour Google Sign-In des agences
+    val agencyGoogleSignInLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val accountResult = googleAuthClient.getAccountFromIntent(result.data)
+        accountResult.onFailure { error ->
+            googleSignInLoading = false
+            isGoogleSignInForAgency = false
+            googleSignInError = when (error) {
+                is GoogleApiException -> when (error.statusCode) {
+                    12501 -> "Connexion Google annulée"
+                    7 -> "Impossible de contacter Google. Vérifiez votre connexion."
+                    else -> "Erreur Google (${error.statusCode})"
+                }
+                else -> "Connexion Google annulée"
+            }
+        }.onSuccess { account ->
+            val idToken = account.idToken
+            if (idToken.isNullOrBlank()) {
+                googleSignInLoading = false
+                isGoogleSignInForAgency = false
+                val nomResponsable = account.givenName
+                    ?: account.displayName?.split(" ")?.firstOrNull().orEmpty()
+                val nomAgence = account.familyName
+                    ?: account.displayName
+                        ?.takeIf { it.contains(" ") }
+                        ?.split(" ")
+                        ?.drop(1)
+                        ?.joinToString(" ")
+                        .orEmpty()
+                    .takeIf { it.isNotBlank() } ?: account.displayName ?: "Agence"
+                
+                agencySignupData = AgencySignupData(
+                    nomAgence = nomAgence,
+                    nomResponsable = nomResponsable,
+                    email = account.email.orEmpty(),
+                    telephone = "",
+                    gouvernorat = "",
+                    motDePasse = "",
+                    siteWeb = null,
+                    description = "",
+                    logoUrl = account.photoUrl?.toString(),
+                    documentUrl = null
+                )
+                googleSignInError = null
+                navController.navigate("signUpAgencyStep1")
+                return@rememberLauncherForActivityResult
+            }
+            
+            scope.launch {
+                try {
+                    val resultLogin = sharedAuthRepository.loginWithGoogle(idToken)
+                    resultLogin.onSuccess { authResponse ->
+                        // Vérifier le rôle du compte
+                        val userRole = authResponse.user?.role?.name
+                        if (userRole != null && !userRole.equals("RECRUTEUR", ignoreCase = true)) {
+                            // Le compte connecté n'est pas un compte agence (RECRUTEUR)
+                            // IMPORTANT: Nettoyer le TokenManager car le rôle a été sauvegardé avant la vérification
+                            val tokenManager = TokenManager(context)
+                            tokenManager.clearToken()
+                            android.util.Log.d("GoogleSignInAgency", "🧹 TokenManager nettoyé car rôle incorrect: '$userRole'")
+                            
+                            googleSignInLoading = false
+                            isGoogleSignInForAgency = false
+                            val errorMsg = if (userRole.equals("ACTEUR", ignoreCase = true)) {
+                                "Ce compte Google est associé à un compte acteur. Veuillez vous connecter depuis la page acteur ou créer un nouveau compte agence."
+                            } else {
+                                "Ce compte Google n'est pas associé à un compte agence. Veuillez créer un nouveau compte agence."
+                            }
+                            googleSignInError = errorMsg
+                            android.util.Log.e("GoogleSignInAgency", "❌ $errorMsg - Rôle: $userRole")
+                            return@onSuccess
+                        }
+                        
+                        googleSignInLoading = false
+                        isGoogleSignInForAgency = false
+                        agencySignupData = null
+                        googleSignInError = null
+                        navController.navigate("agencyCastingList") {
+                            popUpTo("home") { inclusive = true }
+                        }
+                    }
+                    resultLogin.onFailure { exception ->
+                        when (exception) {
+                            is ApiException.NotFoundException,
+                            is ApiException.BadRequestException -> {
+                                try {
+                                    val email = account.email
+                                    if (email.isNullOrBlank()) {
+                                        googleSignInLoading = false
+                                        isGoogleSignInForAgency = false
+                                        googleSignInError = "Email Google non disponible. Veuillez utiliser un compte Google avec email."
+                                        return@onFailure
+                                    }
+                                    
+                                    android.util.Log.d("GoogleSignInAgency", "📧 Email Google: $email")
+                                    
+                                    // IMPORTANT: Vérifier d'abord si un mot de passe a été stocké pour ce compte Google
+                                    // Si OUI, cela signifie qu'un compte existe déjà (acteur OU agence)
+                                    // Dans ce cas, NE PAS créer un nouveau compte, mais essayer de se connecter
+                                    val tokenManager = TokenManager(context)
+                                    val existingPassword = tokenManager.getGoogleAccountPassword(email)
+                                    
+                                    if (!existingPassword.isNullOrBlank()) {
+                                        // Un compte existe déjà avec cet email Google
+                                        android.util.Log.d("GoogleSignInAgency", "⚠️ Un compte existe déjà avec cet email. Tentative de connexion avec mot de passe stocké...")
+                                        
+                                        // Essayer de se connecter avec le mot de passe stocké
+                                        val resultLoginWithPassword = sharedAuthRepository.login(email, existingPassword, expectedRole = "RECRUTEUR")
+                                        resultLoginWithPassword.onSuccess { authResponse ->
+                                            // Vérifier le rôle du compte
+                                            val userRole = authResponse.user?.role?.name
+                                            android.util.Log.d("GoogleSignInAgency", "🔍 Rôle du compte existant: $userRole")
+                                            
+                                            if (userRole != null && !userRole.equals("RECRUTEUR", ignoreCase = true)) {
+                                                // Le compte existe mais avec un autre rôle (probablement ACTEUR)
+                                                val tokenManager = TokenManager(context)
+                                                tokenManager.clearToken()
+                                                android.util.Log.e("GoogleSignInAgency", "❌ ERREUR: Ce compte a le rôle '$userRole' au lieu de 'RECRUTEUR'")
+                                                
+                                                googleSignInLoading = false
+                                                isGoogleSignInForAgency = false
+                                                val errorMsg = if (userRole.equals("ACTEUR", ignoreCase = true)) {
+                                                    "Ce compte Google est associé à un compte acteur. Veuillez vous connecter depuis la page acteur."
+                                                } else {
+                                                    "Ce compte Google est associé à un compte avec un rôle différent ($userRole). Veuillez utiliser la page de connexion appropriée."
+                                                }
+                                                googleSignInError = errorMsg
+                                                android.util.Log.e("GoogleSignInAgency", "❌ $errorMsg")
+                                                return@onFailure
+                                            }
+                                            
+                                            // Le compte existe et le rôle est correct (RECRUTEUR)
+                                            googleSignInLoading = false
+                                            isGoogleSignInForAgency = false
+                                            agencySignupData = null
+                                            googleSignInError = null
+                                            android.util.Log.d("GoogleSignInAgency", "✅ Connexion réussie avec le compte existant")
+                                            navController.navigate("agencyCastingList") {
+                                                popUpTo("home") { inclusive = true }
+                                            }
+                                        }
+                                        resultLoginWithPassword.onFailure { loginException ->
+                                            googleSignInLoading = false
+                                            isGoogleSignInForAgency = false
+                                            val errorMsg = "Un compte existe avec cet email mais la connexion a échoué. Veuillez vous connecter manuellement avec votre mot de passe."
+                                            android.util.Log.e("GoogleSignInAgency", "❌ $errorMsg", loginException)
+                                            googleSignInError = errorMsg
+                                        }
+                                        
+                                        // Ne pas continuer vers la création du compte
+                                        return@onFailure
+                                    }
+                                    
+                                    // Aucun compte n'existe avec cet email, on peut créer un nouveau compte
+                                    android.util.Log.d("GoogleSignInAgency", "✅ Aucun compte existant détecté, création d'un nouveau compte agence...")
+                                    
+                                    val nomResponsable = account.givenName
+                                        ?: account.displayName?.split(" ")?.firstOrNull()
+                                        ?: "Responsable"
+                                    val nomAgence = account.familyName
+                                        ?: account.displayName
+                                            ?.takeIf { it.contains(" ") }
+                                            ?.split(" ")
+                                            ?.drop(1)
+                                            ?.joinToString(" ")
+                                        ?: account.displayName
+                                        ?: "Agence Google"
+                                    
+                                    android.util.Log.d("GoogleSignInAgency", "👤 Agence: $nomAgence, Responsable: $nomResponsable")
+                                    
+                                    // Générer un nouveau mot de passe déterministe
+                                    val emailHash = email.hashCode().toString()
+                                    val randomPassword = "Google_${emailHash}_CastMate"
+                                    // Stocker le mot de passe pour les futures connexions
+                                    tokenManager.saveGoogleAccountPassword(email, randomPassword)
+                                    android.util.Log.d("GoogleSignInAgency", "🔑 Nouveau mot de passe généré et stocké pour: $email")
+                                    
+                                    var logoFile: File? = null
+                                    account.photoUrl?.toString()?.let { photoUrl ->
+                                        try {
+                                            android.util.Log.d("GoogleSignInAgency", "📷 Téléchargement logo depuis: $photoUrl")
+                                            logoFile = withContext(Dispatchers.IO) {
+                                                try {
+                                                    val url = java.net.URL(photoUrl)
+                                                    val connection = url.openConnection() as java.net.HttpURLConnection
+                                                    connection.connectTimeout = 10000
+                                                    connection.readTimeout = 10000
+                                                    connection.connect()
+                                                    val inputStream = connection.inputStream
+                                                    val logoCacheFile = File(context.cacheDir, "google_logo_${System.currentTimeMillis()}.jpg")
+                                                    logoCacheFile.outputStream().use { output ->
+                                                        inputStream.copyTo(output)
+                                                    }
+                                                    inputStream.close()
+                                                    connection.disconnect()
+                                                    android.util.Log.d("GoogleSignInAgency", "✅ Logo téléchargé: ${logoCacheFile.absolutePath}")
+                                                    logoCacheFile
+                                                } catch (e: Exception) {
+                                                    android.util.Log.e("GoogleSignInAgency", "❌ Erreur téléchargement logo: ${e.message}", e)
+                                                    throw e
+                                                }
+                                            }
+                                        } catch (e: Exception) {
+                                            android.util.Log.e("GoogleSignInAgency", "⚠️ Téléchargement logo échoué, continuation sans logo: ${e.message}")
+                                            logoFile = null
+                                        }
+                                    }
+                                    
+                                    android.util.Log.d("GoogleSignInAgency", "🔄 Création du compte agence...")
+                                    
+                                    val resultSignup = sharedAuthRepository.signupAgence(
+                                        nomAgence = nomAgence,
+                                        responsable = nomResponsable,
+                                        email = email,
+                                        motDePasse = randomPassword,
+                                        tel = "00000000",
+                                        gouvernorat = "Tunis",
+                                        siteWeb = null,
+                                        description = "Agence créée via Google Sign-In",
+                                        logoFile = logoFile,
+                                        documentFile = null,
+                                        facebook = null,
+                                        instagram = null
+                                    )
+                                    
+                                    resultSignup.onSuccess { authResponse ->
+                                        // IMPORTANT: Vérifier le rôle après la création du compte
+                                        val userRole = authResponse.user?.role?.name
+                                        android.util.Log.d("GoogleSignInAgency", "🔍 Rôle retourné après création: $userRole (user: ${authResponse.user}, role enum: ${authResponse.user?.role})")
+                                        
+                                        // Vérifier que le rôle est RECRUTEUR (agence) et non ACTEUR (acteur)
+                                        if (!userRole.isNullOrBlank() && !userRole.equals("RECRUTEUR", ignoreCase = true)) {
+                                            // Le backend a créé le compte avec un mauvais rôle
+                                            val tokenManager = TokenManager(context)
+                                            tokenManager.clearToken()
+                                            android.util.Log.e("GoogleSignInAgency", "❌ ERREUR: Backend a créé le compte avec le mauvais rôle: '$userRole' au lieu de 'RECRUTEUR'")
+                                            
+                                            googleSignInLoading = false
+                                            isGoogleSignInForAgency = false
+                                            val errorMsg = "Erreur: Le compte a été créé avec un rôle incorrect ($userRole). Veuillez contacter le support ou créer le compte manuellement."
+                                            googleSignInError = errorMsg
+                                            return@onSuccess
+                                        }
+                                        
+                                        if (!authResponse.accessToken.isNullOrBlank()) {
+                                            android.util.Log.d("GoogleSignInAgency", "✅ Compte créé et connecté avec succès (token reçu, rôle: $userRole)")
+                                            googleSignInLoading = false
+                                            isGoogleSignInForAgency = false
+                                            agencySignupData = null
+                                            googleSignInError = null
+                                            navController.navigate("agencyCastingList") {
+                                                popUpTo("home") { inclusive = true }
+                                            }
+                                        } else {
+                                            android.util.Log.d("GoogleSignInAgency", "⚠️ Compte créé sans token, tentative de connexion avec email/mot de passe...")
+                                            val resultLoginAfterSignup = sharedAuthRepository.login(email, randomPassword, expectedRole = "RECRUTEUR")
+                                            resultLoginAfterSignup.onSuccess { loginAuthResponse ->
+                                                // Vérifier aussi le rôle après la connexion
+                                                val loginRole = loginAuthResponse.user?.role?.name
+                                                android.util.Log.d("GoogleSignInAgency", "🔍 Rôle retourné après login: $loginRole")
+                                                
+                                                if (!loginRole.isNullOrBlank() && !loginRole.equals("RECRUTEUR", ignoreCase = true)) {
+                                                    // Le rôle n'est pas correct après la connexion
+                                                    val tokenManager = TokenManager(context)
+                                                    tokenManager.clearToken()
+                                                    android.util.Log.e("GoogleSignInAgency", "❌ ERREUR: Rôle incorrect après login: '$loginRole' au lieu de 'RECRUTEUR'")
+                                                    
+                                                    googleSignInLoading = false
+                                                    isGoogleSignInForAgency = false
+                                                    val errorMsg = if (loginRole.equals("ACTEUR", ignoreCase = true)) {
+                                                        "Ce compte Google est associé à un compte acteur. Veuillez vous connecter depuis la page acteur ou créer un nouveau compte agence."
+                                                    } else {
+                                                        "Erreur: Le compte a le mauvais rôle ($loginRole). Veuillez contacter le support."
+                                                    }
+                                                    googleSignInError = errorMsg
+                                                    return@onSuccess
+                                                }
+                                                
+                                                googleSignInLoading = false
+                                                isGoogleSignInForAgency = false
+                                                agencySignupData = null
+                                                googleSignInError = null
+                                                android.util.Log.d("GoogleSignInAgency", "✅ Connexion réussie après création du compte (rôle: $loginRole)")
+                                                navController.navigate("agencyCastingList") {
+                                                    popUpTo("home") { inclusive = true }
+                                                }
+                                            }
+                                            resultLoginAfterSignup.onFailure { loginException ->
+                                                googleSignInLoading = false
+                                                isGoogleSignInForAgency = false
+                                                val errorMsg = "Compte créé avec succès ! Veuillez vous connecter avec votre email et mot de passe. Note : ce compte n'est pas encore lié à Google."
+                                                android.util.Log.e("GoogleSignInAgency", "⚠️ $errorMsg", loginException)
+                                                googleSignInError = errorMsg
+                                            }
+                                        }
+                                    }
+                                    
+                                    resultSignup.onFailure { signupException ->
+                                        val errorMsg = getErrorMessage(signupException)
+                                        val isConflict = signupException is ApiException.ConflictException || 
+                                                       errorMsg.contains("409", ignoreCase = true) ||
+                                                       errorMsg.contains("Conflict", ignoreCase = true) ||
+                                                       errorMsg.contains("existe déjà", ignoreCase = true) ||
+                                                       errorMsg.contains("already exists", ignoreCase = true) ||
+                                                       (signupException.message?.contains("409", ignoreCase = true) == true) ||
+                                                       (signupException.message?.contains("Conflict", ignoreCase = true) == true) ||
+                                                       (signupException.message?.contains("existe déjà", ignoreCase = true) == true)
+                                        
+                                        if (isConflict) {
+                                            android.util.Log.d("GoogleSignInAgency", "⚠️ Compte existe déjà (409), tentative de connexion automatique avec Google...")
+                                            val resultLoginExisting = sharedAuthRepository.loginWithGoogle(idToken)
+                                            resultLoginExisting.onSuccess { authResponse ->
+                                                // Vérifier le rôle du compte
+                                                val userRole = authResponse.user?.role?.name
+                                                if (userRole != null && !userRole.equals("RECRUTEUR", ignoreCase = true)) {
+                                                    // IMPORTANT: Nettoyer le TokenManager car le rôle a été sauvegardé avant la vérification
+                                                    val tokenManager = TokenManager(context)
+                                                    tokenManager.clearToken()
+                                                    android.util.Log.d("GoogleSignInAgency", "🧹 TokenManager nettoyé car rôle incorrect: '$userRole'")
+                                                    
+                                                    googleSignInLoading = false
+                                                    isGoogleSignInForAgency = false
+                                                    val errorMsg = if (userRole.equals("ACTEUR", ignoreCase = true)) {
+                                                        "Ce compte Google est associé à un compte acteur. Veuillez vous connecter depuis la page acteur ou créer un nouveau compte agence."
+                                                    } else {
+                                                        "Ce compte Google n'est pas associé à un compte agence. Veuillez créer un nouveau compte agence."
+                                                    }
+                                                    googleSignInError = errorMsg
+                                                    android.util.Log.e("GoogleSignInAgency", "❌ $errorMsg - Rôle: $userRole")
+                                                    return@onSuccess
+                                                }
+                                                
+                                                googleSignInLoading = false
+                                                isGoogleSignInForAgency = false
+                                                agencySignupData = null
+                                                googleSignInError = null
+                                                android.util.Log.d("GoogleSignInAgency", "✅ Connexion réussie avec compte existant lié à Google")
+                                                navController.navigate("agencyCastingList") {
+                                                    popUpTo("home") { inclusive = true }
+                                                }
+                                            }
+                                            resultLoginExisting.onFailure { loginException ->
+                                                val loginErrorMsg = getErrorMessage(loginException)
+                                                val isNotFound = loginException is ApiException.NotFoundException ||
+                                                                loginErrorMsg.contains("404", ignoreCase = true) ||
+                                                                loginErrorMsg.contains("non trouvé", ignoreCase = true) ||
+                                                                loginErrorMsg.contains("not found", ignoreCase = true)
+                                                
+                                                if (isNotFound) {
+                                                    android.util.Log.d("GoogleSignInAgency", "⚠️ Compte non lié à Google (404), tentative de connexion avec email/mot de passe...")
+                                                    
+                                                    val tokenManager = TokenManager(context)
+                                                    val storedPassword = tokenManager.getGoogleAccountPassword(email)
+                                                    
+                                                    if (storedPassword.isNullOrBlank()) {
+                                                        googleSignInLoading = false
+                                                        isGoogleSignInForAgency = false
+                                                        val finalErrorMsg = "Un compte existe déjà avec cet email. Ce compte n'est pas encore lié à Google. Veuillez vous connecter avec votre mot de passe, puis liez votre compte Google dans les paramètres."
+                                                        android.util.Log.e("GoogleSignInAgency", "❌ $finalErrorMsg")
+                                                        googleSignInError = finalErrorMsg
+                                                        return@onFailure
+                                                    }
+                                                    
+                                                    android.util.Log.d("GoogleSignInAgency", "🔑 Utilisation du mot de passe stocké pour la connexion...")
+                                                    val resultLoginWithPassword = sharedAuthRepository.login(email, storedPassword, expectedRole = "RECRUTEUR")
+                                                    resultLoginWithPassword.onSuccess { authResponse ->
+                                                        // Vérifier le rôle du compte
+                                                        val userRole = authResponse.user?.role?.name
+                                                        if (userRole != null && !userRole.equals("RECRUTEUR", ignoreCase = true)) {
+                                                            // IMPORTANT: Nettoyer le TokenManager car le rôle a été sauvegardé avant la vérification
+                                                            val tokenManager = TokenManager(context)
+                                                            tokenManager.clearToken()
+                                                            android.util.Log.d("GoogleSignInAgency", "🧹 TokenManager nettoyé car rôle incorrect: '$userRole'")
+                                                            
+                                                            googleSignInLoading = false
+                                                            isGoogleSignInForAgency = false
+                                                            val errorMsg = if (userRole.equals("ACTEUR", ignoreCase = true)) {
+                                                                "Ce compte Google est associé à un compte acteur. Veuillez vous connecter depuis la page acteur ou créer un nouveau compte agence."
+                                                            } else {
+                                                                "Ce compte Google n'est pas associé à un compte agence. Veuillez créer un nouveau compte agence."
+                                                            }
+                                                            googleSignInError = errorMsg
+                                                            android.util.Log.e("GoogleSignInAgency", "❌ $errorMsg - Rôle: $userRole")
+                                                            return@onSuccess
+                                                        }
+                                                        
+                                                        googleSignInLoading = false
+                                                        isGoogleSignInForAgency = false
+                                                        agencySignupData = null
+                                                        googleSignInError = null
+                                                        android.util.Log.d("GoogleSignInAgency", "✅ Connexion réussie avec email/mot de passe (compte créé via Google)")
+                                                        navController.navigate("agencyCastingList") {
+                                                            popUpTo("home") { inclusive = true }
+                                                        }
+                                                    }
+                                                    resultLoginWithPassword.onFailure { passwordLoginException ->
+                                                        googleSignInLoading = false
+                                                        isGoogleSignInForAgency = false
+                                                        val finalErrorMsg = "Un compte existe déjà avec cet email. Ce compte n'est pas encore lié à Google. Veuillez vous connecter avec votre mot de passe, puis liez votre compte Google dans les paramètres."
+                                                        android.util.Log.e("GoogleSignInAgency", "❌ $finalErrorMsg", passwordLoginException)
+                                                        googleSignInError = finalErrorMsg
+                                                    }
+                                                } else {
+                                                    googleSignInLoading = false
+                                                    isGoogleSignInForAgency = false
+                                                    val finalErrorMsg = "Un compte existe déjà avec cet email. Erreur de connexion Google: $loginErrorMsg"
+                                                    android.util.Log.e("GoogleSignInAgency", "❌ $finalErrorMsg", loginException)
+                                                    googleSignInError = finalErrorMsg
+                                                }
+                                            }
+                                        } else {
+                                            googleSignInLoading = false
+                                            isGoogleSignInForAgency = false
+                                            val finalErrorMsg = "Erreur lors de la création du compte: $errorMsg"
+                                            android.util.Log.e("GoogleSignInAgency", "❌ $finalErrorMsg", signupException)
+                                            googleSignInError = finalErrorMsg
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    googleSignInLoading = false
+                                    isGoogleSignInForAgency = false
+                                    val errorMsg = "Erreur lors de la création automatique du compte: ${e.message}"
+                                    android.util.Log.e("GoogleSignInAgency", "❌ $errorMsg", e)
+                                    googleSignInError = errorMsg
+                                }
+                            }
+                            else -> {
+                                googleSignInLoading = false
+                                isGoogleSignInForAgency = false
+                                val errorMsg = getErrorMessage(exception)
+                                android.util.Log.e("GoogleSignInAgency", "❌ Erreur de connexion Google: $errorMsg", exception)
+                                googleSignInError = errorMsg
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    googleSignInLoading = false
+                    isGoogleSignInForAgency = false
+                    val errorMsg = "Erreur inattendue lors de la connexion Google: ${e.message}"
+                    android.util.Log.e("GoogleSignInAgency", "❌ $errorMsg", e)
+                    googleSignInError = errorMsg
+                }
+            }
+        }
     }
     
     NavHost(
@@ -496,7 +1119,13 @@ fun NavigationScreen() {
                     navController.navigate("forgotPassword")
                 },
                 onGoogleSignInClick = {
-                    // TODO: Implémenter Google Sign-In pour les agences si nécessaire
+                    if (!googleSignInLoading) {
+                        googleSignInError = null
+                        googleSignInLoading = true
+                        isGoogleSignInForAgency = true
+                        googleAuthClient.signOut()
+                        agencyGoogleSignInLauncher.launch(googleAuthClient.getSignInIntent())
+                    }
                 },
                 onBackClick = {
                     navController.popBackStack()
