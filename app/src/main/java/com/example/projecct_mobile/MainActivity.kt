@@ -36,6 +36,7 @@ import com.example.projecct_mobile.data.utils.GoogleAuthUiClient
 import com.google.android.gms.common.api.ApiException as GoogleApiException
 import com.example.projecct_mobile.ui.screens.auth.*
 import com.example.projecct_mobile.ui.screens.auth.signup.*
+import com.example.projecct_mobile.ui.screens.auth.ResetPasswordScreen
 import com.example.projecct_mobile.ui.screens.casting.*
 import com.example.projecct_mobile.ui.screens.agenda.*
 import com.example.projecct_mobile.ui.screens.map.*
@@ -49,10 +50,15 @@ import com.example.projecct_mobile.ui.screens.acteur.ActorSettingsScreen
 import com.example.projecct_mobile.ui.screens.acteur.MyCandidaturesScreen
 import com.example.projecct_mobile.ui.components.getErrorMessage
 import com.example.projecct_mobile.ui.theme.Projecct_MobileTheme
+import com.example.projecct_mobile.ui.utils.EmailSender
+import org.json.JSONObject
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import java.io.File
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody.Companion.toRequestBody
+import android.net.Uri
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -68,7 +74,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    NavigationScreen()
+                    NavigationScreen(intent = intent)
                 }
             }
         }
@@ -76,7 +82,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun NavigationScreen() {
+fun NavigationScreen(intent: android.content.Intent? = null) {
     val navController = rememberNavController()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -85,6 +91,30 @@ fun NavigationScreen() {
     var googleSignInLoading by remember { mutableStateOf(false) }
     var googleSignInError by remember { mutableStateOf<String?>(null) }
     var isGoogleSignInForAgency by remember { mutableStateOf(false) }
+    
+    // Gérer les deep links (réinitialisation de mot de passe)
+    LaunchedEffect(intent) {
+        val data = intent?.data
+        if (data != null) {
+            android.util.Log.d("DeepLink", "🔗 URI reçu: $data")
+            if (data.scheme == "castmate" && data.host == "reset-password") {
+                val token = data.getQueryParameter("token") ?: ""
+                val email = data.getQueryParameter("email") ?: ""
+                val type = data.getQueryParameter("type") ?: "actor"
+                
+                android.util.Log.d("DeepLink", "🔗 Paramètres: token=$token, email=$email, type=$type")
+                
+                if (token.isNotBlank() && email.isNotBlank()) {
+                    android.util.Log.d("DeepLink", "✅ Navigation vers resetPassword")
+                    navController.navigate("resetPassword/$token/$email/$type") {
+                        popUpTo("home") { inclusive = false }
+                    }
+                } else {
+                    android.util.Log.e("DeepLink", "❌ Token ou email manquant")
+                }
+            }
+        }
+    }
     
     // Stockage temporaire des données d'inscription acteur
     var actorSignupData by remember {
@@ -1116,7 +1146,7 @@ fun NavigationScreen() {
                     navController.navigate("signUpAgencyStep1")
                 },
                 onForgotPasswordClick = {
-                    navController.navigate("forgotPassword")
+                    navController.navigate("forgotPassword/agency")
                 },
                 onGoogleSignInClick = {
                     if (!googleSignInLoading) {
@@ -1440,7 +1470,8 @@ fun NavigationScreen() {
                     }
                 },
                 onForgotPasswordClick = {
-                    navController.navigate("forgotPassword")
+                    // Naviguer vers forgotPassword avec le rôle approprié
+                    navController.navigate("forgotPassword/${role}")
                 },
                 onGoogleSignInClick = {
                     if (!googleSignInLoading) {
@@ -1593,14 +1624,261 @@ fun NavigationScreen() {
             )
         }
         
-        composable("forgotPassword") {
+        composable(
+            route = "resetPassword/{token}/{email}/{type}",
+            arguments = listOf(
+                navArgument("token") {
+                    type = NavType.StringType
+                },
+                navArgument("email") {
+                    type = NavType.StringType
+                },
+                navArgument("type") {
+                    type = NavType.StringType
+                    defaultValue = "actor"
+                }
+            )
+        ) { backStackEntry ->
+            val token = backStackEntry.arguments?.getString("token") ?: ""
+            val email = backStackEntry.arguments?.getString("email") ?: ""
+            val userType = backStackEntry.arguments?.getString("type") ?: "actor"
+            
+            ResetPasswordScreen(
+                token = token,
+                email = email,
+                userType = userType,
+                onBackClick = {
+                    navController.popBackStack()
+                },
+                onSuccess = {
+                    // Après succès, retourner à la page de connexion appropriée
+                    val isAgency = userType.equals("RECRUTEUR", ignoreCase = true) || 
+                                  userType.equals("agency", ignoreCase = true) ||
+                                  userType.equals("agence", ignoreCase = true)
+                    
+                    if (isAgency) {
+                        navController.navigate("agencySignIn") {
+                            popUpTo("home") { inclusive = false }
+                        }
+                    } else {
+                        navController.navigate("signIn?role=actor") {
+                            popUpTo("home") { inclusive = false }
+                        }
+                    }
+                }
+            )
+        }
+        
+        composable(
+            route = "forgotPassword/{role}",
+            arguments = listOf(
+                navArgument("role") {
+                    type = NavType.StringType
+                    defaultValue = "actor"
+                }
+            )
+        ) { backStackEntry ->
+            val role = backStackEntry.arguments?.getString("role") ?: "actor"
+            val isAgency = role.equals("agency", ignoreCase = true) || 
+                          role.equals("recruteur", ignoreCase = true) ||
+                          role.equals("agence", ignoreCase = true)
+            
+            // États pour gérer l'envoi d'email
+            var forgotPasswordLoading by remember { mutableStateOf(false) }
+            var forgotPasswordError by remember { mutableStateOf<String?>(null) }
+            var forgotPasswordException by remember { mutableStateOf<Throwable?>(null) }
+            var forgotPasswordSuccess by remember { mutableStateOf<String?>(null) }
+            var showErrorDialog by remember { mutableStateOf(false) }
+            
+            // Afficher le dialogue d'erreur détaillé
+            if (showErrorDialog && forgotPasswordError != null) {
+                com.example.projecct_mobile.ui.components.ErrorDetailDialog(
+                    title = if (isAgency) "Erreur" else "Error",
+                    message = forgotPasswordError ?: "",
+                    exception = forgotPasswordException,
+                    isAgency = isAgency,
+                    onDismiss = {
+                        showErrorDialog = false
+                        forgotPasswordError = null
+                        forgotPasswordException = null
+                    }
+                )
+            }
+            
             ForgotPasswordScreen(
                 onBackClick = {
-                    navController.navigate("signIn")
+                    // Retourner vers la bonne page de connexion selon le rôle
+                    if (isAgency) {
+                        navController.navigate("agencySignIn") {
+                            popUpTo("agencySignIn") { inclusive = false }
+                        }
+                    } else {
+                        navController.navigate("signIn?role=actor") {
+                            popUpTo("signIn") { inclusive = false }
+                        }
+                    }
                 },
                 onSubmitClick = {
-                    // Après la soumission, retour à la connexion
-                    navController.navigate("signIn")
+                    // Après la soumission, retour à la connexion appropriée
+                    if (isAgency) {
+                        navController.navigate("agencySignIn") {
+                            popUpTo("agencySignIn") { inclusive = false }
+                        }
+                    } else {
+                        navController.navigate("signIn?role=actor") {
+                            popUpTo("signIn") { inclusive = false }
+                        }
+                    }
+                },
+                userRole = role,
+                onForgotPassword = { email ->
+                    // ⚠️ OPTION A : Envoi depuis Android (NON RECOMMANDÉ - credentials exposés)
+                    // ✅ OPTION B : Appel API backend (RECOMMANDÉ - sécurisé)
+                    
+                    // Changez USE_ANDROID_EMAIL_SENDER selon votre choix
+                    val USE_ANDROID_EMAIL_SENDER = true // false = utilise le backend
+                    
+                    scope.launch {
+                        try {
+                            forgotPasswordLoading = true
+                            forgotPasswordError = null
+                            forgotPasswordException = null
+                            
+                            android.util.Log.d("ForgotPassword", "📧 Envoi de l'email de réinitialisation à: $email")
+                            
+                            if (USE_ANDROID_EMAIL_SENDER) {
+                                // ⚠️ OPTION A : Envoi direct depuis Android (NON SÉCURISÉ)
+                                // L'application génère le token et envoie l'email
+                                // Le backend stocke le token pour pouvoir le valider lors du reset-password
+                                android.util.Log.w("ForgotPassword", "⚠️ Utilisation de l'envoi direct depuis Android - NON RECOMMANDÉ EN PRODUCTION")
+                                android.util.Log.d("ForgotPassword", "📧 Email destinataire: $email")
+                                android.util.Log.d("ForgotPassword", "🎭 Type d'utilisateur: ${if (isAgency) "RECRUTEUR" else "ACTEUR"}")
+                                
+                                val userType = if (isAgency) "RECRUTEUR" else "ACTEUR"
+                                
+                                // Générer un token localement
+                                val resetToken = EmailSender.generateResetToken()
+                                android.util.Log.d("ForgotPassword", "🔑 Token généré localement par Android: ${resetToken.take(10)}...")
+                                
+                                // Stocker le token localement avec l'email pour vérification ultérieure
+                                val tokenManager = TokenManager(context)
+                                tokenManager.saveResetToken(email, resetToken)
+                                
+                                android.util.Log.d("ForgotPassword", "💾 Token stocké localement pour $email")
+                                
+                                // IMPORTANT : Essayer d'envoyer le token au backend pour qu'il le stocke (non bloquant)
+                                // Si le backend ne supporte pas encore le champ token, on envoie quand même l'email
+                                android.util.Log.d("ForgotPassword", "📤 Tentative d'envoi du token au backend pour stockage...")
+                                try {
+                                    val forgotPasswordResult = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                        // Utiliser AuthRepository pour envoyer le token au backend
+                                        sharedAuthRepository.forgotPassword(email, userType, resetToken)
+                                    }
+                                    
+                                    forgotPasswordResult.onSuccess { forgotPasswordResponse ->
+                                        android.util.Log.d("ForgotPassword", "✅ Token envoyé au backend avec succès")
+                                        android.util.Log.d("ForgotPassword", "📝 Réponse backend: ${forgotPasswordResponse.message}")
+                                    }
+                                    
+                                    forgotPasswordResult.onFailure { exception ->
+                                        // Le backend n'a pas accepté le token (peut-être qu'il ne supporte pas encore ce champ)
+                                        android.util.Log.w("ForgotPassword", "⚠️ Backend n'a pas accepté le token (${exception.message}), mais on continue quand même")
+                                        // On continue quand même pour envoyer l'email
+                                    }
+                                } catch (e: Exception) {
+                                    // Erreur réseau ou autre - on continue quand même pour envoyer l'email
+                                    android.util.Log.w("ForgotPassword", "⚠️ Erreur lors de l'envoi du token au backend: ${e.message}, mais on continue quand même")
+                                }
+                                
+                                // TOUJOURS envoyer l'email, même si le backend a échoué
+                                android.util.Log.d("ForgotPassword", "📧 Envoi de l'email depuis Android...")
+                                val emailResult = EmailSender.sendPasswordResetEmail(email, userType, resetToken)
+                                
+                                forgotPasswordLoading = false
+                                
+                                emailResult.onSuccess { message ->
+                                    android.util.Log.d("ForgotPassword", "✅ Email envoyé avec succès depuis Android")
+                                    forgotPasswordSuccess = if (isAgency) {
+                                        "Un email de réinitialisation a été envoyé à $email. Vérifiez votre boîte de réception (et les spams)."
+                                    } else {
+                                        "A reset email has been sent to $email. Check your inbox (and spam folder)."
+                                    }
+                                }
+                                
+                                emailResult.onFailure { exception ->
+                                    forgotPasswordException = exception
+                                    forgotPasswordError = if (isAgency) {
+                                        "Erreur lors de l'envoi de l'email: ${exception.message}"
+                                    } else {
+                                        "Error sending email: ${exception.message}"
+                                    }
+                                    showErrorDialog = true
+                                    android.util.Log.e("ForgotPassword", "❌ Erreur: ${exception.message}")
+                                }
+                            } else {
+                                // ✅ OPTION B : Appel API backend uniquement (RECOMMANDÉ)
+                                android.util.Log.d("ForgotPassword", "✅ Utilisation de l'API backend uniquement - RECOMMANDÉ")
+                                
+                                val userType = if (isAgency) "RECRUTEUR" else "ACTEUR"
+                                
+                                // Utiliser AuthRepository pour appeler l'API backend
+                                val forgotPasswordResult = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                    sharedAuthRepository.forgotPassword(email, userType)
+                                }
+                                
+                                forgotPasswordLoading = false
+                                
+                                forgotPasswordResult.onSuccess { forgotPasswordResponse ->
+                                    android.util.Log.d("ForgotPassword", "✅ Email envoyé avec succès par le backend")
+                                    forgotPasswordSuccess = if (isAgency) {
+                                        "Un email de réinitialisation a été envoyé à $email. Vérifiez votre boîte de réception (et les spams)."
+                                    } else {
+                                        "A reset email has been sent to $email. Check your inbox (and spam folder)."
+                                    }
+                                }
+                                
+                                forgotPasswordResult.onFailure { exception ->
+                                    forgotPasswordException = exception
+                                    android.util.Log.e("ForgotPassword", "❌ Erreur: ${exception.message}", exception)
+                                    
+                                    when (exception) {
+                                        is ApiException.NotFoundException -> {
+                                            forgotPasswordError = if (isAgency) {
+                                                "Aucun compte trouvé avec cet email."
+                                            } else {
+                                                "No account found with this email."
+                                            }
+                                        }
+                                        is ApiException.BadRequestException -> {
+                                            forgotPasswordError = if (isAgency) {
+                                                "Trop de demandes. Veuillez réessayer plus tard."
+                                            } else {
+                                                "Too many requests. Please try again later."
+                                            }
+                                        }
+                                        else -> {
+                                            forgotPasswordError = if (isAgency) {
+                                                "Erreur lors de la demande de réinitialisation: ${exception.message}"
+                                            } else {
+                                                "Error requesting password reset: ${exception.message}"
+                                            }
+                                        }
+                                    }
+                                    showErrorDialog = true
+                                }
+                            }
+                        } catch (e: Exception) {
+                            forgotPasswordLoading = false
+                            forgotPasswordException = e
+                            forgotPasswordError = if (isAgency) {
+                                "Erreur de connexion. Vérifiez votre internet"
+                            } else {
+                                "Connection error. Check your internet"
+                            }
+                            showErrorDialog = true
+                            android.util.Log.e("ForgotPassword", "❌ Exception: ${e.message}", e)
+                        }
+                    }
                 }
             )
         }
@@ -1721,27 +1999,27 @@ fun NavigationScreen() {
                 if (castingId.isNotEmpty()) {
                     isLoading = true
                     errorMessage = null
-                        try {
+                    try {
                     scope.launch {
                         val result = castingRepository.getCastingById(castingId)
                         result.onSuccess { apiCasting ->
                                 casting = apiCasting
-                                    isLoading = false
-                                errorMessage = null
-                                }
-                                result.onFailure { exception ->
-                                    android.util.Log.e("MainActivity", "Erreur chargement casting: ${exception.message}", exception)
-                                    isLoading = false
-                                errorMessage = getErrorMessage(exception)
-                                }
-                            }
-                        } catch (e: Exception) {
-                            android.util.Log.e("MainActivity", "Exception lors du chargement: ${e.message}", e)
                             isLoading = false
+                                errorMessage = null
+                        }
+                            result.onFailure { exception ->
+                                android.util.Log.e("MainActivity", "Erreur chargement casting: ${exception.message}", exception)
+                            isLoading = false
+                                errorMessage = getErrorMessage(exception)
+                        }
+                    }
+                    } catch (e: Exception) {
+                        android.util.Log.e("MainActivity", "Exception lors du chargement: ${e.message}", e)
+                        isLoading = false
                         errorMessage = getErrorMessage(e)
                     }
                 } else {
-                            isLoading = false
+                    isLoading = false
                     errorMessage = "ID de casting invalide"
                 }
             }
@@ -1807,7 +2085,7 @@ fun NavigationScreen() {
                                             errorMessage = null
                                         }
                                         result.onFailure { exception ->
-                            isLoading = false
+                                            isLoading = false
                                             errorMessage = getErrorMessage(exception)
                                         }
                                     }

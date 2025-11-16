@@ -4,6 +4,10 @@ import com.example.projecct_mobile.data.model.LoginRequest
 import com.example.projecct_mobile.data.model.AgenceSignupRequest
 import com.example.projecct_mobile.data.model.AuthResponse
 import com.example.projecct_mobile.data.model.GoogleLoginRequest
+import com.example.projecct_mobile.data.model.ForgotPasswordRequest
+import com.example.projecct_mobile.data.model.ForgotPasswordResponse
+import com.example.projecct_mobile.data.model.ResetPasswordRequest
+import com.example.projecct_mobile.data.model.ResetPasswordResponse
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import retrofit2.Response
@@ -92,5 +96,51 @@ interface AuthApiService {
         @Part photo: MultipartBody.Part? = null,
         @Part document: MultipartBody.Part? = null
     ): Response<AuthResponse>
+    
+    /**
+     * Demande de réinitialisation de mot de passe
+     * POST /auth/forgot-password
+     * 
+     * Body:
+     * {
+     *   "email": "user@example.com",
+     *   "userType": "ACTEUR" | "RECRUTEUR"
+     * }
+     * 
+     * Réponse 200:
+     * {
+     *   "success": true,
+     *   "message": "Reset email sent",
+     *   "token": "hex-64-chars",  // Optionnel
+     *   "link": "castmate://reset-password?token=...&email=...&type=...",  // Optionnel
+     *   "expiresIn": 3600  // Optionnel
+     * }
+     */
+    @POST("auth/forgot-password")
+    suspend fun forgotPassword(
+        @Body request: ForgotPasswordRequest
+    ): Response<ForgotPasswordResponse>
+    
+    /**
+     * Appliquer la réinitialisation de mot de passe
+     * POST /auth/reset-password
+     * 
+     * Body:
+     * {
+     *   "token": "hex-64-chars",
+     *   "newPassword": "NewPass!23",
+     *   "email": "user@example.com"
+     * }
+     * 
+     * Réponse 200:
+     * {
+     *   "success": true,
+     *   "message": "Password updated"
+     * }
+     */
+    @POST("auth/reset-password")
+    suspend fun resetPassword(
+        @Body request: ResetPasswordRequest
+    ): Response<ResetPasswordResponse>
 }
 

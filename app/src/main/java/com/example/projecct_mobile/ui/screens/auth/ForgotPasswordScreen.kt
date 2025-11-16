@@ -20,12 +20,22 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
-fun ForgotPasswordScreen(onBackClick: () -> Unit = {}, onSubmitClick: () -> Unit = {}) {
+fun ForgotPasswordScreen(
+    onBackClick: () -> Unit = {}, 
+    onSubmitClick: () -> Unit = {},
+    userRole: String = "actor", // "actor" ou "agency"
+    onForgotPassword: (String) -> Unit = {} // Callback pour envoyer l'email
+) {
     var email by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var successMessage by remember { mutableStateOf<String?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+    
+    // Texte adapté selon le type d'utilisateur
+    val isAgency = userRole.equals("agency", ignoreCase = true) || 
+                   userRole.equals("recruteur", ignoreCase = true) ||
+                   userRole.equals("agence", ignoreCase = true)
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Section bleue avec l'icône de cadenas
@@ -86,7 +96,7 @@ fun ForgotPasswordScreen(onBackClick: () -> Unit = {}, onSubmitClick: () -> Unit
                 
                 // Titre
                 Text(
-                    text = "Forgot Password?",
+                    text = if (isAgency) "Mot de passe oublié ?" else "Forgot Password?",
                     fontSize = 28.sp,
                     fontWeight = FontWeight.Bold,
                     color = Black,
@@ -97,7 +107,11 @@ fun ForgotPasswordScreen(onBackClick: () -> Unit = {}, onSubmitClick: () -> Unit
                 
                 // Description
                 Text(
-                    text = "Don't worry! It happens. Please enter the email address associated with your account.",
+                    text = if (isAgency) {
+                        "Ne vous inquiétez pas ! Entrez l'adresse email associée à votre compte agence."
+                    } else {
+                        "Don't worry! It happens. Please enter the email address associated with your account."
+                    },
                     fontSize = 14.sp,
                     color = GrayBorder,
                     textAlign = TextAlign.Center,
@@ -165,16 +179,36 @@ fun ForgotPasswordScreen(onBackClick: () -> Unit = {}, onSubmitClick: () -> Unit
                         errorMessage = null
                         successMessage = null
                         
-                        // Simulation d'un envoi d'email (mode test)
+                        // Appeler la fonction de réinitialisation
                         scope.launch {
-                            delay(1000) // Simuler un délai d'envoi
-                            isLoading = false
-                            successMessage = "Un email de réinitialisation a été envoyé à $email"
-                            errorMessage = null
-                            
-                            // Navigation après 2 secondes
-                            delay(2000)
-                            onSubmitClick()
+                            try {
+                                // Appeler le callback qui fait l'appel API
+                                onForgotPassword(email.trim())
+                                
+                                // Attendre un peu pour voir les logs
+                                delay(2000)
+                                
+                                // Simuler le succès (le message réel viendra du backend)
+                                isLoading = false
+                                successMessage = if (isAgency) {
+                                    "Un email de réinitialisation a été envoyé à $email"
+                                } else {
+                                    "A reset email has been sent to $email"
+                                }
+                                errorMessage = null
+                                
+                                // Navigation après 2 secondes
+                                delay(2000)
+                                onSubmitClick()
+                            } catch (e: Exception) {
+                                isLoading = false
+                                errorMessage = e.message ?: if (isAgency) {
+                                    "Erreur lors de l'envoi de l'email"
+                                } else {
+                                    "Error sending email"
+                                }
+                                successMessage = null
+                            }
                         }
                     },
                     modifier = Modifier
@@ -211,7 +245,7 @@ fun ForgotPasswordScreen(onBackClick: () -> Unit = {}, onSubmitClick: () -> Unit
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            "Back to Login",
+                            if (isAgency) "Retour à la connexion" else "Back to Login",
                             color = DarkBlue,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium
