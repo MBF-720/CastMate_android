@@ -4,6 +4,10 @@ import com.example.projecct_mobile.data.model.LoginRequest
 import com.example.projecct_mobile.data.model.AgenceSignupRequest
 import com.example.projecct_mobile.data.model.AuthResponse
 import com.example.projecct_mobile.data.model.GoogleLoginRequest
+import com.example.projecct_mobile.data.model.ForgotPasswordRequest
+import com.example.projecct_mobile.data.model.ForgotPasswordResponse
+import com.example.projecct_mobile.data.model.ResetPasswordRequest
+import com.example.projecct_mobile.data.model.ResetPasswordResponse
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import retrofit2.Response
@@ -65,15 +69,19 @@ interface AuthApiService {
     ): Response<AuthResponse>
     
     /**
-     * Inscription d'une nouvelle agence
-     * POST /agence/signup
+     * Inscription d'une agence (Public)
      * 
-     * Multipart attendu :
-     * - Part "payload": JSON sérialisé du CreateAgenceDto
-     * - Part "photo": (optionnel) image JPEG/PNG pour le logo
-     * - Part "document": (optionnel) PDF
+     * Méthode: POST
+     * URL: /agence/signup
+     * Auth: Non requise
+     * Content-Type: multipart/form-data
      * 
-     * Exemple de requête selon l'API :
+     * Body (multipart/form-data):
+     * - payload (string JSON): Données de l'agence
+     * - photo (file, optionnel): Logo JPEG/PNG (max 10 Mo)
+     * - document (file, optionnel): PDF (max 10 Mo)
+     * 
+     * Exemple payload JSON:
      * {
      *   "nomAgence": "Agence de Casting Tunis",
      *   "responsable": "Mohamed Ben Ali",
@@ -81,8 +89,28 @@ interface AuthApiService {
      *   "motDePasse": "password123",
      *   "tel": "+21612345678",
      *   "gouvernorat": "Tunis",
-     *   "siteWeb": "https://www.agence-casting.tn",
-     *   "description": "Agence spécialisée dans le casting"
+     *   "siteWeb": "https://agence-casting.tn",
+     *   "description": "Agence spécialisée dans le casting.",
+     *   "socialLinks": {
+     *     "facebook": "https://facebook.com/agence-casting-tunis",
+     *     "instagram": "https://instagram.com/agence_casting_tunis"
+     *   }
+     * }
+     * 
+     * Réponse 201:
+     * {
+     *   "id": "507f1f77bcf86cd799439011",
+     *   "nomAgence": "Agence de Casting Tunis",
+     *   "responsable": "Mohamed Ben Ali",
+     *   "email": "contact@agence-casting.tn",
+     *   "role": "RECRUTEUR",
+     *   "media": {
+     *     "photoFileId": "65b9f1f77bcf86cd799439031",
+     *     "photoMimeType": "image/png",
+     *     "documentFileId": "65b9f1f77bcf86cd799439045",
+     *     "documentMimeType": "application/pdf"
+     *   },
+     *   "socialLinks": { ... }
      * }
      */
     @Multipart
@@ -92,5 +120,51 @@ interface AuthApiService {
         @Part photo: MultipartBody.Part? = null,
         @Part document: MultipartBody.Part? = null
     ): Response<AuthResponse>
+    
+    /**
+     * Demande de réinitialisation de mot de passe
+     * POST /auth/forgot-password
+     * 
+     * Body:
+     * {
+     *   "email": "user@example.com",
+     *   "userType": "ACTEUR" | "RECRUTEUR"
+     * }
+     * 
+     * Réponse 200:
+     * {
+     *   "success": true,
+     *   "message": "Reset email sent",
+     *   "token": "hex-64-chars",  // Optionnel
+     *   "link": "castmate://reset-password?token=...&email=...&type=...",  // Optionnel
+     *   "expiresIn": 3600  // Optionnel
+     * }
+     */
+    @POST("auth/forgot-password")
+    suspend fun forgotPassword(
+        @Body request: ForgotPasswordRequest
+    ): Response<ForgotPasswordResponse>
+    
+    /**
+     * Appliquer la réinitialisation de mot de passe
+     * POST /auth/reset-password
+     * 
+     * Body:
+     * {
+     *   "token": "hex-64-chars",
+     *   "newPassword": "NewPass!23",
+     *   "email": "user@example.com"
+     * }
+     * 
+     * Réponse 200:
+     * {
+     *   "success": true,
+     *   "message": "Password updated"
+     * }
+     */
+    @POST("auth/reset-password")
+    suspend fun resetPassword(
+        @Body request: ResetPasswordRequest
+    ): Response<ResetPasswordResponse>
 }
 

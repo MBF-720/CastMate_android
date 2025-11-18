@@ -345,9 +345,35 @@ fun SignInAgencyScreen(
                             try {
                                 val result = authRepository.login(email.trim(), password, expectedRole = "RECRUTEUR")
                                 
-                                result.onSuccess {
-                                    isLoading = false
-                                    onSignInClick()
+                                result.onSuccess { authResponse ->
+                                    // Vérifier que le rôle de l'utilisateur correspond au rôle RECRUTEUR
+                                    val userRole = authResponse.user?.role?.name ?: authResponse.user?.role?.toString()
+                                    
+                                    val actualRole = when {
+                                        userRole != null -> {
+                                            when {
+                                                userRole.equals("ACTEUR", ignoreCase = true) -> "ACTEUR"
+                                                userRole.equals("RECRUTEUR", ignoreCase = true) -> "RECRUTEUR"
+                                                else -> null
+                                            }
+                                        }
+                                        else -> null
+                                    }
+                                    
+                                    if (actualRole == null || actualRole != "RECRUTEUR") {
+                                        // Le rôle ne correspond pas - erreur
+                                        isLoading = false
+                                        val errorMessage = "Ce compte n'est pas un compte agence. Veuillez vous connecter depuis la page de connexion acteur."
+                                        emailError = errorMessage
+                                        passwordError = errorMessage
+                                        
+                                        // Déconnecter l'utilisateur si le rôle ne correspond pas
+                                        authRepository.logout()
+                                    } else {
+                                        // Le rôle correspond - connexion réussie
+                                        isLoading = false
+                                        onSignInClick()
+                                    }
                                 }
                                 
                                 result.onFailure { exception ->

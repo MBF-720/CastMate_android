@@ -189,6 +189,92 @@ class TokenManager(private val context: Context) {
     }
     
     /**
+     * Stocke le mot de passe généré pour un compte créé via Google Sign-In
+     * @param email Email de l'utilisateur
+     * @param password Mot de passe généré pour ce compte
+     */
+    suspend fun saveGoogleAccountPassword(email: String, password: String) {
+        context.dataStore.edit { preferences ->
+            val key = stringPreferencesKey("google_password_${sanitizeEmail(email)}")
+            preferences[key] = password
+        }
+    }
+    
+    /**
+     * Récupère le mot de passe généré pour un compte créé via Google Sign-In
+     * @param email Email de l'utilisateur
+     * @return Mot de passe stocké ou null si aucun mot de passe n'est stocké
+     */
+    suspend fun getGoogleAccountPassword(email: String): String? {
+        val prefs = context.dataStore.data.first()
+        val key = stringPreferencesKey("google_password_${sanitizeEmail(email)}")
+        return prefs[key]
+    }
+    
+    /**
+     * Supprime le mot de passe stocké pour un compte Google (optionnel, pour nettoyer)
+     */
+    suspend fun clearGoogleAccountPassword(email: String) {
+        context.dataStore.edit { preferences ->
+            val key = stringPreferencesKey("google_password_${sanitizeEmail(email)}")
+            preferences.remove(key)
+        }
+    }
+    
+    /**
+     * Stocke un token de réinitialisation de mot de passe pour un email donné
+     * @param email Email de l'utilisateur
+     * @param resetToken Token de réinitialisation
+     */
+    suspend fun saveResetToken(email: String, resetToken: String) {
+        context.dataStore.edit { preferences ->
+            val key = stringPreferencesKey("reset_token_${sanitizeEmail(email)}")
+            preferences[key] = resetToken
+            // Stocker aussi la date de création pour expiration (optionnel)
+            val timestampKey = stringPreferencesKey("reset_token_timestamp_${sanitizeEmail(email)}")
+            preferences[timestampKey] = System.currentTimeMillis().toString()
+        }
+    }
+    
+    /**
+     * Récupère le token de réinitialisation stocké pour un email donné
+     * @param email Email de l'utilisateur
+     * @return Token stocké ou null si aucun token n'est stocké ou expiré (> 1 heure)
+     */
+    suspend fun getResetToken(email: String): String? {
+        val prefs = context.dataStore.data.first()
+        val key = stringPreferencesKey("reset_token_${sanitizeEmail(email)}")
+        val token = prefs[key] ?: return null
+        
+        // Vérifier l'expiration (1 heure)
+        val timestampKey = stringPreferencesKey("reset_token_timestamp_${sanitizeEmail(email)}")
+        val timestamp = prefs[timestampKey]?.toLongOrNull() ?: return token
+        
+        val now = System.currentTimeMillis()
+        val oneHourInMillis = 60 * 60 * 1000L
+        if (now - timestamp > oneHourInMillis) {
+            // Token expiré, le supprimer
+            clearResetToken(email)
+            return null
+        }
+        
+        return token
+    }
+    
+    /**
+     * Supprime le token de réinitialisation stocké pour un email donné
+     * @param email Email de l'utilisateur
+     */
+    suspend fun clearResetToken(email: String) {
+        context.dataStore.edit { preferences ->
+            val key = stringPreferencesKey("reset_token_${sanitizeEmail(email)}")
+            val timestampKey = stringPreferencesKey("reset_token_timestamp_${sanitizeEmail(email)}")
+            preferences.remove(key)
+            preferences.remove(timestampKey)
+        }
+    }
+    
+    /**
      * Décode le token JWT et extrait l'ID utilisateur depuis le payload
      */
     suspend fun getUserIdFromToken(): String? {

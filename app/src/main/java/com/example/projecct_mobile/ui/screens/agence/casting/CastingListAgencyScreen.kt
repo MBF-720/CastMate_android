@@ -1,6 +1,8 @@
 package com.example.projecct_mobile.ui.screens.agence.casting
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,6 +21,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -26,9 +31,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.graphics.BitmapFactory
 import kotlinx.coroutines.launch
 import com.example.projecct_mobile.data.local.TokenManager
 import com.example.projecct_mobile.data.model.Casting
+import com.example.projecct_mobile.data.repository.AgenceRepository
 import com.example.projecct_mobile.data.repository.CastingRepository
 import com.example.projecct_mobile.ui.components.ComingSoonAlert
 import com.example.projecct_mobile.ui.components.ErrorMessage
@@ -52,7 +59,8 @@ fun CastingListAgencyScreen(
     loadData: Boolean = true,
     initialCastings: List<CastingItem> = emptyList(),
     initialAgencyName: String = "",
-    initialAgencyEmail: String = ""
+    initialAgencyEmail: String = "",
+    refreshTrigger: Int = 0 // Clé pour forcer le rafraîchissement
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var castings by remember { mutableStateOf(initialCastings) }
@@ -83,32 +91,57 @@ fun CastingListAgencyScreen(
         agencyName = derivedName
     }
 
-    LaunchedEffect(Unit, loadData) {
+    // Clé pour forcer le rechargement de la liste
+    var refreshKey by remember { mutableStateOf(refreshTrigger) }
+    
+    // Mettre à jour refreshKey quand refreshTrigger change
+    LaunchedEffect(refreshTrigger) {
+        if (refreshTrigger > refreshKey) {
+            refreshKey = refreshTrigger
+        }
+    }
+    
+    LaunchedEffect(refreshKey, loadData) {
         if (!loadData) return@LaunchedEffect
         isLoading = true
         errorMessage = null
 
         try {
             val agencyId = withContext(Dispatchers.IO) { tokenManager?.getUserIdSync() }
+            android.util.Log.d("CastingListAgency", "🔄 Chargement des castings pour agence ID: $agencyId")
+            
             val result = castingRepository?.getAllCastings()
 
             result?.onSuccess { apiCastings ->
+                android.util.Log.d("CastingListAgency", "📋 Castings reçus de l'API: ${apiCastings.size}")
+                
                 val filtered = agencyId?.let { id ->
-                    apiCastings.filter { it.belongsToRecruiter(id) }
+                    val filteredList = apiCastings.filter { casting ->
+                        val belongs = casting.belongsToRecruiter(id)
+                        android.util.Log.d("CastingListAgency", "🔍 Casting '${casting.titre}': belongs=$belongs, recruteurId=${casting.recruteur?.actualId}")
+                        belongs
+                    }
+                    android.util.Log.d("CastingListAgency", "✅ Castings filtrés pour agence $id: ${filteredList.size}")
+                    filteredList
                 } ?: apiCastings
+                
                 castings = filtered.map { it.toCastingItem() }
+                android.util.Log.d("CastingListAgency", "✅ Castings affichés: ${castings.size}")
                 isLoading = false
             }
 
             result?.onFailure { exception ->
+                android.util.Log.e("CastingListAgency", "❌ Erreur: ${exception.message}", exception)
                 errorMessage = getErrorMessage(exception)
                 isLoading = false
             }
         } catch (e: Exception) {
+            android.util.Log.e("CastingListAgency", "❌ Exception: ${e.message}", e)
             errorMessage = getErrorMessage(e)
             isLoading = false
         }
     }
+    
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -385,9 +418,13 @@ fun CastingListAgencyScreen(
                                     isLoading = true
                                     errorMessage = null
                                     try {
+                                        val agencyId = withContext(Dispatchers.IO) { tokenManager?.getUserIdSync() }
                                         val result = castingRepository.getAllCastings()
                                         result.onSuccess { apiCastings ->
-                                            castings = apiCastings.map { it.toCastingItem() }
+                                            val filtered = agencyId?.let { id ->
+                                                apiCastings.filter { it.belongsToRecruiter(id) }
+                                            } ?: apiCastings
+                                            castings = filtered.map { it.toCastingItem() }
                                             isLoading = false
                                         }
                                         result.onFailure { exception ->
@@ -496,7 +533,10 @@ private fun EmptyCastingState(onCreateCastingClick: () -> Unit) {
 
 private fun Casting.belongsToRecruiter(recruiterId: String): Boolean {
     // Selon la documentation, recruteur est maintenant un objet RecruteurInfo
-    return recruteur?.id?.equals(recruiterId, ignoreCase = true) == true
+    // Utiliser actualId qui gère à la fois id et idAlt
+    val recruiterActualId = recruteur?.actualId
+    android.util.Log.d("CastingListAgency", "🔍 Vérification casting: recruteurId=$recruiterActualId, attendu=$recruiterId")
+    return recruiterActualId?.equals(recruiterId, ignoreCase = true) == true
 }
 
 @Composable
@@ -505,109 +545,214 @@ private fun LocalAgencyCastingCard(
     onEditClick: () -> Unit,
     onFavoriteToggle: () -> Unit
 ) {
+    val context = LocalContext.current
+    val agenceRepository = remember { AgenceRepository() }
+    val scope = rememberCoroutineScope()
+    
+    var afficheImage by remember { mutableStateOf<ImageBitmap?>(null) }
+    var isLoadingImage by remember { mutableStateOf(false) }
+    
+    // Charger l'image si afficheFileId existe
+    LaunchedEffect(casting.afficheFileId) {
+        if (casting.afficheFileId != null && casting.afficheFileId.isNotBlank()) {
+            isLoadingImage = true
+            val result = agenceRepository.downloadMedia(casting.afficheFileId)
+            result.onSuccess { bytes ->
+                try {
+                    val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    afficheImage = bitmap?.asImageBitmap()
+                } catch (e: Exception) {
+                    android.util.Log.e("LocalAgencyCastingCard", "Erreur décodage image: ${e.message}")
+                }
+                isLoadingImage = false
+            }
+            result.onFailure {
+                android.util.Log.e("LocalAgencyCastingCard", "Erreur chargement image: ${it.message}")
+                isLoadingImage = false
+            }
+        } else if (casting.afficheFileId == null) {
+            isLoadingImage = false
+        }
+    }
+    
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onEditClick() }
-            .shadow(
-                elevation = 8.dp,
-                shape = RoundedCornerShape(20.dp),
-                spotColor = DarkBlue.copy(alpha = 0.1f)
-            ),
-        shape = RoundedCornerShape(20.dp),
+            .border(2.dp, DarkBlue, RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = White),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
+            // Image de l'affiche à gauche
+            Box(
+                modifier = Modifier
+                    .width(120.dp)
+                    .height(160.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                DarkBlue.copy(alpha = 0.1f),
+                                DarkBlue.copy(alpha = 0.05f)
+                            )
+                        )
+                    )
+                    .border(1.dp, DarkBlue.copy(alpha = 0.2f), RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                when {
+                    isLoadingImage -> {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            color = DarkBlue,
+                            strokeWidth = 2.dp
+                        )
+                    }
+                    afficheImage != null -> {
+                        Image(
+                            bitmap = afficheImage!!,
+                            contentDescription = "Affiche du casting",
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(RoundedCornerShape(12.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
+                    else -> {
+                        Text("📷", fontSize = 48.sp)
+                    }
+                }
+            }
+            
+            // Informations du casting à droite
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Titre
                     Text(
                         text = casting.title,
-                        fontSize = 19.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = DarkBlue,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Black,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    // Description
+                    Text(
+                        text = casting.description,
+                        fontSize = 13.sp,
+                        color = Color(0xFF555555),
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        letterSpacing = 0.3.sp
+                        lineHeight = 18.sp
                     )
-                    Row(
-                        modifier = Modifier.padding(top = 6.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    
+                    // Rôle et âge
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "rôle",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Black
+                            )
+                            Text(
+                                text = casting.role,
+                                fontSize = 13.sp,
+                                color = Color(0xFF555555)
+                            )
+                        }
+                        if (casting.age.isNotEmpty()) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "age",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Black
+                                )
+                                Text(
+                                    text = casting.age,
+                                    fontSize = 13.sp,
+                                    color = Color(0xFF555555)
+                                )
+                            }
+                        }
+                        
+                        // Statut du casting (Ouvert/Fermé)
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = if (casting.ouvert) Icons.Default.CheckCircle else Icons.Default.Cancel,
+                                contentDescription = null,
+                                tint = if (casting.ouvert) Color(0xFF4CAF50) else Red,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (casting.ouvert) Color(0xFF4CAF50).copy(alpha = 0.1f) else Red.copy(alpha = 0.1f)
+                            ) {
+                                Text(
+                                    text = if (casting.ouvert) "Ouvert" else "Fermé",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (casting.ouvert) Color(0xFF4CAF50) else Red,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                // Prix et favori en bas à droite
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = casting.compensation,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = DarkBlue,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                    IconButton(
+                        onClick = onFavoriteToggle,
+                        modifier = Modifier.size(32.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.CalendarToday,
-                            contentDescription = null,
-                            tint = GrayBorder,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Text(
-                            text = casting.date,
-                            fontSize = 13.sp,
-                            color = GrayBorder,
-                            fontWeight = FontWeight.Medium
+                            imageVector = if (casting.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                            contentDescription = "Favorite",
+                            tint = RedHeart,
+                            modifier = Modifier.size(24.dp)
                         )
                     }
                 }
-
-                IconButton(
-                    onClick = onFavoriteToggle,
-                    modifier = Modifier
-                        .size(42.dp)
-                        .background(
-                            if (casting.isFavorite) RedHeart.copy(alpha = 0.1f) else Color.Transparent,
-                            CircleShape
-                        )
-                ) {
-                    Icon(
-                        imageVector = if (casting.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                        contentDescription = "Favoris",
-                        tint = RedHeart,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-            }
-
-            Text(
-                text = casting.description,
-                fontSize = 14.sp,
-                color = Black.copy(alpha = 0.65f),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                lineHeight = 20.sp
-            )
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(DarkBlue.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = casting.compensation,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = Red,
-                    letterSpacing = 0.3.sp
-                )
-
-                Text(
-                    text = casting.role,
-                    fontSize = 14.sp,
-                    color = DarkBlue,
-                    fontWeight = FontWeight.SemiBold
-                )
             }
         }
     }

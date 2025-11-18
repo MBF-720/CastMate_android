@@ -378,8 +378,18 @@ class CastingRepository {
             if (response.isSuccessful && response.body() != null) {
                 Result.success(response.body()!!)
             } else {
+                val errorCode = response.code()
+                val errorMessage = when (errorCode) {
+                    401 -> "Non autorisé - vous n'avez pas encore postulé à ce casting"
+                    404 -> "Statut de candidature non trouvé"
+                    else -> "Erreur ${errorCode}: ${response.message()}"
+                }
                 Result.failure(
-                    ApiException.NotFoundException("Statut de candidature non trouvé")
+                    when (errorCode) {
+                        401 -> ApiException.UnauthorizedException(errorMessage)
+                        404 -> ApiException.NotFoundException(errorMessage)
+                        else -> ApiException.UnknownException(errorMessage)
+                    }
                 )
             }
         } catch (e: ApiException) {

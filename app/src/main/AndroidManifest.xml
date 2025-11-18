@@ -25,6 +25,14 @@
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            
+            <!-- Deep Link pour réinitialisation de mot de passe -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="castmate" android:host="reset-password" />
+            </intent-filter>
         </activity>
         
         <!-- FileProvider pour partager des fichiers de manière sécurisée -->

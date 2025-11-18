@@ -271,9 +271,39 @@ fun SignInScreen(
                                 val expectedRole = if (role.equals("agency", ignoreCase = true)) "RECRUTEUR" else "ACTEUR"
                                 val result = authRepository.login(email.trim(), password, expectedRole = expectedRole)
                                 
-                                result.onSuccess {
-                                    isLoading = false
-                                    onSignInClick()
+                                result.onSuccess { authResponse ->
+                                    // Vérifier que le rôle de l'utilisateur correspond au rôle attendu
+                                    val userRole = authResponse.user?.role?.name ?: authResponse.user?.role?.toString()
+                                    
+                                    val actualRole = when {
+                                        userRole != null -> {
+                                            when {
+                                                userRole.equals("ACTEUR", ignoreCase = true) -> "ACTEUR"
+                                                userRole.equals("RECRUTEUR", ignoreCase = true) -> "RECRUTEUR"
+                                                else -> null
+                                            }
+                                        }
+                                        else -> null
+                                    }
+                                    
+                                    if (actualRole == null || !actualRole.equals(expectedRole, ignoreCase = true)) {
+                                        // Le rôle ne correspond pas - erreur
+                                        isLoading = false
+                                        val errorMessage = if (expectedRole == "ACTEUR") {
+                                            "Ce compte n'est pas un compte acteur. Veuillez vous connecter depuis la page de connexion agence."
+                                        } else {
+                                            "Ce compte n'est pas un compte agence. Veuillez vous connecter depuis la page de connexion acteur."
+                                        }
+                                        emailError = errorMessage
+                                        passwordError = errorMessage
+                                        
+                                        // Déconnecter l'utilisateur si le rôle ne correspond pas
+                                        authRepository.logout()
+                                    } else {
+                                        // Le rôle correspond - connexion réussie
+                                        isLoading = false
+                                        onSignInClick()
+                                    }
                                 }
                                 
                                 result.onFailure { exception ->

@@ -46,7 +46,8 @@ data class CastingItem(
     val age: String,
     val compensation: String,
     val isFavorite: Boolean = false,
-    val afficheFileId: String? = null
+    val afficheFileId: String? = null,
+    val ouvert: Boolean = true // Statut du casting (Ouvert/Fermé)
 )
 
 /**
@@ -66,7 +67,8 @@ fun com.example.projecct_mobile.data.model.Casting.toCastingItem(isFavorite: Boo
         age = this.age ?: "",
         compensation = this.prix?.toString() ?: "Non spécifié",
         isFavorite = isFavorite,
-        afficheFileId = this.actualAfficheFileId // Utiliser actualAfficheFileId qui gère media.afficheFileId
+        afficheFileId = this.actualAfficheFileId, // Utiliser actualAfficheFileId qui gère media.afficheFileId
+        ouvert = this.ouvert ?: true // Statut du casting
     )
 }
 

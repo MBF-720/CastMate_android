@@ -9,6 +9,10 @@ import com.example.projecct_mobile.data.model.AuthResponse
 import com.example.projecct_mobile.data.model.ApiException
 import com.example.projecct_mobile.data.model.SocialLinks
 import com.example.projecct_mobile.data.model.GoogleLoginRequest
+import com.example.projecct_mobile.data.model.ForgotPasswordRequest
+import com.example.projecct_mobile.data.model.ForgotPasswordResponse
+import com.example.projecct_mobile.data.model.ResetPasswordRequest
+import com.example.projecct_mobile.data.model.ResetPasswordResponse
 import com.google.gson.Gson
 import kotlinx.coroutines.flow.Flow
 import okhttp3.MediaType.Companion.toMediaType
@@ -24,7 +28,7 @@ import java.net.URLConnection
  */
 class AuthRepository {
     
-    private val authService: AuthApiService = ApiClient.getAuthService()
+    val authService: AuthApiService = ApiClient.getAuthService() // Public pour permettre l'accès direct si nécessaire
     private val tokenManager = ApiClient.getTokenManager()
     
     private val gson: Gson = Gson()
@@ -420,6 +424,112 @@ class AuthRepository {
 
     private fun guessMimeType(file: File): String? {
         return URLConnection.guessContentTypeFromName(file.name)
+    }
+    
+    /**
+     * Demande de réinitialisation de mot de passe
+     * POST /auth/forgot-password
+     * 
+     * @param email Email de l'utilisateur
+     * @param userType Type d'utilisateur ("ACTEUR" ou "RECRUTEUR")
+     * @param token Token optionnel généré par Android pour que le backend le stocke
+     * @return Result<ForgotPasswordResponse> avec le token et le lien si disponibles
+     */
+    suspend fun forgotPassword(
+        email: String,
+        userType: String,
+        token: String? = null // Optionnel : token généré par Android
+    ): Result<ForgotPasswordResponse> {
+        return try {
+            val request = ForgotPasswordRequest(
+                email = email,
+                userType = userType,
+                token = token // Envoyer le token au backend pour qu'il le stocke
+            )
+            
+            val response = authService.forgotPassword(request)
+            
+            if (response.isSuccessful && response.body() != null) {
+                val forgotPasswordResponse = response.body()!!
+                Result.success(forgotPasswordResponse)
+            } else {
+                val errorBody = response.errorBody()?.string()
+                when (response.code()) {
+                    404 -> Result.failure(
+                        ApiException.NotFoundException(
+                            errorBody ?: "Aucun compte trouvé avec cet email"
+                        )
+                    )
+                    429 -> Result.failure(
+                        ApiException.BadRequestException(
+                            errorBody ?: "Trop de demandes. Veuillez réessayer plus tard."
+                        )
+                    )
+                    else -> Result.failure(
+                        ApiException.BadRequestException(
+                            errorBody ?: response.message() ?: "Erreur lors de la demande de réinitialisation"
+                        )
+                    )
+                }
+            }
+        } catch (e: ApiException) {
+            Result.failure(e)
+        } catch (e: Exception) {
+            Result.failure(ApiException.UnknownException("Erreur inconnue: ${e.message}"))
+        }
+    }
+    
+    /**
+     * Appliquer la réinitialisation de mot de passe
+     * POST /auth/reset-password
+     * 
+     * @param token Token de réinitialisation
+     * @param newPassword Nouveau mot de passe
+     * @param email Email de l'utilisateur
+     * @return Result<ResetPasswordResponse> succès si le mot de passe a été changé
+     */
+    suspend fun resetPassword(
+        token: String,
+        newPassword: String,
+        email: String
+    ): Result<ResetPasswordResponse> {
+        return try {
+            val request = ResetPasswordRequest(
+                token = token,
+                newPassword = newPassword,
+                email = email
+            )
+            
+            val response = authService.resetPassword(request)
+            
+            if (response.isSuccessful && response.body() != null) {
+                val resetPasswordResponse = response.body()!!
+                Result.success(resetPasswordResponse)
+            } else {
+                val errorBody = response.errorBody()?.string()
+                when (response.code()) {
+                    400 -> Result.failure(
+                        ApiException.BadRequestException(
+                            errorBody ?: "Token invalide ou expiré, ou mot de passe non conforme"
+                        )
+                    )
+                    404 -> Result.failure(
+                        ApiException.NotFoundException(
+                            errorBody ?: "Token non trouvé"
+                        )
+                    )
+                    else -> Result.failure(
+                        ApiException.BadRequestException(
+                            errorBody ?: response.message() ?: "Erreur lors de la réinitialisation"
+                        )
+                    )
+                }
+            }
+        } catch (e: ApiException) {
+            Result.failure(e)
+        } catch (e: Exception) {
+            Result.failure(ApiException.UnknownException("Erreur inconnue: ${e.message}"))
+        }
     }
 }
 
