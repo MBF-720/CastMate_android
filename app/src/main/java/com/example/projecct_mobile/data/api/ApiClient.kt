@@ -105,5 +105,12 @@ object ApiClient {
     fun getAgenceService(): AgenceApiService {
         return getRetrofit().create(AgenceApiService::class.java)
     }
+    
+    /**
+     * Crée une instance du service des médias
+     */
+    fun getMediaService(): MediaApiService {
+        return getRetrofit().create(MediaApiService::class.java)
+    }
 }
 

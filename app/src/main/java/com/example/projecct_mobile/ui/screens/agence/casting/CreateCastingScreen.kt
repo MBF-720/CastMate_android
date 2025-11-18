@@ -102,21 +102,50 @@ fun CreateCastingScreen(
         lieu: String,
         afficheFile: File?
     ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _ -> },
-    externalErrorMessage: String? = null
+    externalErrorMessage: String? = null,
+    existingCasting: com.example.projecct_mobile.data.model.Casting? = null
 ) {
-    var titre by remember { mutableStateOf("") }
-    var descriptionRole by remember { mutableStateOf("") }
-    var synopsis by remember { mutableStateOf("") }
-    var dateDebut by remember { mutableStateOf("") }
-    var dateFin by remember { mutableStateOf("") }
-    var prix by remember { mutableStateOf("") }
-    var selectedType by remember { mutableStateOf<String?>(null) }
-    var ageFrom by remember { mutableStateOf(18) }
-    var ageTo by remember { mutableStateOf(35) }
-    var conditions by remember { mutableStateOf("") }
-    var lieu by remember { mutableStateOf("") }
+    // Pré-remplir les champs si on est en mode édition
+    fun parseAge(ageString: String?): Pair<Int, Int> {
+        if (ageString.isNullOrBlank()) return Pair(18, 35)
+        val regex = """(\d+)-(\d+)""".toRegex()
+        val match = regex.find(ageString)
+        return if (match != null) {
+            val from = match.groupValues[1].toIntOrNull() ?: 18
+            val to = match.groupValues[2].toIntOrNull() ?: 35
+            Pair(from, to)
+        } else {
+            Pair(18, 35)
+        }
+    }
+    
+    val initialAge = parseAge(existingCasting?.age)
+    
+    var titre by remember { mutableStateOf(existingCasting?.titre ?: "") }
+    var descriptionRole by remember { mutableStateOf(existingCasting?.descriptionRole ?: "") }
+    var synopsis by remember { mutableStateOf(existingCasting?.synopsis ?: "") }
+    var dateDebut by remember { mutableStateOf(existingCasting?.dateDebut ?: "") }
+    var dateFin by remember { mutableStateOf(existingCasting?.dateFin ?: "") }
+    var prix by remember { mutableStateOf(existingCasting?.prix?.toString() ?: "") }
+    var selectedType by remember { mutableStateOf<String?>(existingCasting?.types?.firstOrNull()) }
+    var ageFrom by remember { mutableStateOf(initialAge.first) }
+    var ageTo by remember { mutableStateOf(initialAge.second) }
+    var conditions by remember { mutableStateOf(existingCasting?.conditions ?: "") }
+    var lieu by remember { mutableStateOf(existingCasting?.lieu ?: "") }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    
+    // États pour les erreurs de validation par champ
+    var titreError by remember { mutableStateOf<String?>(null) }
+    var descriptionRoleError by remember { mutableStateOf<String?>(null) }
+    var synopsisError by remember { mutableStateOf<String?>(null) }
+    var dateDebutError by remember { mutableStateOf<String?>(null) }
+    var dateFinError by remember { mutableStateOf<String?>(null) }
+    var prixError by remember { mutableStateOf<String?>(null) }
+    var lieuError by remember { mutableStateOf<String?>(null) }
+    var conditionsError by remember { mutableStateOf<String?>(null) }
+    
+    val isEditMode = existingCasting != null
     
     // Types disponibles pour les castings
     val availableTypes = listOf("Cinéma", "Télévision", "Théâtre", "Publicité", "Court-métrage", "Documentaire")
@@ -175,7 +204,25 @@ fun CreateCastingScreen(
                     android.util.Log.d("CreateCastingScreen", "✅ Date début sélectionnée: $year-$month-$dayOfMonth")
                     val selectedCalendar = Calendar.getInstance()
                     selectedCalendar.set(year, month, dayOfMonth)
-                    dateDebut = dateFormat.format(selectedCalendar.time)
+                    val selectedDate = dateFormat.format(selectedCalendar.time)
+                    
+                    // Vérifier que la date de début n'est pas après la date de fin
+                    if (dateFin.isNotBlank()) {
+                        try {
+                            val parsedDateFin = dateFormat.parse(dateFin)
+                            if (parsedDateFin != null && selectedCalendar.time.after(parsedDateFin)) {
+                                dateDebutError = "La date de début doit être avant la date de fin"
+                                android.util.Log.w("CreateCastingScreen", "⚠️ Date début après date fin")
+                                return@DatePickerDialog
+                            }
+                        } catch (e: Exception) {
+                            android.util.Log.e("CreateCastingScreen", "Erreur comparaison dates: ${e.message}")
+                        }
+                    }
+                    
+                    dateDebut = selectedDate
+                    dateDebutError = null // Réinitialiser l'erreur si la date est valide
+                    dateFinError = null // Réinitialiser aussi l'erreur de date fin
                     android.util.Log.d("CreateCastingScreen", "✅ Date début formatée: $dateDebut")
                 },
                 initialYear,
@@ -204,6 +251,21 @@ fun CreateCastingScreen(
             }
         }
         
+        // Si une date de début existe, s'assurer que la date de fin ne peut pas être avant
+        var minDate: Long? = null
+        if (dateDebut.isNotBlank()) {
+            try {
+                val parsedDateDebut = dateFormat.parse(dateDebut)
+                if (parsedDateDebut != null) {
+                    val minCalendar = Calendar.getInstance()
+                    minCalendar.time = parsedDateDebut
+                    minDate = minCalendar.timeInMillis
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("CreateCastingScreen", "Erreur parsing date début pour min: ${e.message}")
+            }
+        }
+        
         val initialYear = calendar.get(Calendar.YEAR)
         val initialMonth = calendar.get(Calendar.MONTH)
         val initialDay = calendar.get(Calendar.DAY_OF_MONTH)
@@ -214,19 +276,43 @@ fun CreateCastingScreen(
         val dialogContext = activity ?: context
         
         try {
-            DatePickerDialog(
+            val datePickerDialog = DatePickerDialog(
                 dialogContext,
                 { _, year, month, dayOfMonth ->
                     android.util.Log.d("CreateCastingScreen", "✅ Date fin sélectionnée: $year-$month-$dayOfMonth")
                     val selectedCalendar = Calendar.getInstance()
                     selectedCalendar.set(year, month, dayOfMonth)
-                    dateFin = dateFormat.format(selectedCalendar.time)
+                    val selectedDate = dateFormat.format(selectedCalendar.time)
+                    
+                    // Vérifier que la date de fin n'est pas avant la date de début
+                    if (dateDebut.isNotBlank()) {
+                        try {
+                            val parsedDateDebut = dateFormat.parse(dateDebut)
+                            if (parsedDateDebut != null && selectedCalendar.time.before(parsedDateDebut)) {
+                                dateFinError = "La date de fin doit être après la date de début"
+                                android.util.Log.w("CreateCastingScreen", "⚠️ Date fin avant date début")
+                                return@DatePickerDialog
+                            }
+                        } catch (e: Exception) {
+                            android.util.Log.e("CreateCastingScreen", "Erreur comparaison dates: ${e.message}")
+                        }
+                    }
+                    
+                    dateFin = selectedDate
+                    dateFinError = null // Réinitialiser l'erreur si la date est valide
                     android.util.Log.d("CreateCastingScreen", "✅ Date fin formatée: $dateFin")
                 },
                 initialYear,
                 initialMonth,
                 initialDay
-            ).show()
+            )
+            
+            // Définir la date minimum si une date de début existe
+            if (minDate != null) {
+                datePickerDialog.datePicker.minDate = minDate
+            }
+            
+            datePickerDialog.show()
             android.util.Log.d("CreateCastingScreen", "✅ DatePickerDialog.show() appelé pour fin")
         } catch (e: Exception) {
             android.util.Log.e("CreateCastingScreen", "❌ Erreur affichage DatePickerDialog fin: ${e.message}", e)
@@ -257,7 +343,7 @@ fun CreateCastingScreen(
             TopAppBar(
                 title = {
                     Text(
-                        "Nouveau Casting",
+                        if (isEditMode) "Modifier le Casting" else "Nouveau Casting",
                         color = White,
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 22.sp,
@@ -296,7 +382,10 @@ fun CreateCastingScreen(
         ) {
             OutlinedTextField(
                 value = titre,
-                onValueChange = { titre = it },
+                onValueChange = { 
+                    titre = it
+                    titreError = null // Réinitialiser l'erreur lors de la saisie
+                },
                 label = {
                     Text(
                         "Titre du casting *",
@@ -308,17 +397,24 @@ fun CreateCastingScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = DarkBlue,
-                    unfocusedBorderColor = GrayBorder.copy(alpha = 0.4f),
+                    focusedBorderColor = if (titreError != null) Color(0xFFFF0000) else DarkBlue,
+                    unfocusedBorderColor = if (titreError != null) Color(0xFFFF0000) else GrayBorder.copy(alpha = 0.4f),
                     focusedContainerColor = White,
                     unfocusedContainerColor = White
                 ),
-                singleLine = true
+                singleLine = true,
+                isError = titreError != null,
+                supportingText = titreError?.let { 
+                    { Text(it, color = Color(0xFFFF0000), fontSize = 12.sp) }
+                }
             )
 
             OutlinedTextField(
                 value = descriptionRole,
-                onValueChange = { descriptionRole = it },
+                onValueChange = { 
+                    descriptionRole = it
+                    descriptionRoleError = null
+                },
                 label = {
                     Text(
                         "Description du rôle *",
@@ -332,18 +428,25 @@ fun CreateCastingScreen(
                     .height(120.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = DarkBlue,
-                    unfocusedBorderColor = GrayBorder.copy(alpha = 0.4f),
+                    focusedBorderColor = if (descriptionRoleError != null) Color(0xFFFF0000) else DarkBlue,
+                    unfocusedBorderColor = if (descriptionRoleError != null) Color(0xFFFF0000) else GrayBorder.copy(alpha = 0.4f),
                     focusedContainerColor = White,
                     unfocusedContainerColor = White
                 ),
                 maxLines = 5,
-                minLines = 3
+                minLines = 3,
+                isError = descriptionRoleError != null,
+                supportingText = descriptionRoleError?.let { 
+                    { Text(it, color = Color(0xFFFF0000), fontSize = 12.sp) }
+                }
             )
 
             OutlinedTextField(
                 value = synopsis,
-                onValueChange = { synopsis = it },
+                onValueChange = { 
+                    synopsis = it
+                    synopsisError = null
+                },
                 label = {
                     Text(
                         "Synopsis *",
@@ -357,13 +460,17 @@ fun CreateCastingScreen(
                     .height(120.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = DarkBlue,
-                    unfocusedBorderColor = GrayBorder.copy(alpha = 0.4f),
+                    focusedBorderColor = if (synopsisError != null) Color(0xFFFF0000) else DarkBlue,
+                    unfocusedBorderColor = if (synopsisError != null) Color(0xFFFF0000) else GrayBorder.copy(alpha = 0.4f),
                     focusedContainerColor = White,
                     unfocusedContainerColor = White
                 ),
                 maxLines = 5,
-                minLines = 3
+                minLines = 3,
+                isError = synopsisError != null,
+                supportingText = synopsisError?.let { 
+                    { Text(it, color = Color(0xFFFF0000), fontSize = 12.sp) }
+                }
             )
 
             // Date de début avec date picker
@@ -385,8 +492,8 @@ fun CreateCastingScreen(
                     .clickable { onDateDebutClick() },
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = DarkBlue,
-                    unfocusedBorderColor = GrayBorder.copy(alpha = 0.4f),
+                    focusedBorderColor = if (dateDebutError != null) Color(0xFFFF0000) else DarkBlue,
+                    unfocusedBorderColor = if (dateDebutError != null) Color(0xFFFF0000) else GrayBorder.copy(alpha = 0.4f),
                     focusedContainerColor = White,
                     unfocusedContainerColor = White
                 ),
@@ -398,11 +505,15 @@ fun CreateCastingScreen(
                         Icon(
                             imageVector = Icons.Filled.CalendarToday,
                             contentDescription = "Sélectionner la date",
-                            tint = DarkBlue
+                            tint = if (dateDebutError != null) Color(0xFFFF0000) else DarkBlue
                         )
                     }
                 },
-                singleLine = true
+                singleLine = true,
+                isError = dateDebutError != null,
+                supportingText = dateDebutError?.let { 
+                    { Text(it, color = Color(0xFFFF0000), fontSize = 12.sp) }
+                }
             )
 
             // Date de fin avec date picker
@@ -424,8 +535,8 @@ fun CreateCastingScreen(
                     .clickable { onDateFinClick() },
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = DarkBlue,
-                    unfocusedBorderColor = GrayBorder.copy(alpha = 0.4f),
+                    focusedBorderColor = if (dateFinError != null) Color(0xFFFF0000) else DarkBlue,
+                    unfocusedBorderColor = if (dateFinError != null) Color(0xFFFF0000) else GrayBorder.copy(alpha = 0.4f),
                     focusedContainerColor = White,
                     unfocusedContainerColor = White
                 ),
@@ -437,16 +548,23 @@ fun CreateCastingScreen(
                         Icon(
                             imageVector = Icons.Filled.CalendarToday,
                             contentDescription = "Sélectionner la date",
-                            tint = DarkBlue
+                            tint = if (dateFinError != null) Color(0xFFFF0000) else DarkBlue
                         )
                     }
                 },
-                singleLine = true
+                singleLine = true,
+                isError = dateFinError != null,
+                supportingText = dateFinError?.let { 
+                    { Text(it, color = Color(0xFFFF0000), fontSize = 12.sp) }
+                }
             )
             
             OutlinedTextField(
                 value = prix,
-                onValueChange = { prix = it },
+                onValueChange = { 
+                    prix = it
+                    prixError = null
+                },
                 label = {
                     Text(
                         "Prix *",
@@ -459,13 +577,17 @@ fun CreateCastingScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = DarkBlue,
-                    unfocusedBorderColor = GrayBorder.copy(alpha = 0.4f),
+                    focusedBorderColor = if (prixError != null) Color(0xFFFF0000) else DarkBlue,
+                    unfocusedBorderColor = if (prixError != null) Color(0xFFFF0000) else GrayBorder.copy(alpha = 0.4f),
                     focusedContainerColor = White,
                     unfocusedContainerColor = White
                 ),
                 singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                isError = prixError != null,
+                supportingText = prixError?.let { 
+                    { Text(it, color = Color(0xFFFF0000), fontSize = 12.sp) }
+                }
             )
 
             // Section Types de casting (un seul choix)
@@ -637,7 +759,10 @@ fun CreateCastingScreen(
 
             OutlinedTextField(
                 value = lieu,
-                onValueChange = { lieu = it },
+                onValueChange = { 
+                    lieu = it
+                    lieuError = null
+                },
                 label = {
                     Text(
                         "Lieu *",
@@ -650,17 +775,24 @@ fun CreateCastingScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = DarkBlue,
-                    unfocusedBorderColor = GrayBorder.copy(alpha = 0.4f),
+                    focusedBorderColor = if (lieuError != null) Color(0xFFFF0000) else DarkBlue,
+                    unfocusedBorderColor = if (lieuError != null) Color(0xFFFF0000) else GrayBorder.copy(alpha = 0.4f),
                     focusedContainerColor = White,
                     unfocusedContainerColor = White
                 ),
-                singleLine = true
+                singleLine = true,
+                isError = lieuError != null,
+                supportingText = lieuError?.let { 
+                    { Text(it, color = Color(0xFFFF0000), fontSize = 12.sp) }
+                }
             )
             
             OutlinedTextField(
                 value = conditions,
-                onValueChange = { conditions = it },
+                onValueChange = { 
+                    conditions = it
+                    conditionsError = null
+                },
                 label = {
                     Text(
                         "Conditions *",
@@ -675,13 +807,17 @@ fun CreateCastingScreen(
                     .height(120.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = DarkBlue,
-                    unfocusedBorderColor = GrayBorder.copy(alpha = 0.4f),
+                    focusedBorderColor = if (conditionsError != null) Color(0xFFFF0000) else DarkBlue,
+                    unfocusedBorderColor = if (conditionsError != null) Color(0xFFFF0000) else GrayBorder.copy(alpha = 0.4f),
                     focusedContainerColor = White,
                     unfocusedContainerColor = White
                 ),
                 maxLines = 5,
-                minLines = 3
+                minLines = 3,
+                isError = conditionsError != null,
+                supportingText = conditionsError?.let { 
+                    { Text(it, color = Color(0xFFFF0000), fontSize = 12.sp) }
+                }
             )
             
             // Section Affiche
@@ -754,45 +890,81 @@ fun CreateCastingScreen(
 
             Button(
                 onClick = {
+                    // Réinitialiser toutes les erreurs
                     errorMessage = null
-                    // Validation
+                    titreError = null
+                    descriptionRoleError = null
+                    synopsisError = null
+                    dateDebutError = null
+                    dateFinError = null
+                    prixError = null
+                    lieuError = null
+                    conditionsError = null
+                    
+                    var hasError = false
+                    
+                    // Validation des champs obligatoires
                     if (titre.isBlank()) {
-                        errorMessage = "Le titre est requis"
-                        return@Button
+                        titreError = "Le titre est requis"
+                        hasError = true
                     }
                     if (descriptionRole.isBlank()) {
-                        errorMessage = "La description du rôle est requise"
-                        return@Button
+                        descriptionRoleError = "La description du rôle est requise"
+                        hasError = true
                     }
                     if (synopsis.isBlank()) {
-                        errorMessage = "Le synopsis est requis"
-                        return@Button
+                        synopsisError = "Le synopsis est requis"
+                        hasError = true
                     }
                     if (dateDebut.isBlank()) {
-                        errorMessage = "La date de début est requise"
-                        return@Button
+                        dateDebutError = "La date de début est requise"
+                        hasError = true
                     }
                     if (dateFin.isBlank()) {
-                        errorMessage = "La date de fin est requise"
-                        return@Button
+                        dateFinError = "La date de fin est requise"
+                        hasError = true
                     }
                     if (prix.isBlank()) {
-                        errorMessage = "Le prix est requis"
-                        return@Button
-                    }
-                    val prixValue = prix.toDoubleOrNull()
-                    if (prixValue == null || prixValue < 0) {
-                        errorMessage = "Le prix doit être un nombre positif"
-                        return@Button
+                        prixError = "Le prix est requis"
+                        hasError = true
+                    } else {
+                        val prixValue = prix.toDoubleOrNull()
+                        if (prixValue == null || prixValue < 0) {
+                            prixError = "Le prix doit être un nombre positif"
+                            hasError = true
+                        }
                     }
                     if (conditions.isBlank()) {
-                        errorMessage = "Les conditions sont requises"
-                        return@Button
+                        conditionsError = "Les conditions sont requises"
+                        hasError = true
                     }
                     if (lieu.isBlank()) {
-                        errorMessage = "Le lieu est requis"
+                        lieuError = "Le lieu est requis"
+                        hasError = true
+                    }
+                    
+                    // Validation de la cohérence des dates
+                    if (dateDebut.isNotBlank() && dateFin.isNotBlank()) {
+                        try {
+                            val parsedDateDebut = dateFormat.parse(dateDebut)
+                            val parsedDateFin = dateFormat.parse(dateFin)
+                            if (parsedDateDebut != null && parsedDateFin != null) {
+                                if (parsedDateDebut.after(parsedDateFin)) {
+                                    dateDebutError = "La date de début doit être avant la date de fin"
+                                    dateFinError = "La date de fin doit être après la date de début"
+                                    hasError = true
+                                }
+                            }
+                        } catch (e: Exception) {
+                            android.util.Log.e("CreateCastingScreen", "Erreur validation dates: ${e.message}")
+                        }
+                    }
+                    
+                    if (hasError) {
                         return@Button
                     }
+                    
+                    val prixValue = prix.toDoubleOrNull() ?: 0.0
                     
                     isLoading = true
                     // Construire la chaîne d'âge
@@ -831,7 +1003,10 @@ fun CreateCastingScreen(
                 ),
                 enabled = !isLoading && titre.isNotBlank() && descriptionRole.isNotBlank() &&
                     synopsis.isNotBlank() && dateDebut.isNotBlank() && dateFin.isNotBlank() &&
-                    prix.isNotBlank() && conditions.isNotBlank() && lieu.isNotBlank()
+                    prix.isNotBlank() && conditions.isNotBlank() && lieu.isNotBlank() &&
+                    titreError == null && descriptionRoleError == null && synopsisError == null &&
+                    dateDebutError == null && dateFinError == null && prixError == null &&
+                    lieuError == null && conditionsError == null
             ) {
                 if (isLoading) {
                     CircularProgressIndicator(
@@ -841,7 +1016,7 @@ fun CreateCastingScreen(
                     )
                 } else {
                     Text(
-                        text = "Publier le Casting",
+                        text = if (isEditMode) "Enregistrer les modifications" else "Publier le Casting",
                         fontSize = 17.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = White,

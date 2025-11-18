@@ -47,13 +47,30 @@ import com.example.projecct_mobile.ui.components.ComingSoonAlert
 import com.example.projecct_mobile.ui.components.ErrorMessage
 import com.example.projecct_mobile.ui.components.getErrorMessage
 import com.example.projecct_mobile.ui.theme.*
+import com.example.projecct_mobile.data.cache.GalleryPhotoCache
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 
 /**
  * Page de profil éditable pour les acteurs
@@ -66,6 +83,7 @@ fun ActorProfileScreen(
     onAgendaClick: () -> Unit = {},
     onHistoryClick: () -> Unit = {},
     loadData: Boolean = true,
+    acteurId: String? = null, // ID de l'acteur à afficher (null = profil actuel)
     initialNom: String = "",
     initialPrenom: String = "",
     initialEmail: String = "",
@@ -77,6 +95,8 @@ fun ActorProfileScreen(
     initialYoutube: String = "",
     initialTiktok: String = ""
 ) {
+    // Si acteurId est fourni, on est en mode lecture seule (agence qui consulte un profil)
+    val isReadOnly = acteurId != null
     var isEditing by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -105,6 +125,15 @@ fun ActorProfileScreen(
     var isUploadingDocument by remember { mutableStateOf(false) }
     var isDownloadingDocument by remember { mutableStateOf(false) }
     var lastDownloadedDocumentFileId by remember { mutableStateOf<String?>(null) }
+    
+    // État pour la galerie de photos
+    var galleryPhotos by remember { mutableStateOf<List<Pair<String, ImageBitmap>>>(emptyList()) }
+    var isLoadingGallery by remember { mutableStateOf(false) }
+    var isUploadingGalleryPhotos by remember { mutableStateOf(false) }
+    var isDeletingPhotos by remember { mutableStateOf(false) }
+    var isSelectionMode by remember { mutableStateOf(false) }
+    var selectedPhotoIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var fullScreenGalleryIndex by remember { mutableStateOf<Int?>(null) }
     
     val acteurRepository = remember(loadData) {
         if (loadData) ActeurRepository() else null
@@ -147,7 +176,59 @@ fun ActorProfileScreen(
         }
     }
     
-    LaunchedEffect(Unit, loadData) {
+    // File picker pour choisir plusieurs photos pour la galerie
+    val galleryPhotosPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetMultipleContents()
+    ) { uris: List<Uri> ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        
+        scope.launch {
+            isUploadingGalleryPhotos = true
+            errorMessage = null
+            
+            try {
+                val photoFiles = mutableListOf<File>()
+                uris.forEach { uri ->
+                    val copiedFile = copyUriToCache(context, uri, "gallery_photo")
+                    if (copiedFile != null) {
+                        photoFiles.add(copiedFile)
+                    }
+                }
+                
+                if (photoFiles.isEmpty()) {
+                    errorMessage = "Impossible de copier les photos sélectionnées."
+                    isUploadingGalleryPhotos = false
+                    return@launch
+                }
+                
+                // Upload des photos
+                val acteurId = acteurRepository?.getCurrentActeurId()
+                if (acteurId == null) {
+                    errorMessage = "Impossible de récupérer l'ID de l'acteur."
+                    isUploadingGalleryPhotos = false
+                    return@launch
+                }
+                
+                val result = acteurRepository.addGalleryPhotos(acteurId, photoFiles)
+                result.onSuccess { updatedProfile ->
+                    acteurProfile = updatedProfile
+                    successMessage = "${photoFiles.size} photo(s) ajoutée(s) avec succès!"
+                    // Le LaunchedEffect se déclenchera automatiquement quand acteurProfile changera
+                }
+                result.onFailure { exception ->
+                    errorMessage = getErrorMessage(exception)
+                    android.util.Log.e("ActorProfileScreen", "❌ Erreur upload galerie: ${exception.message}")
+                }
+            } catch (e: Exception) {
+                errorMessage = "Erreur lors de l'ajout des photos: ${e.message}"
+                android.util.Log.e("ActorProfileScreen", "❌ Exception upload galerie: ${e.message}", e)
+            } finally {
+                isUploadingGalleryPhotos = false
+            }
+        }
+    }
+    
+    LaunchedEffect(Unit, loadData, acteurId) {
         if (!loadData) return@LaunchedEffect
         if (!isEditing) {
             isLoading = true
@@ -155,7 +236,14 @@ fun ActorProfileScreen(
             
             try {
                 android.util.Log.e("ActorProfileScreen", "=== Début du chargement du profil acteur ===")
-                val result = acteurRepository?.getCurrentActeur()
+                val result = if (acteurId != null) {
+                    // Charger le profil d'un autre acteur (pour les agences)
+                    android.util.Log.d("ActorProfileScreen", "📋 Chargement du profil acteur ID: $acteurId")
+                    acteurRepository?.getActeurById(acteurId)
+                } else {
+                    // Charger le profil de l'acteur connecté
+                    acteurRepository?.getCurrentActeur()
+                }
                 
                 result?.onSuccess { acteur ->
                     android.util.Log.e("ActorProfileScreen", "✅ Profil acteur chargé: ${acteur.nom} ${acteur.prenom}")
@@ -254,6 +342,82 @@ fun ActorProfileScreen(
                 android.util.Log.e("ActorProfileScreen", "❌ Exception téléchargement: ${e.message}", e)
                 e.printStackTrace()
             }
+        }
+    }
+    
+    // Charger la galerie de photos quand acteurProfile change
+    LaunchedEffect(acteurProfile?.media?.gallery) {
+        val gallery = acteurProfile?.media?.gallery
+        android.util.Log.d("ActorProfileScreen", "🖼️ LaunchedEffect galerie déclenché. Gallery: ${gallery?.size ?: 0} photos, isReadOnly: $isReadOnly, acteurRepository: ${acteurRepository != null}")
+        
+        if (gallery.isNullOrEmpty()) {
+            android.util.Log.d("ActorProfileScreen", "⚠️ Galerie vide ou null")
+            galleryPhotos = emptyList()
+            return@LaunchedEffect
+        }
+        
+        isLoadingGallery = true
+        
+        try {
+            // Extraire les fileIds
+            val photos = gallery.mapNotNull { mediaRef ->
+                mediaRef.fileId?.takeIf { it.isNotBlank() }
+            }
+            
+            android.util.Log.d("ActorProfileScreen", "📋 FileIds extraits: ${photos.size} photos")
+            
+            if (photos.isEmpty()) {
+                galleryPhotos = emptyList()
+                isLoadingGallery = false
+                return@LaunchedEffect
+            }
+            
+            // Charger les photos en utilisant le cache (en parallèle)
+            val loadedPhotos = photos.map { fileId ->
+                async {
+                    try {
+                        // Vérifier d'abord le cache
+                        val cachedBitmap = GalleryPhotoCache.get(context, fileId)
+                        if (cachedBitmap != null) {
+                            android.util.Log.d("ActorProfileScreen", "✅ Photo $fileId chargée depuis le cache")
+                            Pair(fileId, cachedBitmap)
+                        } else {
+                            // Si pas en cache, télécharger
+                            android.util.Log.d("ActorProfileScreen", "📥 Téléchargement photo $fileId... (repository: ${acteurRepository != null})")
+                            if (acteurRepository == null) {
+                                android.util.Log.w("ActorProfileScreen", "⚠️ Repository null, impossible de télécharger $fileId")
+                                null
+                            } else {
+                                val mediaResult = acteurRepository.downloadMedia(fileId)
+                                mediaResult?.getOrNull()?.let { bytes ->
+                                    if (bytes.isNotEmpty()) {
+                                        // Mettre en cache et décoder
+                                        val imageBitmap = GalleryPhotoCache.put(context, fileId, bytes)
+                                        android.util.Log.d("ActorProfileScreen", "✅ Photo $fileId téléchargée et mise en cache")
+                                        imageBitmap?.let { Pair(fileId, it) }
+                                    } else {
+                                        android.util.Log.w("ActorProfileScreen", "⚠️ Bytes vides pour $fileId")
+                                        null
+                                    }
+                                } ?: run {
+                                    android.util.Log.e("ActorProfileScreen", "❌ Erreur téléchargement $fileId: ${mediaResult?.exceptionOrNull()?.message}")
+                                    null
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("ActorProfileScreen", "❌ Erreur chargement photo galerie $fileId: ${e.message}", e)
+                        null
+                    }
+                }
+            }.awaitAll().filterNotNull()
+            
+            android.util.Log.d("ActorProfileScreen", "✅ Galerie chargée: ${loadedPhotos.size} photos sur ${photos.size}")
+            galleryPhotos = loadedPhotos
+        } catch (e: Exception) {
+            android.util.Log.e("ActorProfileScreen", "❌ Erreur chargement galerie: ${e.message}", e)
+        } finally {
+            isLoadingGallery = false
         }
     }
     
@@ -373,15 +537,16 @@ fun ActorProfileScreen(
                         )
                     }
                     
-                    // Bouton Edit/Save
-                    Box(
-                        modifier = Modifier
-                            .size(46.dp)
-                            .clip(CircleShape)
-                            .background(White.copy(alpha = 0.18f))
-                            .clickable {
-                                android.util.Log.d("ActorProfileScreen", "Bouton cliqué, isEditing actuel: $isEditing")
-                                if (isEditing) {
+                    // Bouton Edit/Save (masqué en mode lecture seule)
+                    if (!isReadOnly) {
+                        Box(
+                            modifier = Modifier
+                                .size(46.dp)
+                                .clip(CircleShape)
+                                .background(White.copy(alpha = 0.18f))
+                                .clickable {
+                                    android.util.Log.d("ActorProfileScreen", "Bouton cliqué, isEditing actuel: $isEditing")
+                                    if (isEditing) {
                                     // Sauvegarder les modifications
                                     android.util.Log.d("ActorProfileScreen", "Sauvegarde en cours...")
                                     
@@ -524,6 +689,7 @@ fun ActorProfileScreen(
                             tint = White,
                             modifier = Modifier.size(24.dp)
                         )
+                    }
                     }
                 }
                 
@@ -834,28 +1000,101 @@ fun ActorProfileScreen(
                         }
                     }
                     
-                    // Section Galerie de photos (placeholder - à implémenter plus tard)
-                    // TODO: Implémenter la galerie de photos pour l'acteur
-                    Text(
-                        text = "Galerie de photos",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1A1A1A),
-                        modifier = Modifier.padding(top = 8.dp)
+                    // Section Galerie de photos
+                    GallerySection(
+                        galleryPhotos = galleryPhotos,
+                        isLoadingGallery = isLoadingGallery,
+                        isUploadingGalleryPhotos = isUploadingGalleryPhotos,
+                        isSelectionMode = isSelectionMode,
+                        selectedPhotoIds = selectedPhotoIds,
+                        isDeletingPhotos = isDeletingPhotos,
+                        isReadOnly = isReadOnly,
+                        onAddPhotosClick = {
+                            if (!isReadOnly) {
+                                galleryPhotosPicker.launch("image/*")
+                            }
+                        },
+                        onPhotoLongPress = { fileId ->
+                            if (!isReadOnly) {
+                                isSelectionMode = true
+                                selectedPhotoIds = selectedPhotoIds + fileId
+                            }
+                        },
+                        onPhotoClick = { fileId ->
+                            if (isSelectionMode && !isReadOnly) {
+                                selectedPhotoIds = if (selectedPhotoIds.contains(fileId)) {
+                                    selectedPhotoIds - fileId
+                                } else {
+                                    selectedPhotoIds + fileId
+                                }
+                                if (selectedPhotoIds.isEmpty()) {
+                                    isSelectionMode = false
+                                }
+                            } else if (!isSelectionMode) {
+                                val index = galleryPhotos.indexOfFirst { it.first == fileId }
+                                if (index >= 0) {
+                                    fullScreenGalleryIndex = index
+                                }
+                            }
+                        },
+                        onCancelSelection = {
+                            isSelectionMode = false
+                            selectedPhotoIds = emptySet()
+                        },
+                        onDeleteSelected = {
+                            scope.launch {
+                                if (acteurRepository == null || selectedPhotoIds.isEmpty()) return@launch
+                                
+                                isDeletingPhotos = true
+                                errorMessage = null
+                                
+                                val acteurId = acteurRepository.getCurrentActeurId()
+                                if (acteurId == null) {
+                                    errorMessage = "Impossible de récupérer l'ID de l'acteur."
+                                    isDeletingPhotos = false
+                                    return@launch
+                                }
+                                
+                                var successCount = 0
+                                var failureCount = 0
+                                
+                                selectedPhotoIds.forEach { fileId ->
+                                    try {
+                                        val result = acteurRepository.deleteGalleryPhoto(acteurId, fileId)
+                                        result.onSuccess {
+                                            successCount++
+                                            acteurProfile = it
+                                            // Supprimer du cache
+                                            GalleryPhotoCache.remove(context, fileId)
+                                        }
+                                        result.onFailure {
+                                            failureCount++
+                                            android.util.Log.e("ActorProfileScreen", "❌ Erreur suppression photo $fileId: ${it.message}")
+                                        }
+                                    } catch (e: Exception) {
+                                        failureCount++
+                                        android.util.Log.e("ActorProfileScreen", "❌ Exception suppression photo $fileId: ${e.message}", e)
+                                    }
+                                }
+                                
+                                if (successCount > 0) {
+                                    successMessage = "$successCount photo(s) supprimée(s) avec succès!"
+                                    if (failureCount > 0) {
+                                        successMessage += " ($failureCount erreur(s))"
+                                    }
+                                } else {
+                                    errorMessage = "Erreur lors de la suppression des photos."
+                                }
+                                
+                                selectedPhotoIds = emptySet()
+                                isSelectionMode = false
+                                isDeletingPhotos = false
+                            }
+                        },
+                        onPhotoViewClick = { index ->
+                            fullScreenGalleryIndex = index
+                        }
                     )
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = LightGray.copy(alpha = 0.3f)),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text(
-                            text = "Fonctionnalité à venir : Ajouter une galerie de photos",
-                            modifier = Modifier.padding(16.dp),
-                            color = GrayBorder,
-                            fontSize = 14.sp,
-                            textAlign = TextAlign.Center
-                        )
-                    }
                     
                     // Informations personnelles - Section PROFILE
                     Spacer(modifier = Modifier.height(24.dp))
@@ -867,54 +1106,61 @@ fun ActorProfileScreen(
                         modifier = Modifier.padding(bottom = 16.dp)
                     )
                     
-                    if (isEditing) {
-                        // Mode édition - champs éditables
+                    if (isEditing && !isReadOnly) {
+                        // Mode édition - champs éditables (seulement si pas en lecture seule)
                         EditableField(
                             label = "Nom",
                             value = nom,
-                            onValueChange = { nom = it }
+                            onValueChange = { nom = it },
+                            enabled = !isReadOnly
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         
                         EditableField(
                             label = "Prénom",
                             value = prenom,
-                            onValueChange = { prenom = it }
+                            onValueChange = { prenom = it },
+                            enabled = !isReadOnly
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         
                         EditableField(
                             label = "Email",
                             value = email,
-                            onValueChange = { email = it }
+                            onValueChange = { email = it },
+                            enabled = !isReadOnly
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         
                         EditableField(
                             label = "Téléphone",
                             value = telephone,
-                            onValueChange = { telephone = it }
+                            onValueChange = { telephone = it },
+                            enabled = !isReadOnly
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         
                         EditableField(
                             label = "Âge",
                             value = age,
-                            onValueChange = { age = it }
+                            onValueChange = { age = it },
+                            enabled = !isReadOnly
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         
                         EditableField(
                             label = "Gouvernorat",
                             value = gouvernorat,
-                            onValueChange = { gouvernorat = it }
+                            onValueChange = { gouvernorat = it },
+                            enabled = !isReadOnly
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         
                         EditableField(
                             label = "Années d'expérience",
                             value = experience,
-                            onValueChange = { experience = it }
+                            onValueChange = { experience = it },
+                            enabled = !isReadOnly
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         
@@ -931,7 +1177,8 @@ fun ActorProfileScreen(
                             label = "Instagram",
                             value = instagram,
                             onValueChange = { instagram = it },
-                            placeholder = "https://instagram.com/votre-compte"
+                            placeholder = "https://instagram.com/votre-compte",
+                            enabled = !isReadOnly
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         
@@ -939,7 +1186,8 @@ fun ActorProfileScreen(
                             label = "YouTube",
                             value = youtube,
                             onValueChange = { youtube = it },
-                            placeholder = "https://youtube.com/votre-chaine"
+                            placeholder = "https://youtube.com/votre-chaine",
+                            enabled = !isReadOnly
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         
@@ -947,7 +1195,8 @@ fun ActorProfileScreen(
                             label = "TikTok",
                             value = tiktok,
                             onValueChange = { tiktok = it },
-                            placeholder = "https://tiktok.com/@votre-compte"
+                            placeholder = "https://tiktok.com/@votre-compte",
+                            enabled = !isReadOnly
                         )
                     } else {
                         // Mode affichage - ProfileInfoRow
@@ -1184,6 +1433,15 @@ fun ActorProfileScreen(
             onProfileClick = { /* Déjà sur le profil */ },
             onAdvancedClick = { showComingSoon = "Fonctionnalité avancée" }
         )
+        
+        // Vue plein écran de la galerie (au-dessus de tout)
+        fullScreenGalleryIndex?.let { index ->
+            FullScreenGalleryViewer(
+                photos = galleryPhotos,
+                initialIndex = index,
+                onDismiss = { fullScreenGalleryIndex = null }
+            )
+        }
     }
     
     // Alerte Coming Soon
@@ -1355,7 +1613,8 @@ private fun EditableField(
     onValueChange: (String) -> Unit,
     minLines: Int = 1,
     maxLines: Int = 1,
-    placeholder: String? = null
+    placeholder: String? = null,
+    enabled: Boolean = true
 ) {
     OutlinedTextField(
         value = value,
@@ -1363,11 +1622,15 @@ private fun EditableField(
         modifier = Modifier.fillMaxWidth(),
         label = { Text(label) },
         placeholder = placeholder?.let { { Text(it, color = LightGray) } },
+        enabled = enabled,
+        readOnly = !enabled,
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = DarkBlue,
             unfocusedBorderColor = GrayBorder,
             cursorColor = DarkBlue,
-            focusedLabelColor = DarkBlue
+            focusedLabelColor = DarkBlue,
+            disabledBorderColor = GrayBorder,
+            disabledLabelColor = Color(0xFF999999)
         ),
         minLines = minLines,
         maxLines = maxLines,
@@ -1425,6 +1688,432 @@ private fun ProfileNavigationItemPreview() {
             onClick = {},
             isSelected = false
         )
+    }
+}
+
+/**
+ * Section de la galerie de photos
+ */
+@Composable
+private fun GallerySection(
+    galleryPhotos: List<Pair<String, ImageBitmap>>,
+    isLoadingGallery: Boolean,
+    isUploadingGalleryPhotos: Boolean,
+    isSelectionMode: Boolean,
+    selectedPhotoIds: Set<String>,
+    isDeletingPhotos: Boolean,
+    isReadOnly: Boolean,
+    onAddPhotosClick: () -> Unit,
+    onPhotoLongPress: (String) -> Unit,
+    onPhotoClick: (String) -> Unit,
+    onCancelSelection: () -> Unit,
+    onDeleteSelected: () -> Unit,
+    onPhotoViewClick: (Int) -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Header avec titre et boutons d'action
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Galerie de photos",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF1A1A1A)
+            )
+            
+            // Boutons d'action selon le mode
+            if (isSelectionMode) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Bouton annuler
+                    TextButton(
+                        onClick = onCancelSelection,
+                        enabled = !isDeletingPhotos
+                    ) {
+                        Text(
+                            text = "Annuler",
+                            fontSize = 14.sp,
+                            color = GrayBorder
+                        )
+                    }
+                    
+                    // Bouton supprimer
+                    Button(
+                        onClick = onDeleteSelected,
+                        enabled = !isDeletingPhotos && selectedPhotoIds.isNotEmpty(),
+                        modifier = Modifier.height(36.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Red
+                        ),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        if (isDeletingPhotos) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = White,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Supprimer",
+                                modifier = Modifier.size(18.dp),
+                                tint = White
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Supprimer (${selectedPhotoIds.size})",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            } else {
+                // Bouton pour ajouter des photos (seulement si pas en lecture seule)
+                if (!isReadOnly) {
+                    Button(
+                        onClick = onAddPhotosClick,
+                        enabled = !isUploadingGalleryPhotos,
+                        modifier = Modifier.height(36.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = DarkBlue
+                        ),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        if (isUploadingGalleryPhotos) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = White,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "Ajouter des photos",
+                                modifier = Modifier.size(18.dp),
+                                tint = White
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Ajouter",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Contenu de la galerie
+        if (isLoadingGallery) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = DarkBlue)
+            }
+        } else if (galleryPhotos.isEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = LightGray.copy(alpha = 0.3f)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PhotoLibrary,
+                        contentDescription = null,
+                        modifier = Modifier.size(48.dp),
+                        tint = GrayBorder
+                    )
+                    Text(
+                        text = "Aucune photo dans la galerie",
+                        color = GrayBorder,
+                        fontSize = 14.sp,
+                        textAlign = TextAlign.Center
+                    )
+                    if (!isReadOnly) {
+                        Text(
+                            text = "Cliquez sur 'Ajouter' pour publier vos photos",
+                            color = GrayBorder.copy(alpha = 0.7f),
+                            fontSize = 12.sp,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(3),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 400.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(0.dp)
+            ) {
+                items(galleryPhotos.size) { index ->
+                    val (fileId, bitmap) = galleryPhotos[index]
+                    val isSelected = selectedPhotoIds.contains(fileId)
+                    GalleryPhotoItem(
+                        fileId = fileId,
+                        bitmap = bitmap,
+                        isSelected = isSelected,
+                        isSelectionMode = isSelectionMode,
+                        onLongPress = { onPhotoLongPress(fileId) },
+                        onClick = {
+                            if (isSelectionMode) {
+                                onPhotoClick(fileId)
+                            } else {
+                                onPhotoViewClick(index)
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Item d'une photo dans la galerie
+ */
+@Composable
+private fun GalleryPhotoItem(
+    fileId: String,
+    bitmap: ImageBitmap,
+    isSelected: Boolean,
+    isSelectionMode: Boolean,
+    onLongPress: () -> Unit,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .aspectRatio(1f)
+            .clip(RoundedCornerShape(8.dp))
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxSize()
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = onLongPress
+                )
+                .then(
+                    if (isSelected) {
+                        Modifier.border(
+                            width = 3.dp,
+                            color = DarkBlue,
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    } else {
+                        Modifier
+                    }
+                ),
+            shape = RoundedCornerShape(8.dp),
+            elevation = CardDefaults.cardElevation(
+                defaultElevation = if (isSelected) 8.dp else 2.dp
+            )
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                Image(
+                    bitmap = bitmap,
+                    contentDescription = "Photo galerie",
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .then(
+                            if (isSelected || isSelectionMode) {
+                                Modifier.background(
+                                    color = if (isSelected) DarkBlue.copy(alpha = 0.3f) else Color.Transparent
+                                )
+                            } else {
+                                Modifier
+                            }
+                        ),
+                    contentScale = ContentScale.Crop
+                )
+                
+                // Indicateur de sélection
+                if (isSelectionMode) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (isSelected) DarkBlue else White.copy(alpha = 0.7f)
+                                )
+                                .border(
+                                    width = 2.dp,
+                                    color = if (isSelected) White else GrayBorder,
+                                    shape = CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isSelected) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = "Sélectionné",
+                                    tint = White,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Vue plein écran pour la galerie
+ */
+@Composable
+private fun FullScreenGalleryViewer(
+    photos: List<Pair<String, ImageBitmap>>,
+    initialIndex: Int,
+    onDismiss: () -> Unit
+) {
+    var currentIndex by remember(initialIndex) { mutableStateOf(initialIndex) }
+    var offsetX by remember { mutableStateOf(0f) }
+    val density = LocalDensity.current
+    
+    // Dialog plein écran qui couvre tout l'écran (100%)
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
+            BoxWithConstraints(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                val screenWidth = with(density) { maxWidth.toPx() }
+                
+                // Zone de gestes pour le swipe
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(screenWidth, currentIndex, photos.size) {
+                            detectHorizontalDragGestures(
+                                onDragEnd = {
+                                    val threshold = screenWidth * 0.25f
+                                    when {
+                                        offsetX > threshold && currentIndex > 0 -> {
+                                            currentIndex--
+                                        }
+                                        offsetX < -threshold && currentIndex < photos.size - 1 -> {
+                                            currentIndex++
+                                        }
+                                    }
+                                    offsetX = 0f
+                                }
+                            ) { change, dragAmount ->
+                                change.consume()
+                                val newOffset = offsetX + dragAmount
+                                // Limiter le déplacement selon la position
+                                when {
+                                    currentIndex == 0 && newOffset > 0 -> {
+                                        offsetX = newOffset * 0.3f
+                                    }
+                                    currentIndex == photos.size - 1 && newOffset < 0 -> {
+                                        offsetX = newOffset * 0.3f
+                                    }
+                                    else -> {
+                                        offsetX = newOffset
+                                    }
+                                }
+                            }
+                        }
+                ) {
+                    // Affichage de la photo courante
+                    if (currentIndex in photos.indices) {
+                        val (_, bitmap) = photos[currentIndex]
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .then(
+                                    if (offsetX != 0f) {
+                                        Modifier.offset(x = with(density) { offsetX.toDp() })
+                                    } else {
+                                        Modifier
+                                    }
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Image(
+                                bitmap = bitmap,
+                                contentDescription = "Photo galerie plein écran",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Fit
+                            )
+                        }
+                    }
+                }
+                
+                // Bouton de fermeture en haut à gauche
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(16.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Fermer",
+                        tint = White,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+                
+                // Indicateur de position en bas
+                if (photos.size > 1) {
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 32.dp),
+                        color = Color.Black.copy(alpha = 0.6f),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Text(
+                            text = "${currentIndex + 1} / ${photos.size}",
+                            color = White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -43,11 +43,26 @@ class ErrorInterceptor(
                     requestUrl.contains("/agence/login")) {
                     return response
                 } else {
+                    // IMPORTANT: Ne pas lancer l'exception ici pour éviter le crash dans le thread OkHttp
+                    // Laisser la réponse être retournée avec le code 401
+                    // L'erreur sera gérée dans le repository
+                    
+                    // Ne pas nettoyer le token pour getMyStatus car c'est normal si l'acteur n'a pas encore postulé
+                    val isGetMyStatus = requestUrl.contains("/castings/") && requestUrl.contains("/my-status")
+                    
+                    if (!isGetMyStatus) {
+                        // Nettoyer le token seulement pour les autres endpoints (token expiré/invalide)
                     runBlocking {
                         tokenManager.clearToken()
                     }
+                    }
+                    
                     val error = parseError(response)
-                    throw ApiException.UnauthorizedException(error?.message ?: "Token invalide ou expiré")
+                    val errorMessage = error?.message ?: "Token invalide ou expiré"
+                    android.util.Log.d("ErrorInterceptor", "⚠️ Erreur 401 (Unauthorized): $errorMessage - URL: ${request.url}")
+                    // Retourner la réponse pour que le repository puisse la gérer
+                    // Le repository convertira l'erreur 401 en Result.failure(ApiException.UnauthorizedException)
+                    return response
                 }
             }
             

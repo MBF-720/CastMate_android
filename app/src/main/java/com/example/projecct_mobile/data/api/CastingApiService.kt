@@ -9,19 +9,60 @@ import retrofit2.http.*
 
 /**
  * Service API pour les castings
+ * Documentation: CASTINGS — Endpoints
+ * 
+ * Base URL: https://cast-mate.vercel.app
+ * Auth: JWT Bearer Token (pour routes protégées)
+ * Headers: Content-Type: application/json (pour JSON) | multipart/form-data (pour uploads)
  */
 interface CastingApiService {
     
     /**
-     * Récupère tous les castings (route publique)
-     * GET /castings
+     * Liste tous les castings (Public)
+     * 
+     * Méthode: GET
+     * URL: /castings
+     * Auth: Non requise
+     * 
+     * Réponse 200: Liste de castings avec toutes les informations (recruteur peuplé, candidats, media)
+     * 
+     * Structure de réponse:
+     * [
+     *   {
+     *     "id": "...",
+     *     "titre": "...",
+     *     "descriptionRole": "...",
+     *     "synopsis": "...",
+     *     "lieu": "...",
+     *     "dateDebut": "2024-01-15T00:00:00.000Z",
+     *     "dateFin": "2024-02-15T00:00:00.000Z",
+     *     "prix": 5000,
+     *     "types": ["Cinéma", "Télévision"],
+     *     "age": "25-35 ans",
+     *     "conditions": "...",
+     *     "ouvert": true,
+     *     "recruteur": { ... },
+     *     "candidats": [ ... ],
+     *     "media": { ... }
+     *   }
+     * ]
      */
     @GET("castings")
     suspend fun getAllCastings(): Response<List<Casting>>
     
     /**
-     * Récupère un casting par son ID (route publique)
-     * GET /castings/:id
+     * Détail d'un casting (Public)
+     * 
+     * Méthode: GET
+     * URL: /castings/:id
+     * Auth: Non requise
+     * 
+     * @param id ID du casting (MongoDB ObjectId)
+     * 
+     * Réponse 200: Même structure qu'un élément de la liste
+     * 
+     * Erreurs:
+     * - 404: Casting non trouvé
      */
     @GET("castings/{id}")
     suspend fun getCastingById(
@@ -29,23 +70,39 @@ interface CastingApiService {
     ): Response<Casting>
     
     /**
-     * Crée un nouveau casting (route protégée)
-     * POST /castings
-     * Nécessite un token JWT dans le header Authorization
+     * Créer un casting (Recruteur/Admin)
      * 
-     * Exemple de requête selon l'API :
+     * Méthode: POST
+     * URL: /castings
+     * Auth: Requise (JWT)
+     * Rôle: RECRUTEUR ou ADMIN
+     * Content-Type: multipart/form-data
+     * 
+     * Body (multipart/form-data):
+     * - payload (string JSON): Données du casting
+     * - affiche (file, optionnel): Image JPEG/PNG (max 10 Mo)
+     * 
+     * Exemple payload JSON:
      * {
      *   "titre": "Recherche acteur principal",
-     *   "descriptionRole": "Rôle de protagoniste dans une série",
-     *   "synopsis": "Synopsis du projet...",
+     *   "descriptionRole": "Rôle principal masculin 30-40 ans",
+     *   "synopsis": "Série dramatique...",
      *   "lieu": "Paris",
      *   "dateDebut": "2024-01-15",
      *   "dateFin": "2024-02-15",
      *   "prix": 5000,
      *   "types": ["Cinéma", "Télévision"],
      *   "age": "25-35 ans",
+     *   "ouvert": true,
      *   "conditions": "Disponibilité totale requise"
      * }
+     * 
+     * Réponse 201: Casting créé avec recruteur peuplé (objet)
+     * 
+     * Erreurs:
+     * - 401: Non authentifié
+     * - 403: Accès refusé (recruteur/admin uniquement)
+     * - 400: Données invalides
      */
     @Multipart
     @POST("castings")
@@ -55,9 +112,22 @@ interface CastingApiService {
     ): Response<Casting>
     
     /**
-     * Met à jour un casting (route protégée)
-     * PATCH /castings/:id
-     * Nécessite un token JWT
+     * Modifier un casting (Propriétaire/Admin)
+     * 
+     * Méthode: PATCH
+     * URL: /castings/:id
+     * Auth: Requise (JWT)
+     * Content-Type: multipart/form-data
+     * 
+     * Body (multipart/form-data):
+     * - payload (string JSON, optionnel): Champs à mettre à jour
+     * - affiche (file, optionnel): Nouvelle affiche
+     * 
+     * Réponse 200: Casting mis à jour
+     * 
+     * Erreurs:
+     * - 403: Vous ne pouvez modifier que vos propres castings
+     * - 404: Casting non trouvé
      */
     @Multipart
     @PATCH("castings/{id}")
@@ -68,9 +138,16 @@ interface CastingApiService {
     ): Response<Casting>
     
     /**
-     * Supprime un casting (route protégée)
-     * DELETE /castings/:id
-     * Nécessite un token JWT
+     * Supprimer un casting (Propriétaire/Admin)
+     * 
+     * Méthode: DELETE
+     * URL: /castings/:id
+     * Auth: Requise (JWT)
+     * 
+     * Réponse 200:
+     * {
+     *   "message": "Casting supprimé avec succès"
+     * }
      */
     @DELETE("castings/{id}")
     suspend fun deleteCasting(
@@ -78,9 +155,19 @@ interface CastingApiService {
     ): Response<Unit>
     
     /**
-     * Postuler à un casting (route protégée - Acteur uniquement)
-     * POST /castings/:id/apply
-     * Nécessite un token JWT
+     * Postuler à un casting (Acteur)
+     * 
+     * Méthode: POST
+     * URL: /castings/:id/apply
+     * Auth: Requise (JWT)
+     * Rôle: ACTEUR
+     * 
+     * Réponse 200: Casting mis à jour avec la candidature
+     * 
+     * Erreurs:
+     * - 400: Le casting n'accepte plus de candidatures
+     * - 409: Vous avez déjà postulé à ce casting
+     * - 404: Casting non trouvé
      */
     @POST("castings/{id}/apply")
     suspend fun applyToCasting(
@@ -88,9 +175,17 @@ interface CastingApiService {
     ): Response<Unit>
     
     /**
-     * Accepter un candidat (route protégée - Recruteur/Admin uniquement)
-     * PATCH /castings/:id/candidates/:acteurId/accept
-     * Nécessite un token JWT
+     * Accepter un candidat (Recruteur/Admin)
+     * 
+     * Méthode: PATCH
+     * URL: /castings/:id/candidates/:acteurId/accept
+     * Auth: Requise (JWT)
+     * 
+     * Paramètres:
+     * - id: ID du casting
+     * - acteurId: ID de l'acteur à accepter
+     * 
+     * Réponse 200: Casting mis à jour avec statut ACCEPTE
      */
     @PATCH("castings/{id}/candidates/{acteurId}/accept")
     suspend fun acceptCandidate(
@@ -99,9 +194,17 @@ interface CastingApiService {
     ): Response<Unit>
     
     /**
-     * Refuser un candidat (route protégée - Recruteur/Admin uniquement)
-     * PATCH /castings/:id/candidates/:acteurId/reject
-     * Nécessite un token JWT
+     * Refuser un candidat (Recruteur/Admin)
+     * 
+     * Méthode: PATCH
+     * URL: /castings/:id/candidates/:acteurId/reject
+     * Auth: Requise (JWT)
+     * 
+     * Paramètres:
+     * - id: ID du casting
+     * - acteurId: ID de l'acteur à refuser
+     * 
+     * Réponse 200: Casting mis à jour avec statut REFUSE
      */
     @PATCH("castings/{id}/candidates/{acteurId}/reject")
     suspend fun rejectCandidate(
@@ -110,9 +213,19 @@ interface CastingApiService {
     ): Response<Unit>
     
     /**
-     * Obtenir le statut de candidature de l'acteur connecté (route protégée - Acteur uniquement)
-     * GET /castings/:id/my-status
-     * Nécessite un token JWT
+     * Obtenir mon statut de candidature (Acteur)
+     * 
+     * Méthode: GET
+     * URL: /castings/:id/my-status
+     * Auth: Requise (JWT)
+     * Rôle: ACTEUR
+     * 
+     * Réponse 200:
+     * {
+     *   "hasApplied": true,
+     *   "statut": "EN_ATTENTE" | "ACCEPTE" | "REFUSE",
+     *   "dateCandidature": "2024-01-15T10:30:00.000Z"
+     * }
      */
     @GET("castings/{id}/my-status")
     suspend fun getMyStatus(

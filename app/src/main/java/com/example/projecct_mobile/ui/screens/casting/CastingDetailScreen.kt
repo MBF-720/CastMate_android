@@ -80,6 +80,47 @@ fun CastingDetailScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val tabs = listOf("overview", "Film", "production")
     
+    // État pour le statut de candidature
+    var candidateStatus by remember { mutableStateOf<com.example.projecct_mobile.data.model.CandidateStatusResponse?>(null) }
+    var isLoadingStatus by remember { mutableStateOf(false) }
+    
+    // Charger le statut de candidature au chargement de l'écran
+    LaunchedEffect(casting.actualId) {
+        val castingId = casting.actualId
+        if (castingId != null && !isLoadingStatus) {
+            isLoadingStatus = true
+            try {
+                val result = castingRepository.getMyStatus(castingId)
+                result.onSuccess { status ->
+                    candidateStatus = status
+                    android.util.Log.d("CastingDetailScreen", "📋 Statut de candidature: hasApplied=${status.hasApplied}, statut=${status.statut}")
+                    isLoadingStatus = false
+                }
+                result.onFailure { exception ->
+                    android.util.Log.d("CastingDetailScreen", "⚠️ Erreur chargement statut: ${exception.message}")
+                    // Si l'erreur est 404 ou 401, c'est normal (pas encore postulé ou non autorisé)
+                    // Dans ce cas, on considère que l'acteur n'a pas encore postulé
+                    if (exception is ApiException.NotFoundException || exception is ApiException.UnauthorizedException) {
+                        android.util.Log.d("CastingDetailScreen", "ℹ️ Acteur n'a pas encore postulé à ce casting")
+                        candidateStatus = com.example.projecct_mobile.data.model.CandidateStatusResponse(
+                            hasApplied = false,
+                            statut = null,
+                            dateCandidature = null
+                        )
+                    } else {
+                        android.util.Log.e("CastingDetailScreen", "❌ Erreur: ${exception.message}")
+                    }
+                    isLoadingStatus = false
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("CastingDetailScreen", "❌ Exception chargement statut: ${e.message}")
+                isLoadingStatus = false
+            }
+        } else if (castingId == null) {
+            isLoadingStatus = false
+        }
+    }
+    
     // Télécharger l'affiche si disponible
     LaunchedEffect(casting.actualAfficheFileId) {
         if (casting.actualAfficheFileId != null && afficheImage == null && !isLoadingImage) {
@@ -307,6 +348,13 @@ fun CastingDetailScreen(
             }
             
             // Bouton Submit fixe
+            // Vérifier si l'acteur a déjà postulé et le statut
+            val hasAlreadyApplied = candidateStatus?.hasApplied == true
+            val status = candidateStatus?.statut?.uppercase()
+            val isAccepted = status == "ACCEPTE" || status == "ACCEPTED"
+            val isRejected = status == "REFUSE" || status == "REFUSED"
+            val canSubmit = !hasAlreadyApplied && !isAccepted && !isRejected && casting.ouvert == true
+            
             Button(
                 onClick = {
                     val castingId = casting.actualId
@@ -314,6 +362,18 @@ fun CastingDetailScreen(
                     // Vérifier d'abord si le casting est ouvert
                     if (!casting.ouvert) {
                         showCastingClosedDialog = true
+                        return@Button
+                    }
+                    
+                    // Vérifier si déjà postulé
+                    if (hasAlreadyApplied) {
+                        if (isAccepted) {
+                            errorMessage = "Vous avez déjà été accepté pour ce casting"
+                        } else if (isRejected) {
+                            errorMessage = "Votre candidature a été refusée. Vous ne pouvez pas postuler à nouveau."
+                        } else {
+                            showAlreadyAppliedDialog = true
+                        }
                         return@Button
                     }
                     
@@ -331,6 +391,12 @@ fun CastingDetailScreen(
                                     errorMessage = null // Pas d'erreur
                                     onSubmitClick()
                                     showSuccessDialog = true // Afficher le dialogue de succès SEULEMENT en cas de succès
+                                    // Mettre à jour le statut localement
+                                    candidateStatus = com.example.projecct_mobile.data.model.CandidateStatusResponse(
+                                        hasApplied = true,
+                                        statut = "EN_ATTENTE",
+                                        dateCandidature = null
+                                    )
                                     isSubmitting = false
                                 }
                                 result.onFailure { exception ->
@@ -417,9 +483,10 @@ fun CastingDetailScreen(
                     .padding(horizontal = 20.dp),
                 shape = RoundedCornerShape(26.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = DarkBlue
+                    containerColor = DarkBlue,
+                    disabledContainerColor = Color(0xFFCCCCCC)
                 ),
-                enabled = !isSubmitting
+                enabled = !isSubmitting && canSubmit && !isLoadingStatus
             ) {
                 if (isSubmitting) {
                     CircularProgressIndicator(
@@ -428,12 +495,57 @@ fun CastingDetailScreen(
                         strokeWidth = 2.dp
                     )
                 } else {
+                    val buttonText = when {
+                        isLoadingStatus -> "Chargement..."
+                        isAccepted -> "Accepté"
+                        isRejected -> "Refusé"
+                        hasAlreadyApplied -> "Déjà postulé"
+                        !casting.ouvert -> "Casting fermé"
+                        else -> "Submit"
+                    }
                     Text(
-                        text = "Submit",
+                        text = buttonText,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        color = White
+                        color = if (canSubmit) White else Color(0xFF666666)
                     )
+                }
+            }
+            
+            // Afficher un message d'information si la candidature a été refusée ou acceptée
+            if (hasAlreadyApplied && (isAccepted || isRejected)) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (isAccepted) Color(0xFF4CAF50).copy(alpha = 0.1f) else Red.copy(alpha = 0.1f)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = if (isAccepted) Icons.Default.CheckCircle else Icons.Default.Cancel,
+                            contentDescription = null,
+                            tint = if (isAccepted) Color(0xFF4CAF50) else Red,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = if (isAccepted) {
+                                "Vous avez été accepté pour ce casting. Vous ne pouvez pas postuler à nouveau."
+                            } else {
+                                "Votre candidature a été refusée. Vous ne pouvez pas postuler à nouveau pour éviter le spam."
+                            },
+                            fontSize = 12.sp,
+                            color = if (isAccepted) Color(0xFF4CAF50) else Red,
+                            lineHeight = 16.sp
+                        )
+                    }
                 }
             }
 

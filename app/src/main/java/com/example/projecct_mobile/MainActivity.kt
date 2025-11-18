@@ -50,7 +50,9 @@ import com.example.projecct_mobile.ui.screens.acteur.ActorSettingsScreen
 import com.example.projecct_mobile.ui.screens.acteur.MyCandidaturesScreen
 import com.example.projecct_mobile.ui.components.getErrorMessage
 import com.example.projecct_mobile.ui.theme.Projecct_MobileTheme
+import com.example.projecct_mobile.ui.theme.DarkBlue
 import com.example.projecct_mobile.ui.utils.EmailSender
+import androidx.compose.ui.graphics.Color
 import org.json.JSONObject
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -124,6 +126,9 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
     var agencySignupData by remember {
         mutableStateOf<AgencySignupData?>(null)
     }
+    
+    // Clé partagée pour forcer le rafraîchissement de la liste des castings après création
+    var castingListRefreshKey by remember { mutableStateOf(0) }
     
     // Vérifier si l'utilisateur est déjà connecté (Remember Me)
     LaunchedEffect(Unit) {
@@ -1295,7 +1300,8 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                     navController.navigate("home") {
                         popUpTo("welcome") { inclusive = false }
                     }
-                }
+                },
+                refreshTrigger = castingListRefreshKey
             )
         }
         
@@ -1331,7 +1337,14 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                             result.onSuccess { casting ->
                                 isLoading = false
                                 android.util.Log.d("MainActivity", "✅ Casting créé avec succès: ${casting.titre}")
-                    navController.popBackStack()
+                                android.util.Log.d("MainActivity", "🔄 Rafraîchissement de la liste des castings...")
+                                
+                                // Incrémenter la clé partagée pour forcer le rafraîchissement de la liste
+                                castingListRefreshKey++
+                                android.util.Log.d("MainActivity", "🔄 Clé de rafraîchissement incrémentée: $castingListRefreshKey")
+                                
+                                // Retourner à la liste des castings
+                                navController.popBackStack()
                             }
                             result.onFailure { exception ->
                                 isLoading = false
@@ -1370,6 +1383,135 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                     }
                 }
             )
+        }
+        
+        // Route pour éditer un casting
+        composable(
+            route = "agencyEditCasting/{castingId}",
+            arguments = listOf(
+                navArgument("castingId") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val castingId = backStackEntry.arguments?.getString("castingId")
+            android.util.Log.d("MainActivity", "📝 Édition du casting ID: $castingId")
+            
+            val castingRepository = remember { CastingRepository() }
+            var isLoading by remember { mutableStateOf(false) }
+            var errorMessage by remember { mutableStateOf<String?>(null) }
+            var casting by remember { mutableStateOf<com.example.projecct_mobile.data.model.Casting?>(null) }
+            var isLoadingCasting by remember { mutableStateOf(true) }
+            
+            // Charger le casting existant
+            LaunchedEffect(castingId) {
+                if (castingId != null) {
+                    isLoadingCasting = true
+                    try {
+                        val result = castingRepository.getCastingById(castingId)
+                        result.onSuccess { loadedCasting ->
+                            casting = loadedCasting
+                            android.util.Log.d("MainActivity", "✅ Casting chargé pour édition: ${loadedCasting.titre}")
+                            isLoadingCasting = false
+                        }
+                        result.onFailure { exception ->
+                            android.util.Log.e("MainActivity", "❌ Erreur chargement casting: ${exception.message}", exception)
+                            errorMessage = "Erreur lors du chargement du casting: ${exception.message}"
+                            isLoadingCasting = false
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("MainActivity", "❌ Exception chargement casting: ${e.message}", e)
+                        errorMessage = "Erreur lors du chargement: ${e.message}"
+                        isLoadingCasting = false
+                    }
+                }
+            }
+            
+            if (isLoadingCasting) {
+                // Afficher un indicateur de chargement
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = DarkBlue)
+                }
+            } else if (casting != null) {
+                // Afficher l'écran de modification avec le casting pré-rempli
+                CreateCastingScreen(
+                    onBackClick = {
+                        navController.popBackStack()
+                    },
+                    externalErrorMessage = errorMessage,
+                    existingCasting = casting,
+                    onSaveCastingClick = { titre, descriptionRole, synopsis, dateDebut, dateFin, prix, types, age, ouvert, conditions, lieu, afficheFile ->
+                        isLoading = true
+                        errorMessage = null
+                        scope.launch {
+                            try {
+                                val result = castingRepository.updateCasting(
+                                    id = castingId!!,
+                                    titre = titre,
+                                    descriptionRole = descriptionRole,
+                                    synopsis = synopsis,
+                                    lieu = lieu,
+                                    dateDebut = dateDebut,
+                                    dateFin = dateFin,
+                                    prix = prix,
+                                    types = types,
+                                    age = age,
+                                    ouvert = ouvert,
+                                    conditions = conditions,
+                                    afficheFile = afficheFile
+                                )
+                                result.onSuccess { updatedCasting ->
+                                    isLoading = false
+                                    android.util.Log.d("MainActivity", "✅ Casting modifié avec succès: ${updatedCasting.titre}")
+                                    android.util.Log.d("MainActivity", "🔄 Rafraîchissement de la liste des castings...")
+                                    
+                                    // Incrémenter la clé partagée pour forcer le rafraîchissement de la liste
+                                    castingListRefreshKey++
+                                    android.util.Log.d("MainActivity", "🔄 Clé de rafraîchissement incrémentée: $castingListRefreshKey")
+                                    
+                                    // Retourner à la liste des castings
+                                    navController.popBackStack()
+                                }
+                                result.onFailure { exception ->
+                                    isLoading = false
+                                    errorMessage = getErrorMessage(exception)
+                                    android.util.Log.e("MainActivity", "❌ Erreur modification casting: ${exception.message}", exception)
+                                }
+                            } catch (e: Exception) {
+                                isLoading = false
+                                errorMessage = "Erreur lors de la modification: ${e.message}"
+                                android.util.Log.e("MainActivity", "❌ Exception modification casting: ${e.message}", e)
+                            }
+                        }
+                    }
+                )
+            } else {
+                // Afficher un message d'erreur si le casting n'a pas pu être chargé
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(24.dp)
+                    ) {
+                        Text(
+                            text = errorMessage ?: "Casting introuvable",
+                            color = Color.Red,
+                            fontSize = 16.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = { navController.popBackStack() },
+                            colors = ButtonDefaults.buttonColors(containerColor = DarkBlue)
+                        ) {
+                            Text("Retour")
+                        }
+                    }
+                }
+            }
         }
 
         composable(
@@ -2100,6 +2242,57 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
             // Afficher l'écran de détails seulement si le casting est chargé
             val currentCasting = casting
             if (currentCasting != null) {
+                // Détecter le rôle de l'utilisateur pour afficher le bon écran
+                var userRole by remember { mutableStateOf<String?>(null) }
+                val tokenManager = remember { TokenManager(context) }
+                
+                LaunchedEffect(Unit) {
+                    userRole = withContext(Dispatchers.IO) {
+                        tokenManager.getUserRoleSync()
+                    }
+                }
+                
+                // Afficher l'écran approprié selon le rôle
+                when (userRole?.uppercase()) {
+                    "RECRUTEUR", "AGENCY", "AGENCE" -> {
+                        // Écran pour les agences (sans bouton Submit, avec options d'édition/suppression)
+                        AgencyCastingDetailScreen(
+                            casting = currentCasting,
+                            onBackClick = {
+                                navController.popBackStack()
+                            },
+                            onEditClick = {
+                                // Naviguer vers l'écran d'édition du casting
+                                android.util.Log.d("MainActivity", "✏️ Édition du casting: ${currentCasting.titre}")
+                                navController.navigate("agencyEditCasting/${currentCasting.actualId ?: castingId}")
+                            },
+                            onDeleteClick = {
+                                // Supprimer le casting
+                                android.util.Log.d("MainActivity", "🗑️ Suppression du casting: ${currentCasting.titre}")
+                                scope.launch {
+                                    try {
+                                        val result = castingRepository.deleteCasting(currentCasting.actualId ?: castingId)
+                                        result.onSuccess {
+                                            android.util.Log.d("MainActivity", "✅ Casting supprimé avec succès")
+                                            navController.popBackStack()
+                                        }
+                                        result.onFailure { exception ->
+                                            android.util.Log.e("MainActivity", "❌ Erreur suppression: ${exception.message}", exception)
+                                        }
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("MainActivity", "❌ Exception suppression: ${e.message}", e)
+                                    }
+                                }
+                            },
+                            onViewActorProfile = { acteurId ->
+                                // Naviguer vers le profil de l'acteur
+                                android.util.Log.d("MainActivity", "👤 Voir le profil de l'acteur: $acteurId")
+                                navController.navigate("actorProfile/$acteurId")
+                            }
+                        )
+                    }
+                    else -> {
+                        // Écran pour les acteurs (avec bouton Submit)
                 CastingDetailScreen(
                     casting = currentCasting,
                     onBackClick = {
@@ -2109,24 +2302,26 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                         navController.navigate("map")
                     },
                     onSubmitClick = {
-                            // L'appel API est géré directement dans CastingDetailScreen
-                            android.util.Log.d("MainActivity", "Callback onSubmitClick appelé pour le casting: ${currentCasting.titre}")
+                                    // L'appel API est géré directement dans CastingDetailScreen
+                                    android.util.Log.d("MainActivity", "Callback onSubmitClick appelé pour le casting: ${currentCasting.titre}")
                     },
                     onNavigateToProfile = {
-                            // Navigue vers la page settings de l'acteur
-                            navController.navigate("settings/actor")
-                        },
-                        onNavigateToHome = {
-                            // Retourne à la page d'accueil de l'acteur
-                            navController.navigate("actorHome") {
-                                popUpTo("actorHome") { inclusive = false }
-                            }
-                        },
-                        onNavigateToCandidatures = {
-                            // Navigue vers la page "Mes candidatures"
-                            navController.navigate("myCandidatures")
-                        }
-                    )
+                                    // Navigue vers la page settings de l'acteur
+                                    navController.navigate("settings/actor")
+                                },
+                                onNavigateToHome = {
+                                    // Retourne à la page d'accueil de l'acteur
+                                    navController.navigate("actorHome") {
+                                        popUpTo("actorHome") { inclusive = false }
+                                    }
+                                },
+                                onNavigateToCandidatures = {
+                                    // Navigue vers la page "Mes candidatures"
+                                    navController.navigate("myCandidatures")
+                                }
+                            )
+                    }
+                }
                 } else {
                     // Si le casting est null et qu'on n'est plus en chargement, afficher un message d'erreur
                     Box(
@@ -2222,6 +2417,37 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                 },
                 onHistoryClick = {
                     // Géré par l'alerte "coming soon" dans la navbar
+                }
+            )
+        }
+        
+        // Route pour afficher le profil d'un acteur spécifique (utilisée par les agences)
+        composable(
+            route = "actorProfile/{acteurId}",
+            arguments = listOf(
+                navArgument("acteurId") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val acteurId = backStackEntry.arguments?.getString("acteurId")
+            android.util.Log.d("MainActivity", "👤 Affichage du profil acteur ID: $acteurId")
+            
+            ActorProfileScreen(
+                acteurId = acteurId,
+                loadData = true, // S'assurer que les données sont chargées pour les agences
+                onBackClick = {
+                    navController.popBackStack()
+                },
+                onLogoutClick = {
+                    // Ne devrait pas être accessible en mode lecture seule
+                },
+                onHomeClick = {
+                    navController.popBackStack()
+                },
+                onAgendaClick = {
+                    // Non applicable en mode lecture seule
+                },
+                onHistoryClick = {
+                    // Non applicable en mode lecture seule
                 }
             )
         }
