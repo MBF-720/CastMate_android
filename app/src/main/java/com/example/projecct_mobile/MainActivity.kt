@@ -46,6 +46,7 @@ import com.example.projecct_mobile.ui.screens.acteur.*
 import com.example.projecct_mobile.ui.screens.agence.auth.*
 import com.example.projecct_mobile.ui.screens.agence.casting.*
 import com.example.projecct_mobile.ui.screens.agence.profile.AgencyProfileScreen
+import com.example.projecct_mobile.ui.screens.agence.profile.ActorProfileDetails
 import com.example.projecct_mobile.ui.screens.settings.SettingsScreen
 import com.example.projecct_mobile.ui.screens.acteur.ActorSettingsScreen
 import com.example.projecct_mobile.ui.screens.acteur.MyCandidaturesScreen
@@ -160,6 +161,9 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
         mutableStateOf<AgencySignupData?>(null)
     }
     
+    // Clé partagée pour forcer le rafraîchissement de la liste des castings après création
+    var castingListRefreshKey by remember { mutableStateOf(0) }
+    
     // Vérifier si l'utilisateur est déjà connecté (Remember Me)
     LaunchedEffect(Unit) {
         val tokenManager = TokenManager(context)
@@ -224,12 +228,32 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
         accountResult.onFailure { error ->
             googleSignInLoading = false
             googleSignInError = when (error) {
-                is GoogleApiException -> when (error.statusCode) {
-                    12501 -> "Connexion Google annulée" // SIGN_IN_CANCELLED
-                    7 -> "Impossible de contacter Google. Vérifiez votre connexion."
-                    else -> "Erreur Google (${error.statusCode})"
+                is GoogleApiException -> {
+                    android.util.Log.e("GoogleSignIn", "❌ Erreur Google API: ${error.statusCode}")
+                    android.util.Log.e("GoogleSignIn", "Message: ${error.message}")
+                    when (error.statusCode) {
+                        10 -> {
+                            // DEVELOPER_ERROR - Problème de configuration
+                            android.util.Log.e("GoogleSignIn", "❌ Erreur 10: Configuration OAuth incorrecte")
+                            android.util.Log.e("GoogleSignIn", "Vérifiez dans Google Cloud Console:")
+                            android.util.Log.e("GoogleSignIn", "1. Client OAuth Android créé avec package: com.example.projecct_mobile")
+                            android.util.Log.e("GoogleSignIn", "2. Client OAuth Web configuré")
+                            android.util.Log.e("GoogleSignIn", "3. API Google Sign-In activée")
+                            "Erreur de configuration Google Sign-In (10).\n\n" +
+                            "Vérifiez dans Google Cloud Console:\n" +
+                            "• Client OAuth Android avec package: com.example.projecct_mobile\n" +
+                            "• Client OAuth Web configuré\n" +
+                            "• API Google Sign-In activée"
+                        }
+                        12501 -> "Connexion Google annulée" // SIGN_IN_CANCELLED
+                        7 -> "Impossible de contacter Google. Vérifiez votre connexion."
+                        else -> "Erreur Google (${error.statusCode}): ${error.message}"
+                    }
                 }
-                else -> "Connexion Google annulée"
+                else -> {
+                    android.util.Log.e("GoogleSignIn", "❌ Erreur inconnue: ${error.message}", error)
+                    "Connexion Google annulée: ${error.message}"
+                }
             }
         }.onSuccess { account ->
             val idToken = account.idToken
@@ -705,12 +729,32 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
             googleSignInLoading = false
             isGoogleSignInForAgency = false
             googleSignInError = when (error) {
-                is GoogleApiException -> when (error.statusCode) {
-                    12501 -> "Connexion Google annulée"
-                    7 -> "Impossible de contacter Google. Vérifiez votre connexion."
-                    else -> "Erreur Google (${error.statusCode})"
+                is GoogleApiException -> {
+                    android.util.Log.e("GoogleSignIn", "❌ Erreur Google API (Agence): ${error.statusCode}")
+                    android.util.Log.e("GoogleSignIn", "Message: ${error.message}")
+                    when (error.statusCode) {
+                        10 -> {
+                            // DEVELOPER_ERROR - Problème de configuration
+                            android.util.Log.e("GoogleSignIn", "❌ Erreur 10: Configuration OAuth incorrecte")
+                            android.util.Log.e("GoogleSignIn", "Vérifiez dans Google Cloud Console:")
+                            android.util.Log.e("GoogleSignIn", "1. Client OAuth Android créé avec package: com.example.projecct_mobile")
+                            android.util.Log.e("GoogleSignIn", "2. Client OAuth Web configuré")
+                            android.util.Log.e("GoogleSignIn", "3. API Google Sign-In activée")
+                            "Erreur de configuration Google Sign-In (10).\n\n" +
+                            "Vérifiez dans Google Cloud Console:\n" +
+                            "• Client OAuth Android avec package: com.example.projecct_mobile\n" +
+                            "• Client OAuth Web configuré\n" +
+                            "• API Google Sign-In activée"
+                        }
+                        12501 -> "Connexion Google annulée"
+                        7 -> "Impossible de contacter Google. Vérifiez votre connexion."
+                        else -> "Erreur Google (${error.statusCode}): ${error.message}"
+                    }
                 }
-                else -> "Connexion Google annulée"
+                else -> {
+                    android.util.Log.e("GoogleSignIn", "❌ Erreur inconnue (Agence): ${error.message}", error)
+                    "Connexion Google annulée: ${error.message}"
+                }
             }
         }.onSuccess { account ->
             val idToken = account.idToken
@@ -1330,7 +1374,8 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                     navController.navigate("home") {
                         popUpTo("welcome") { inclusive = false }
                     }
-                }
+                },
+                refreshTrigger = castingListRefreshKey
             )
         }
         
@@ -1366,7 +1411,14 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                             result.onSuccess { casting ->
                                 isLoading = false
                                 android.util.Log.d("MainActivity", "✅ Casting créé avec succès: ${casting.titre}")
-                    navController.popBackStack()
+                                android.util.Log.d("MainActivity", "🔄 Rafraîchissement de la liste des castings...")
+                                
+                                // Incrémenter la clé partagée pour forcer le rafraîchissement de la liste
+                                castingListRefreshKey++
+                                android.util.Log.d("MainActivity", "🔄 Clé de rafraîchissement incrémentée: $castingListRefreshKey")
+                                
+                                // Retourner à la liste des castings
+                                navController.popBackStack()
                             }
                             result.onFailure { exception ->
                                 isLoading = false
@@ -1407,6 +1459,135 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
             )
         }
 
+        // Route pour éditer un casting
+        composable(
+            route = "agencyEditCasting/{castingId}",
+            arguments = listOf(
+                navArgument("castingId") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val castingId = backStackEntry.arguments?.getString("castingId")
+            android.util.Log.d("MainActivity", "📝 Édition du casting ID: $castingId")
+            
+            val castingRepository = remember { CastingRepository() }
+            var isLoading by remember { mutableStateOf(false) }
+            var errorMessage by remember { mutableStateOf<String?>(null) }
+            var casting by remember { mutableStateOf<com.example.projecct_mobile.data.model.Casting?>(null) }
+            var isLoadingCasting by remember { mutableStateOf(true) }
+            
+            // Charger le casting existant
+            LaunchedEffect(castingId) {
+                if (castingId != null) {
+                    isLoadingCasting = true
+                    try {
+                        val result = castingRepository.getCastingById(castingId)
+                        result.onSuccess { loadedCasting ->
+                            casting = loadedCasting
+                            android.util.Log.d("MainActivity", "✅ Casting chargé pour édition: ${loadedCasting.titre}")
+                            isLoadingCasting = false
+                        }
+                        result.onFailure { exception ->
+                            android.util.Log.e("MainActivity", "❌ Erreur chargement casting: ${exception.message}", exception)
+                            errorMessage = "Erreur lors du chargement du casting: ${exception.message}"
+                            isLoadingCasting = false
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("MainActivity", "❌ Exception chargement casting: ${e.message}", e)
+                        errorMessage = "Erreur lors du chargement: ${e.message}"
+                        isLoadingCasting = false
+                    }
+                }
+            }
+            
+            if (isLoadingCasting) {
+                // Afficher un indicateur de chargement
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = DarkBlue)
+                }
+            } else if (casting != null) {
+                // Afficher l'écran de modification avec le casting pré-rempli
+                CreateCastingScreen(
+                    onBackClick = {
+                        navController.popBackStack()
+                    },
+                    externalErrorMessage = errorMessage,
+                    existingCasting = casting,
+                    onSaveCastingClick = { titre, descriptionRole, synopsis, dateDebut, dateFin, prix, types, age, ouvert, conditions, lieu, afficheFile ->
+                        isLoading = true
+                        errorMessage = null
+                        scope.launch {
+                            try {
+                                val result = castingRepository.updateCasting(
+                                    id = castingId!!,
+                                    titre = titre,
+                                    descriptionRole = descriptionRole,
+                                    synopsis = synopsis,
+                                    lieu = lieu,
+                                    dateDebut = dateDebut,
+                                    dateFin = dateFin,
+                                    prix = prix,
+                                    types = types,
+                                    age = age,
+                                    ouvert = ouvert,
+                                    conditions = conditions,
+                                    afficheFile = afficheFile
+                                )
+                                result.onSuccess { updatedCasting ->
+                                    isLoading = false
+                                    android.util.Log.d("MainActivity", "✅ Casting modifié avec succès: ${updatedCasting.titre}")
+                                    android.util.Log.d("MainActivity", "🔄 Rafraîchissement de la liste des castings...")
+                                    
+                                    // Incrémenter la clé partagée pour forcer le rafraîchissement de la liste
+                                    castingListRefreshKey++
+                                    android.util.Log.d("MainActivity", "🔄 Clé de rafraîchissement incrémentée: $castingListRefreshKey")
+                                    
+                                    // Retourner à la liste des castings
+                                    navController.popBackStack()
+                                }
+                                result.onFailure { exception ->
+                                    isLoading = false
+                                    errorMessage = getErrorMessage(exception)
+                                    android.util.Log.e("MainActivity", "❌ Erreur modification casting: ${exception.message}", exception)
+                                }
+                            } catch (e: Exception) {
+                                isLoading = false
+                                errorMessage = "Erreur lors de la modification: ${e.message}"
+                                android.util.Log.e("MainActivity", "❌ Exception modification casting: ${e.message}", e)
+                            }
+                        }
+                    }
+                )
+            } else {
+                // Afficher un message d'erreur si le casting n'a pas pu être chargé
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(24.dp)
+                    ) {
+                        Text(
+                            text = errorMessage ?: "Casting introuvable",
+                            color = Color.Red,
+                            fontSize = 16.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = { navController.popBackStack() },
+                            colors = ButtonDefaults.buttonColors(containerColor = DarkBlue)
+                        ) {
+                            Text("Retour")
+                        }
+                    }
+                }
+            }
+        }
+
         composable(
             route = "settings/{role}",
             arguments = listOf(
@@ -1443,8 +1624,7 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                         navController.navigate("actorProfile")
                     },
                     onFavoritesClick = {
-                        // TODO: Naviguer vers la page des favoris
-                        android.util.Log.d("MainActivity", "Favoris - À implémenter")
+                        navController.navigate("favorites")
                     },
                     onMyCandidaturesClick = {
                         navController.navigate("myCandidatures")
@@ -2137,17 +2317,42 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
             if (currentCasting != null) {
                 // Détecter le rôle de l'utilisateur pour afficher le bon écran
                 var userRole by remember { mutableStateOf<String?>(null) }
+                var isLoadingRole by remember { mutableStateOf(true) }
                 val tokenManager = remember { TokenManager(context) }
 
                 LaunchedEffect(Unit) {
                     userRole = withContext(Dispatchers.IO) {
                         tokenManager.getUserRoleSync()
                     }
+                    android.util.Log.d("MainActivity", "🔍 Rôle utilisateur détecté: '$userRole'")
+                    isLoadingRole = false
                 }
 
-                // Afficher l'écran approprié selon le rôle
-                when (userRole?.uppercase()) {
-                    "RECRUTEUR", "AGENCY", "AGENCE" -> {
+                // Afficher un écran de chargement pendant la détection du rôle
+                if (isLoadingRole) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = com.example.projecct_mobile.ui.theme.DarkBlue)
+                    }
+                } else {
+                    // Afficher l'écran approprié selon le rôle
+                    val roleUpper = userRole?.uppercase()?.trim()
+                    android.util.Log.d("MainActivity", "🎭 Affichage écran pour rôle: '$roleUpper' (original: '$userRole')")
+                    
+                    // Vérifier si c'est un rôle d'agence (plus flexible)
+                    val isAgencyRole = roleUpper?.let { role ->
+                        role == "RECRUTEUR" || 
+                        role == "AGENCY" || 
+                        role == "AGENCE" ||
+                        role.contains("RECRUTEUR", ignoreCase = true) ||
+                        role.contains("AGENCY", ignoreCase = true) ||
+                        role.contains("AGENCE", ignoreCase = true)
+                    } ?: false
+                    
+                    if (isAgencyRole) {
+                        android.util.Log.d("MainActivity", "✅ Affichage AgencyCastingDetailScreen (rôle agence détecté)")
                         // Écran pour les agences (sans bouton Submit, avec options d'édition/suppression)
                         AgencyCastingDetailScreen(
                             casting = currentCasting,
@@ -2183,8 +2388,8 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                                 navController.navigate("actorProfile/$acteurId")
                             }
                         )
-                    }
-                    else -> {
+                    } else {
+                        android.util.Log.d("MainActivity", "✅ Affichage CastingDetailScreen (acteur par défaut, rôle: '$roleUpper')")
                         // Écran pour les acteurs (avec bouton Submit)
                 CastingDetailScreen(
                     casting = currentCasting,
@@ -2215,56 +2420,26 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                             )
                     }
                 }
-                // Afficher l'écran de détails seulement si le casting est chargé
-                val currentCasting = casting
-                if (currentCasting != null) {
-                    CastingDetailScreen(
-                        casting = currentCasting,
-                        onBackClick = {
-                            navController.popBackStack()
-                        },
-                        onMapClick = {
-                            navController.navigate("map")
-                        },
-                        onSubmitClick = {
-                            // L'appel API est géré directement dans CastingDetailScreen
-                            android.util.Log.d("MainActivity", "Callback onSubmitClick appelé pour le casting: ${currentCasting.titre}")
-                        },
-                        onNavigateToProfile = {
-                            // Navigue vers la page settings de l'acteur
-                            navController.navigate("settings/actor")
-                        },
-                        onNavigateToHome = {
-                            // Retourne à la page d'accueil de l'acteur
-                            navController.navigate("actorHome") {
-                                popUpTo("actorHome") { inclusive = false }
-                            }
-                        },
-                        onNavigateToCandidatures = {
-                            // Navigue vers la page "Mes candidatures"
-                            navController.navigate("myCandidatures")
-                        }
-                    )
-                } else {
-                    // Si le casting est null et qu'on n'est plus en chargement, afficher un message d'erreur
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
+            } else {
+                // Si le casting est null et qu'on n'est plus en chargement, afficher un message d'erreur
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            Text(
-                                text = "Casting non trouvé",
-                                color = com.example.projecct_mobile.ui.theme.Red
-                            )
-                            Button(onClick = { navController.popBackStack() }) {
-                                Text("Retour")
-                            }
+                        Text(
+                            text = "Casting non trouvé",
+                            color = com.example.projecct_mobile.ui.theme.Red
+                        )
+                        Button(onClick = { navController.popBackStack() }) {
+                            Text("Retour")
                         }
                     }
                 }
+            }
             }
         }
         
@@ -2317,6 +2492,31 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
             )
         }
         
+        composable("favorites") {
+            FavoritesScreen(
+                onBackClick = {
+                    navController.popBackStack()
+                },
+                onCastingClick = { casting ->
+                    if (casting.id.isNotBlank()) {
+                        android.util.Log.d("MainActivity", "🎬 Navigation vers castingDetail depuis favoris avec ID: '${casting.id}'")
+                        navController.navigate("castingDetail/${casting.id}")
+                    }
+                },
+                onProfileClick = {
+                    navController.navigate("settings/actor")
+                },
+                onHomeClick = {
+                    navController.navigate("actorHome") {
+                        popUpTo("actorHome") { inclusive = true }
+                    }
+                },
+                onMyCandidaturesClick = {
+                    navController.navigate("myCandidatures")
+                }
+            )
+        }
+        
         composable("actorProfile") {
             ActorProfileScreen(
                 onBackClick = {
@@ -2344,6 +2544,42 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
             )
         }
         
+        // Route pour afficher le profil d'un acteur spécifique (utilisée par les agences)
+        composable(
+            route = "actorProfile/{acteurId}",
+            arguments = listOf(
+                navArgument("acteurId") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val acteurId = backStackEntry.arguments?.getString("acteurId")
+            android.util.Log.d("MainActivity", "👤 Affichage du profil acteur ID: $acteurId")
+            
+            ActorProfileDetails(
+                acteurId = acteurId,
+                loadData = acteurId != null, // S'assurer que les données sont chargées pour les agences
+                onBackClick = {
+                    navController.popBackStack()
+                },
+                onNavigateToCastings = {
+                    navController.navigate("agencyCastingList") {
+                        popUpTo("agencyCastingList") { inclusive = false }
+                    }
+                },
+                onNavigateToCreateCasting = {
+                    navController.navigate("agencyCreateCasting")
+                },
+                onLogoutClick = {
+                    // Ne devrait pas être accessible en mode lecture seule pour les agences
+                    scope.launch {
+                        sharedAuthRepository.logout()
+                    }
+                    navController.navigate("home") {
+                        popUpTo("welcome") { inclusive = false }
+                    }
+                }
+            )
+        }
+        
         composable("profile") {
             val scope = rememberCoroutineScope()
             
@@ -2364,6 +2600,5 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                 }
             )
         }
-    }
     }
 }

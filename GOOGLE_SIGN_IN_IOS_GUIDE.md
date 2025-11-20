@@ -109,7 +109,7 @@ class GoogleAuthManager {
         }
         
         let config = GIDConfiguration(clientID: clientId)
-        GIDSignIn.sharedInstance.configuration = config
+        GIDSignIn.redInstance.configuration = config
     }
     
     func signIn(presentingViewController: UIViewController, userType: UserType) async throws -> GoogleSignInResult {
