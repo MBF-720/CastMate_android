@@ -7,6 +7,7 @@ import com.example.projecct_mobile.data.model.Casting
 import com.example.projecct_mobile.data.model.ChatbotResponse
 import com.example.projecct_mobile.data.model.SuggestedActor
 import com.example.projecct_mobile.data.model.gemini.*
+import com.example.projecct_mobile.utils.GeminiConfig
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 import org.json.JSONArray
@@ -20,8 +21,8 @@ class GeminiChatbotRepository {
     private val geminiService: GeminiApiService = ApiClient.getGeminiService()
     private val gson = Gson()
     
-    // Clé API Gemini (à stocker de manière sécurisée)
-    private val GEMINI_API_KEY = "AIzaSyADwL9Vq4JqSBxYmzovCx-VUNDyD_DdBrg"
+    // Clé API Gemini centralisée
+    private val GEMINI_API_KEY = GeminiConfig.GEMINI_API_KEY
     
     /**
      * Interroge Gemini pour filtrer les acteurs d'un casting

@@ -49,6 +49,7 @@ import com.example.projecct_mobile.ui.screens.agence.profile.AgencyProfileScreen
 import com.example.projecct_mobile.ui.screens.agence.profile.ActorProfileDetails
 import com.example.projecct_mobile.ui.screens.settings.SettingsScreen
 import com.example.projecct_mobile.ui.screens.acteur.ActorSettingsScreen
+import com.example.projecct_mobile.ui.screens.acteur.ActorTrainingScreen
 import com.example.projecct_mobile.ui.screens.acteur.MyCandidaturesScreen
 import com.example.projecct_mobile.ui.components.getErrorMessage
 import com.example.projecct_mobile.ui.theme.Projecct_MobileTheme
@@ -1629,6 +1630,9 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                     onMyCandidaturesClick = {
                         navController.navigate("myCandidatures")
                     },
+                    onTrainingClick = {
+                        navController.navigate("actorTraining")
+                    },
                     onSettingsClick = {
                         // TODO: Naviguer vers les réglages de l'application
                         android.util.Log.d("MainActivity", "Réglages - À implémenter")
@@ -2540,6 +2544,14 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                 },
                 onHistoryClick = {
                     // Géré par l'alerte "coming soon" dans la navbar
+                }
+            )
+        }
+        
+        composable("actorTraining") {
+            ActorTrainingScreen(
+                onBackClick = {
+                    navController.popBackStack()
                 }
             )
         }

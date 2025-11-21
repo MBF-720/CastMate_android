@@ -50,6 +50,7 @@ fun ActorSettingsScreen(
     onMyProfileClick: (() -> Unit)? = null,
     onFavoritesClick: (() -> Unit)? = null,
     onMyCandidaturesClick: (() -> Unit)? = null,
+    onTrainingClick: (() -> Unit)? = null,
     onSettingsClick: (() -> Unit)? = null,
     onLogoutClick: (() -> Unit)? = null,
     onHomeClick: () -> Unit = {},
@@ -238,6 +239,15 @@ fun ActorSettingsScreen(
                         icon = Icons.Default.Favorite,
                         iconBackground = Color(0xFFFFE2E7),
                         onClick = onFavoritesClick ?: { showComingSoon = "Favoris" }
+                    )
+
+                    SettingOptionRow(
+                        label = "Entraînement IA",
+                        subtitle = "Améliorer mon jeu d'acteur avec Gemini",
+                        icon = Icons.Default.Psychology,
+                        iconBackground = Color(0xFFE3F2FD),
+                        contentColor = Color(0xFF1976D2),
+                        onClick = onTrainingClick ?: { showComingSoon = "Entraînement" }
                     )
 
                     SettingOptionRow(
