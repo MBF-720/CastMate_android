@@ -112,5 +112,28 @@ object ApiClient {
     fun getMediaService(): MediaApiService {
         return getRetrofit().create(MediaApiService::class.java)
     }
+    
+    /**
+     * Obtient le service Gemini (utilise une URL de base différente)
+     */
+    fun getGeminiService(): GeminiApiService {
+        val gson: Gson = GsonBuilder()
+            .setLenient()
+            .create()
+        
+        val geminiRetrofit = Retrofit.Builder()
+            .baseUrl("https://generativelanguage.googleapis.com/")
+            .addConverterFactory(GsonConverterFactory.create(gson))
+            .client(
+                OkHttpClient.Builder()
+                    .connectTimeout(30, TimeUnit.SECONDS)
+                    .readTimeout(60, TimeUnit.SECONDS) // Plus long pour Gemini
+                    .writeTimeout(30, TimeUnit.SECONDS)
+                    .build()
+            )
+            .build()
+        
+        return geminiRetrofit.create(GeminiApiService::class.java)
+    }
 }
 

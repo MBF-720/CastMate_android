@@ -27,6 +27,8 @@ import androidx.compose.ui.unit.sp
 import com.example.projecct_mobile.data.model.ApiException
 import com.example.projecct_mobile.data.model.Candidat
 import com.example.projecct_mobile.data.model.Casting
+import com.example.projecct_mobile.data.model.ChatbotResponse
+import com.example.projecct_mobile.data.model.SuggestedActor
 import com.example.projecct_mobile.data.repository.ActeurRepository
 import com.example.projecct_mobile.ui.theme.*
 import kotlinx.coroutines.Dispatchers
@@ -48,7 +50,7 @@ fun AgencyCastingDetailScreen(
     var afficheImage by remember { mutableStateOf<ImageBitmap?>(null) }
     var isLoadingImage by remember { mutableStateOf(false) }
     var selectedTabIndex by remember { mutableStateOf(0) }
-    val tabs = listOf("Détails", "Candidats")
+    val tabs = listOf("Détails", "Candidats", "Chatbot")
     var currentCasting by remember { mutableStateOf(casting) }
     var isUpdatingStatus by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -172,7 +174,21 @@ fun AgencyCastingDetailScreen(
                     )
                 }
                 
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // Bouton Chatbot
+                    IconButton(
+                        onClick = { selectedTabIndex = 2 }, // Ouvrir l'onglet Chatbot
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(Color.White.copy(alpha = 0.3f), CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Chat, // Icône chatbot/IA
+                            contentDescription = "Chatbot IA",
+                            tint = White
+                        )
+                    }
+                    
                     IconButton(
                         onClick = onEditClick,
                         modifier = Modifier
@@ -342,7 +358,8 @@ fun AgencyCastingDetailScreen(
                                         }
                                     }
                                 },
-                                isUpdating = isUpdatingStatus
+                                isUpdating = isUpdatingStatus,
+                                onOpenChatbot = { selectedTabIndex = 2 }
                             )
                         }
                     }
@@ -405,6 +422,16 @@ fun AgencyCastingDetailScreen(
                             onViewProfile = onViewActorProfile
                         )
                     }
+                    2 -> {
+                        // Onglet "Chatbot"
+                        ChatbotContent(
+                            castingId = currentCasting.actualId ?: "",
+                            castingTitle = currentCasting.titre ?: "",
+                            casting = currentCasting,
+                            modifier = Modifier.fillMaxSize(),
+                            onViewActorProfile = onViewActorProfile
+                        )
+                    }
                 }
             }
         }
@@ -415,7 +442,8 @@ fun AgencyCastingDetailScreen(
 private fun CastingDetailsContent(
     casting: Casting,
     onToggleStatus: (Boolean) -> Unit = {},
-    isUpdating: Boolean = false
+    isUpdating: Boolean = false,
+    onOpenChatbot: () -> Unit = {}
 ) {
     // Description
     if (!casting.descriptionRole.isNullOrBlank()) {
@@ -606,6 +634,78 @@ private fun CastingDetailsContent(
             )
         }
     }
+    
+    // Bouton Chatbot IA
+    Spacer(modifier = Modifier.height(8.dp))
+    Button(
+        onClick = onOpenChatbot,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = DarkBlue
+        ),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Default.Chat,
+            contentDescription = null,
+            tint = White,
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            text = "💬 Parler au Chatbot IA",
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = White
+        )
+    }
+    
+    // Texte d'aide
+    Text(
+        text = "Le chatbot IA vous aide à trouver les meilleurs acteurs parmi vos candidats",
+        fontSize = 12.sp,
+        color = Color(0xFF999999),
+        modifier = Modifier.padding(top = 8.dp),
+        lineHeight = 16.sp
+    )
+    
+    // Bouton Chatbot IA
+    Spacer(modifier = Modifier.height(8.dp))
+    Button(
+        onClick = onOpenChatbot,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = DarkBlue
+        ),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Default.Chat,
+            contentDescription = null,
+            tint = White,
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            text = "💬 Parler au Chatbot IA",
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = White
+        )
+    }
+    
+    // Texte d'aide
+    Text(
+        text = "Le chatbot IA vous aide à trouver les meilleurs acteurs parmi vos candidats",
+        fontSize = 12.sp,
+        color = Color(0xFF999999),
+        modifier = Modifier.padding(top = 8.dp),
+        lineHeight = 16.sp
+    )
 }
 
 @Composable

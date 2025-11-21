@@ -5,6 +5,8 @@ import com.example.projecct_mobile.data.api.CastingApiService
 import com.example.projecct_mobile.data.model.ApiException
 import com.example.projecct_mobile.data.model.Casting
 import com.example.projecct_mobile.data.model.CandidateStatusResponse
+import com.example.projecct_mobile.data.model.ChatbotQueryRequest
+import com.example.projecct_mobile.data.model.ChatbotResponse
 import com.example.projecct_mobile.data.model.CreateCastingRequest
 import com.google.gson.Gson
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
