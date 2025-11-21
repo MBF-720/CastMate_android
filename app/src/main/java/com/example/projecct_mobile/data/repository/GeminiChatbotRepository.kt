@@ -21,7 +21,7 @@ class GeminiChatbotRepository {
     private val gson = Gson()
     
     // Clé API Gemini (à stocker de manière sécurisée)
-    private val GEMINI_API_KEY = "AIzaSyBljBG6NkM2SoTya_YpwsAr8wzLiZatP40"
+    private val GEMINI_API_KEY = "AIzaSyADwL9Vq4JqSBxYmzovCx-VUNDyD_DdBrg"
     
     /**
      * Interroge Gemini pour filtrer les acteurs d'un casting
