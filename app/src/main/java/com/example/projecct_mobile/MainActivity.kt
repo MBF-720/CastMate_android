@@ -1,6 +1,7 @@
 package com.example.projecct_mobile
 
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -45,6 +46,7 @@ import com.example.projecct_mobile.ui.screens.acteur.*
 import com.example.projecct_mobile.ui.screens.agence.auth.*
 import com.example.projecct_mobile.ui.screens.agence.casting.*
 import com.example.projecct_mobile.ui.screens.agence.profile.AgencyProfileScreen
+import com.example.projecct_mobile.ui.screens.agence.profile.ActorProfileDetails
 import com.example.projecct_mobile.ui.screens.settings.SettingsScreen
 import com.example.projecct_mobile.ui.screens.acteur.ActorSettingsScreen
 import com.example.projecct_mobile.ui.screens.acteur.MyCandidaturesScreen
@@ -61,6 +63,38 @@ import java.io.File
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
 import android.net.Uri
+
+/**
+ * Classe de données pour stocker temporairement les informations d'inscription d'un acteur
+ */
+data class ActorSignupData(
+    val nom: String,
+    val prenom: String,
+    val age: Int,
+    val email: String,
+    val motDePasse: String,
+    val telephone: String,
+    val gouvernorat: String,
+    val photoProfil: String? = null,
+    val experience: Int = 0,
+    val cvPdf: String? = null,
+    val instagram: String? = null,
+    val youtube: String? = null,
+    val tiktok: String? = null
+)
+
+data class AgencySignupData(
+    val nomAgence: String,
+    val nomResponsable: String,
+    val email: String,
+    val telephone: String,
+    val gouvernorat: String,
+    val motDePasse: String,
+    val siteWeb: String? = null,
+    val description: String = "",
+    val logoUrl: String? = null,
+    val documentUrl: String? = null
+)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -194,12 +228,32 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
         accountResult.onFailure { error ->
             googleSignInLoading = false
             googleSignInError = when (error) {
-                is GoogleApiException -> when (error.statusCode) {
-                    12501 -> "Connexion Google annulée" // SIGN_IN_CANCELLED
-                    7 -> "Impossible de contacter Google. Vérifiez votre connexion."
-                    else -> "Erreur Google (${error.statusCode})"
+                is GoogleApiException -> {
+                    android.util.Log.e("GoogleSignIn", "❌ Erreur Google API: ${error.statusCode}")
+                    android.util.Log.e("GoogleSignIn", "Message: ${error.message}")
+                    when (error.statusCode) {
+                        10 -> {
+                            // DEVELOPER_ERROR - Problème de configuration
+                            android.util.Log.e("GoogleSignIn", "❌ Erreur 10: Configuration OAuth incorrecte")
+                            android.util.Log.e("GoogleSignIn", "Vérifiez dans Google Cloud Console:")
+                            android.util.Log.e("GoogleSignIn", "1. Client OAuth Android créé avec package: com.example.projecct_mobile")
+                            android.util.Log.e("GoogleSignIn", "2. Client OAuth Web configuré")
+                            android.util.Log.e("GoogleSignIn", "3. API Google Sign-In activée")
+                            "Erreur de configuration Google Sign-In (10).\n\n" +
+                            "Vérifiez dans Google Cloud Console:\n" +
+                            "• Client OAuth Android avec package: com.example.projecct_mobile\n" +
+                            "• Client OAuth Web configuré\n" +
+                            "• API Google Sign-In activée"
+                        }
+                        12501 -> "Connexion Google annulée" // SIGN_IN_CANCELLED
+                        7 -> "Impossible de contacter Google. Vérifiez votre connexion."
+                        else -> "Erreur Google (${error.statusCode}): ${error.message}"
+                    }
                 }
-                else -> "Connexion Google annulée"
+                else -> {
+                    android.util.Log.e("GoogleSignIn", "❌ Erreur inconnue: ${error.message}", error)
+                    "Connexion Google annulée: ${error.message}"
+                }
             }
         }.onSuccess { account ->
             val idToken = account.idToken
@@ -675,12 +729,32 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
             googleSignInLoading = false
             isGoogleSignInForAgency = false
             googleSignInError = when (error) {
-                is GoogleApiException -> when (error.statusCode) {
-                    12501 -> "Connexion Google annulée"
-                    7 -> "Impossible de contacter Google. Vérifiez votre connexion."
-                    else -> "Erreur Google (${error.statusCode})"
+                is GoogleApiException -> {
+                    android.util.Log.e("GoogleSignIn", "❌ Erreur Google API (Agence): ${error.statusCode}")
+                    android.util.Log.e("GoogleSignIn", "Message: ${error.message}")
+                    when (error.statusCode) {
+                        10 -> {
+                            // DEVELOPER_ERROR - Problème de configuration
+                            android.util.Log.e("GoogleSignIn", "❌ Erreur 10: Configuration OAuth incorrecte")
+                            android.util.Log.e("GoogleSignIn", "Vérifiez dans Google Cloud Console:")
+                            android.util.Log.e("GoogleSignIn", "1. Client OAuth Android créé avec package: com.example.projecct_mobile")
+                            android.util.Log.e("GoogleSignIn", "2. Client OAuth Web configuré")
+                            android.util.Log.e("GoogleSignIn", "3. API Google Sign-In activée")
+                            "Erreur de configuration Google Sign-In (10).\n\n" +
+                            "Vérifiez dans Google Cloud Console:\n" +
+                            "• Client OAuth Android avec package: com.example.projecct_mobile\n" +
+                            "• Client OAuth Web configuré\n" +
+                            "• API Google Sign-In activée"
+                        }
+                        12501 -> "Connexion Google annulée"
+                        7 -> "Impossible de contacter Google. Vérifiez votre connexion."
+                        else -> "Erreur Google (${error.statusCode}): ${error.message}"
+                    }
                 }
-                else -> "Connexion Google annulée"
+                else -> {
+                    android.util.Log.e("GoogleSignIn", "❌ Erreur inconnue (Agence): ${error.message}", error)
+                    "Connexion Google annulée: ${error.message}"
+                }
             }
         }.onSuccess { account ->
             val idToken = account.idToken
@@ -1384,7 +1458,7 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                 }
             )
         }
-        
+
         // Route pour éditer un casting
         composable(
             route = "agencyEditCasting/{castingId}",
@@ -1550,8 +1624,7 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                         navController.navigate("actorProfile")
                     },
                     onFavoritesClick = {
-                        // TODO: Naviguer vers la page des favoris
-                        android.util.Log.d("MainActivity", "Favoris - À implémenter")
+                        navController.navigate("favorites")
                     },
                     onMyCandidaturesClick = {
                         navController.navigate("myCandidatures")
@@ -2244,17 +2317,42 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
             if (currentCasting != null) {
                 // Détecter le rôle de l'utilisateur pour afficher le bon écran
                 var userRole by remember { mutableStateOf<String?>(null) }
+                var isLoadingRole by remember { mutableStateOf(true) }
                 val tokenManager = remember { TokenManager(context) }
-                
+
                 LaunchedEffect(Unit) {
                     userRole = withContext(Dispatchers.IO) {
                         tokenManager.getUserRoleSync()
                     }
+                    android.util.Log.d("MainActivity", "🔍 Rôle utilisateur détecté: '$userRole'")
+                    isLoadingRole = false
                 }
-                
-                // Afficher l'écran approprié selon le rôle
-                when (userRole?.uppercase()) {
-                    "RECRUTEUR", "AGENCY", "AGENCE" -> {
+
+                // Afficher un écran de chargement pendant la détection du rôle
+                if (isLoadingRole) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = com.example.projecct_mobile.ui.theme.DarkBlue)
+                    }
+                } else {
+                    // Afficher l'écran approprié selon le rôle
+                    val roleUpper = userRole?.uppercase()?.trim()
+                    android.util.Log.d("MainActivity", "🎭 Affichage écran pour rôle: '$roleUpper' (original: '$userRole')")
+                    
+                    // Vérifier si c'est un rôle d'agence (plus flexible)
+                    val isAgencyRole = roleUpper?.let { role ->
+                        role == "RECRUTEUR" || 
+                        role == "AGENCY" || 
+                        role == "AGENCE" ||
+                        role.contains("RECRUTEUR", ignoreCase = true) ||
+                        role.contains("AGENCY", ignoreCase = true) ||
+                        role.contains("AGENCE", ignoreCase = true)
+                    } ?: false
+                    
+                    if (isAgencyRole) {
+                        android.util.Log.d("MainActivity", "✅ Affichage AgencyCastingDetailScreen (rôle agence détecté)")
                         // Écran pour les agences (sans bouton Submit, avec options d'édition/suppression)
                         AgencyCastingDetailScreen(
                             casting = currentCasting,
@@ -2290,8 +2388,8 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                                 navController.navigate("actorProfile/$acteurId")
                             }
                         )
-                    }
-                    else -> {
+                    } else {
+                        android.util.Log.d("MainActivity", "✅ Affichage CastingDetailScreen (acteur par défaut, rôle: '$roleUpper')")
                         // Écran pour les acteurs (avec bouton Submit)
                 CastingDetailScreen(
                     casting = currentCasting,
@@ -2322,26 +2420,26 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                             )
                     }
                 }
-                } else {
-                    // Si le casting est null et qu'on n'est plus en chargement, afficher un message d'erreur
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
+            } else {
+                // Si le casting est null et qu'on n'est plus en chargement, afficher un message d'erreur
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            Text(
-                                text = "Casting non trouvé",
-                                color = com.example.projecct_mobile.ui.theme.Red
-                            )
-                            Button(onClick = { navController.popBackStack() }) {
-                                Text("Retour")
-                            }
+                        Text(
+                            text = "Casting non trouvé",
+                            color = com.example.projecct_mobile.ui.theme.Red
+                        )
+                        Button(onClick = { navController.popBackStack() }) {
+                            Text("Retour")
                         }
                     }
                 }
+            }
             }
         }
         
@@ -2394,6 +2492,31 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
             )
         }
         
+        composable("favorites") {
+            FavoritesScreen(
+                onBackClick = {
+                    navController.popBackStack()
+                },
+                onCastingClick = { casting ->
+                    if (casting.id.isNotBlank()) {
+                        android.util.Log.d("MainActivity", "🎬 Navigation vers castingDetail depuis favoris avec ID: '${casting.id}'")
+                        navController.navigate("castingDetail/${casting.id}")
+                    }
+                },
+                onProfileClick = {
+                    navController.navigate("settings/actor")
+                },
+                onHomeClick = {
+                    navController.navigate("actorHome") {
+                        popUpTo("actorHome") { inclusive = true }
+                    }
+                },
+                onMyCandidaturesClick = {
+                    navController.navigate("myCandidatures")
+                }
+            )
+        }
+        
         composable("actorProfile") {
             ActorProfileScreen(
                 onBackClick = {
@@ -2431,23 +2554,28 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
             val acteurId = backStackEntry.arguments?.getString("acteurId")
             android.util.Log.d("MainActivity", "👤 Affichage du profil acteur ID: $acteurId")
             
-            ActorProfileScreen(
+            ActorProfileDetails(
                 acteurId = acteurId,
-                loadData = true, // S'assurer que les données sont chargées pour les agences
+                loadData = acteurId != null, // S'assurer que les données sont chargées pour les agences
                 onBackClick = {
                     navController.popBackStack()
                 },
+                onNavigateToCastings = {
+                    navController.navigate("agencyCastingList") {
+                        popUpTo("agencyCastingList") { inclusive = false }
+                    }
+                },
+                onNavigateToCreateCasting = {
+                    navController.navigate("agencyCreateCasting")
+                },
                 onLogoutClick = {
-                    // Ne devrait pas être accessible en mode lecture seule
-                },
-                onHomeClick = {
-                    navController.popBackStack()
-                },
-                onAgendaClick = {
-                    // Non applicable en mode lecture seule
-                },
-                onHistoryClick = {
-                    // Non applicable en mode lecture seule
+                    // Ne devrait pas être accessible en mode lecture seule pour les agences
+                    scope.launch {
+                        sharedAuthRepository.logout()
+                    }
+                    navController.navigate("home") {
+                        popUpTo("welcome") { inclusive = false }
+                    }
                 }
             )
         }
@@ -2474,35 +2602,3 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
         }
     }
 }
-
-/**
- * Classe de données pour stocker temporairement les informations d'inscription d'un acteur
- */
-private data class ActorSignupData(
-    val nom: String,
-    val prenom: String,
-    val age: Int,
-    val email: String,
-    val motDePasse: String,
-    val telephone: String,
-    val gouvernorat: String,
-    val photoProfil: String? = null,
-    val experience: Int = 0,
-    val cvPdf: String? = null,
-    val instagram: String? = null,
-    val youtube: String? = null,
-    val tiktok: String? = null
-)
-
-private data class AgencySignupData(
-    val nomAgence: String,
-    val nomResponsable: String,
-    val email: String,
-    val telephone: String,
-    val gouvernorat: String,
-    val motDePasse: String,
-    val siteWeb: String? = null,
-    val description: String = "",
-    val logoUrl: String? = null,
-    val documentUrl: String? = null
-)

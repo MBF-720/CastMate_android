@@ -459,13 +459,7 @@ fun CastingListAgencyScreen(
                             items(filteredItems) { casting ->
                                 LocalAgencyCastingCard(
                                     casting = casting,
-                                    onEditClick = { onItemClick(casting) },
-                                    onFavoriteToggle = {
-                                        castings = castings.map { item ->
-                                            if (item.id == casting.id) item.copy(isFavorite = !item.isFavorite)
-                                            else item
-                                        }
-                                    }
+                                    onEditClick = { onItemClick(casting) }
                                 )
                             }
                         }
@@ -542,8 +536,7 @@ private fun Casting.belongsToRecruiter(recruiterId: String): Boolean {
 @Composable
 private fun LocalAgencyCastingCard(
     casting: CastingItem,
-    onEditClick: () -> Unit,
-    onFavoriteToggle: () -> Unit
+    onEditClick: () -> Unit
 ) {
     val context = LocalContext.current
     val agenceRepository = remember { AgenceRepository() }
@@ -728,7 +721,7 @@ private fun LocalAgencyCastingCard(
                     }
                 }
                 
-                // Prix et favori en bas à droite
+                // Prix en bas à droite
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,
@@ -738,20 +731,8 @@ private fun LocalAgencyCastingCard(
                         text = casting.compensation,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
-                        color = DarkBlue,
-                        modifier = Modifier.padding(end = 8.dp)
+                        color = DarkBlue
                     )
-                    IconButton(
-                        onClick = onFavoriteToggle,
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (casting.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                            contentDescription = "Favorite",
-                            tint = RedHeart,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
                 }
             }
         }

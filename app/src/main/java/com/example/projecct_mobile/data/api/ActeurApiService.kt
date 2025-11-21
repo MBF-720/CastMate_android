@@ -91,5 +91,34 @@ interface ActeurApiService {
     suspend fun downloadMedia(
         @Path("fileId") fileId: String
     ): Response<ResponseBody>
+    
+    /**
+     * Ajoute un casting aux favoris d'un acteur.
+     * POST /acteur/{id}/favoris/{castingId}
+     */
+    @POST("acteur/{id}/favoris/{castingId}")
+    suspend fun addFavorite(
+        @Path("id") id: String,
+        @Path("castingId") castingId: String
+    ): Response<ResponseBody>
+    
+    /**
+     * Retire un casting des favoris d'un acteur.
+     * DELETE /acteur/{id}/favoris/{castingId}
+     */
+    @DELETE("acteur/{id}/favoris/{castingId}")
+    suspend fun removeFavorite(
+        @Path("id") id: String,
+        @Path("castingId") castingId: String
+    ): Response<ResponseBody>
+    
+    /**
+     * Consulte la liste des favoris d'un acteur.
+     * GET /acteur/{id}/favoris
+     */
+    @GET("acteur/{id}/favoris")
+    suspend fun getFavorites(
+        @Path("id") id: String
+    ): Response<List<com.example.projecct_mobile.data.model.Casting>>
 }
 

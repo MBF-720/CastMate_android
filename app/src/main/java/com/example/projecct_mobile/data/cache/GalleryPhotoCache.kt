@@ -11,18 +11,44 @@ import java.io.File
 import java.io.FileOutputStream
 
 /**
- * Cache pour les photos de la galerie d'un acteur.
- * Utilise un cache mémoire et un cache disque pour améliorer les performances.
+ * Cache pour les photos de la galerie
+ * Stocke les photos en mémoire et sur le disque pour éviter de les re-télécharger
  */
 object GalleryPhotoCache {
-    // Cache mémoire : Map<fileId, ImageBitmap>
+    // Cache en mémoire (Map<fileId, ImageBitmap>)
     private val memoryCache = mutableMapOf<String, ImageBitmap>()
-
+    
+    // Obtenir le répertoire de cache pour les photos
+    private fun getCacheDir(context: Context): File {
+        val cacheDir = File(context.cacheDir, "gallery_photos")
+        if (!cacheDir.exists()) {
+            cacheDir.mkdirs()
+        }
+        return cacheDir
+    }
+    
     /**
-     * Récupère une photo depuis le cache (mémoire ou disque).
-     * @param context Le contexte Android
-     * @param fileId L'ID du fichier
-     * @return L'ImageBitmap si trouvée, null sinon
+     * Obtenir le fichier de cache pour une photo
+     */
+    private fun getCacheFile(context: Context, fileId: String): File {
+        return File(getCacheDir(context), "photo_$fileId.jpg")
+    }
+    
+    /**
+     * Vérifier si une photo est en cache
+     */
+    fun isCached(context: Context, fileId: String): Boolean {
+        // Vérifier d'abord le cache mémoire
+        if (memoryCache.containsKey(fileId)) {
+            return true
+        }
+        // Vérifier ensuite le cache disque
+        return getCacheFile(context, fileId).exists()
+    }
+    
+    /**
+     * Obtenir une photo depuis le cache
+     * Retourne null si la photo n'est pas en cache
      */
     suspend fun get(context: Context, fileId: String): ImageBitmap? = withContext(Dispatchers.IO) {
         // Vérifier d'abord le cache mémoire
@@ -47,13 +73,9 @@ object GalleryPhotoCache {
         }
         null
     }
-
+    
     /**
-     * Met une photo en cache (mémoire et disque).
-     * @param context Le contexte Android
-     * @param fileId L'ID du fichier
-     * @param bytes Les bytes de l'image
-     * @return L'ImageBitmap décodée
+     * Mettre une photo en cache
      */
     suspend fun put(context: Context, fileId: String, bytes: ByteArray): ImageBitmap? = withContext(Dispatchers.IO) {
         try {
@@ -79,11 +101,9 @@ object GalleryPhotoCache {
         }
         null
     }
-
+    
     /**
-     * Supprime une photo du cache (mémoire et disque).
-     * @param context Le contexte Android
-     * @param fileId L'ID du fichier
+     * Supprimer une photo du cache
      */
     suspend fun remove(context: Context, fileId: String) = withContext(Dispatchers.IO) {
         // Supprimer du cache mémoire
@@ -95,31 +115,25 @@ object GalleryPhotoCache {
             cacheFile.delete()
         }
     }
-
+    
     /**
-     * Vide tout le cache (mémoire et disque).
-     * @param context Le contexte Android
+     * Vider le cache
      */
     suspend fun clear(context: Context) = withContext(Dispatchers.IO) {
         // Vider le cache mémoire
         memoryCache.clear()
         
         // Vider le cache disque
-        val cacheDir = File(context.cacheDir, "gallery_photos")
-        if (cacheDir.exists()) {
-            cacheDir.listFiles()?.forEach { it.delete() }
-        }
+        val cacheDir = getCacheDir(context)
+        cacheDir.listFiles()?.forEach { it.delete() }
     }
-
+    
     /**
-     * Retourne le fichier de cache pour un fileId donné.
+     * Obtenir la taille du cache disque
      */
-    private fun getCacheFile(context: Context, fileId: String): File {
-        val cacheDir = File(context.cacheDir, "gallery_photos")
-        if (!cacheDir.exists()) {
-            cacheDir.mkdirs()
-        }
-        return File(cacheDir, "photo_$fileId.jpg")
+    fun getCacheSize(context: Context): Long {
+        val cacheDir = getCacheDir(context)
+        return cacheDir.listFiles()?.sumOf { it.length() } ?: 0L
     }
 }
 

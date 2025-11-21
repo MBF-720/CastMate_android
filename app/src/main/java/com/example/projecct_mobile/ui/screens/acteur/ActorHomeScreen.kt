@@ -40,11 +40,13 @@ import com.example.projecct_mobile.ui.components.ComingSoonAlert
 import com.example.projecct_mobile.ui.components.ErrorMessage
 import com.example.projecct_mobile.ui.components.getErrorMessage
 import com.example.projecct_mobile.data.model.Casting
+import com.example.projecct_mobile.data.repository.UserRepository
 import com.example.projecct_mobile.ui.screens.casting.CastingItem
 import com.example.projecct_mobile.ui.screens.casting.toCastingItem
 import com.example.projecct_mobile.ui.theme.*
 import com.example.projecct_mobile.ui.components.ActorBottomNavigationBar
 import com.example.projecct_mobile.ui.components.NavigationItem
+import com.example.projecct_mobile.data.model.CastingFilters
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -58,7 +60,7 @@ fun ActorHomeScreen(
     onCastingClick: (CastingItem) -> Unit = {},
     onProfileClick: () -> Unit = {},
     onAgendaClick: () -> Unit = {},
-    onFilterClick: () -> Unit = {},
+    onFilterClick: (CastingFilters) -> Unit = {},
     onHistoryClick: () -> Unit = {},
     onLogoutClick: () -> Unit = {},
     onMyCandidaturesClick: () -> Unit = {},
@@ -67,10 +69,14 @@ fun ActorHomeScreen(
     initialUserName: String = "",
     initialUserEmail: String = "",
     initialUserPrenom: String = "",
-    initialUserNom: String = ""
+    initialUserNom: String = "",
+    reloadKey: Int = 0,
+    initialFilters: CastingFilters = CastingFilters()
 ) {
-    var searchQuery by remember { mutableStateOf("") }
+    var filters by remember { mutableStateOf(initialFilters) }
+    var searchQuery by remember { mutableStateOf(filters.searchQuery) }
     var castings by remember { mutableStateOf(initialCastings) }
+    var allCastingsData by remember { mutableStateOf<List<Casting>>(emptyList()) } // Stocker les Casting originaux pour le filtrage
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showComingSoon by remember { mutableStateOf<String?>(null) }
@@ -85,8 +91,61 @@ fun ActorHomeScreen(
     val acteurRepository = remember(loadData) {
         if (loadData) ActeurRepository() else null
     }
+    val userRepository = remember(loadData) {
+        if (loadData) UserRepository() else null
+    }
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
+    var favoriteIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    
+    // Fonction pour appliquer tous les filtres
+    val applyFilters = remember { 
+        { castingsData: List<Casting>, currentFilters: CastingFilters, favoriteIdsSet: Set<String> ->
+            castingsData.filter { casting ->
+                // Filtre par recherche textuelle
+                val matchesSearch = currentFilters.searchQuery.isBlank() || 
+                    (casting.titre?.contains(currentFilters.searchQuery, ignoreCase = true) == true) ||
+                    (casting.descriptionRole?.contains(currentFilters.searchQuery, ignoreCase = true) == true) ||
+                    (casting.synopsis?.contains(currentFilters.searchQuery, ignoreCase = true) == true)
+                
+                // Filtre par types
+                val matchesTypes = currentFilters.selectedTypes.isEmpty() || 
+                    (casting.types?.any { type -> currentFilters.selectedTypes.contains(type) } == true)
+                
+                // Filtre par prix
+                val matchesPrice = when {
+                    currentFilters.minPrice != null && currentFilters.maxPrice != null -> {
+                        casting.prix != null && casting.prix >= currentFilters.minPrice && casting.prix <= currentFilters.maxPrice
+                    }
+                    currentFilters.minPrice != null -> {
+                        casting.prix != null && casting.prix >= currentFilters.minPrice
+                    }
+                    currentFilters.maxPrice != null -> {
+                        casting.prix != null && casting.prix <= currentFilters.maxPrice
+                    }
+                    else -> true
+                }
+                
+                // Filtre par lieu
+                val matchesLieu = currentFilters.lieu.isNullOrBlank() ||
+                    (casting.lieu?.contains(currentFilters.lieu ?: "", ignoreCase = true) == true)
+                
+                // Filtre par date début
+                val matchesDateDebut = currentFilters.dateDebut.isNullOrBlank() ||
+                    (casting.dateDebut?.let { it >= (currentFilters.dateDebut ?: "") } == true)
+                
+                // Filtre par date fin
+                val matchesDateFin = currentFilters.dateFin.isNullOrBlank() ||
+                    (casting.dateFin?.let { it <= (currentFilters.dateFin ?: "") } == true)
+                
+                matchesSearch && matchesTypes && matchesPrice && matchesLieu && matchesDateDebut && matchesDateFin
+            }.map { casting ->
+                val item = casting.toCastingItem()
+                val castingId = casting.actualId
+                item.copy(isFavorite = castingId != null && favoriteIdsSet.contains(castingId))
+            }
+        }
+    }
     
     // Charger les informations utilisateur
     LaunchedEffect(Unit, loadData) {
@@ -119,23 +178,78 @@ fun ActorHomeScreen(
         }
     }
     
-    // Charger les castings
+    // Charger les favoris et les castings - fusionné en un seul LaunchedEffect pour éviter les requêtes en double
+    // Ne pas utiliser reloadKey pour éviter les rechargements en boucle
     LaunchedEffect(Unit, loadData) {
         if (!loadData) {
             isLoading = false
             errorMessage = null
             return@LaunchedEffect
         }
-        isLoading = true
-        errorMessage = null
         
         try {
+            isLoading = true
+            errorMessage = null
+            
+            // Récupérer l'ID de l'acteur pour filtrer les candidatures
+            val acteurId = acteurRepository?.getCurrentActeurId()
+            
+            // Charger les favoris en premier
+            val userResult = userRepository?.getCurrentUser()
+            var loadedFavoriteIds = favoriteIds // Utiliser les favoris existants par défaut
+            
+            if (userResult?.isSuccess == true) {
+                val user = userResult.getOrNull()
+                val userId = user?.actualId
+                if (!userId.isNullOrBlank()) {
+                    try {
+                        val favoritesResult = acteurRepository?.getFavorites(userId)
+                        favoritesResult?.onSuccess { favorites ->
+                            loadedFavoriteIds = favorites.mapNotNull { it.actualId }.toSet()
+                            favoriteIds = loadedFavoriteIds
+                        }
+                        favoritesResult?.onFailure {
+                            // En cas d'erreur, utiliser les favoris existants
+                            android.util.Log.w("ActorHomeScreen", "Erreur chargement favoris, utilisation des favoris existants")
+                        }
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        // Requête annulée, c'est normal
+                        throw e
+                    } catch (e: Exception) {
+                        android.util.Log.e("ActorHomeScreen", "Erreur chargement favoris: ${e.message}")
+                    }
+                }
+            }
+            
+            // Ensuite charger les castings
             val result = castingRepository?.getAllCastings()
             
             result?.onSuccess { apiCastings ->
+                // Filtrer les castings où l'acteur a déjà postulé
+                val filteredCastings = if (acteurId != null) {
+                    apiCastings.filter { casting ->
+                        val candidats = casting.candidats ?: emptyList()
+                        // Exclure les castings où l'acteur a déjà postulé
+                        val hasApplied = candidats.any { candidat ->
+                            candidat.acteurId?.actualId == acteurId
+                        }
+                        !hasApplied
+                    }
+                } else {
+                    // Si on ne peut pas récupérer l'ID de l'acteur, afficher tous les castings
+                    apiCastings
+                }
+                
                 // Trier les castings par date de création (les plus récents en haut)
-                val sortedCastings = apiCastings.sortedByDescending { it.getCreationTimestamp() }
-                castings = sortedCastings.map { it.toCastingItem() }
+                val sortedCastings = filteredCastings.sortedByDescending { it.getCreationTimestamp() }
+                
+                // Stocker les Casting originaux pour le filtrage
+                allCastingsData = sortedCastings
+                
+                // Appliquer les filtres et convertir en CastingItem
+                val filteredAndMapped = applyFilters(sortedCastings, filters, loadedFavoriteIds)
+                castings = filteredAndMapped
+                
                 isLoading = false
             }
             
@@ -143,83 +257,99 @@ fun ActorHomeScreen(
                 errorMessage = getErrorMessage(exception)
                 isLoading = false
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Requête annulée - c'est normal quand on navigue rapidement
+            android.util.Log.d("ActorHomeScreen", "⚠️ Requête annulée (normal)")
+            // Ne pas mettre à jour isLoading car la composition a peut-être changé
         } catch (e: Exception) {
             errorMessage = getErrorMessage(e)
             isLoading = false
         }
     }
     
-    Column(
-        modifier = Modifier
+    // Mettre à jour isFavorite quand favoriteIds change et réappliquer les filtres
+    LaunchedEffect(favoriteIds, filters) {
+        if (!loadData) return@LaunchedEffect
+        val filteredAndMapped = applyFilters(allCastingsData, filters, favoriteIds)
+        castings = filteredAndMapped
+    }
+    
+    // Synchroniser searchQuery avec filters
+    LaunchedEffect(searchQuery) {
+        filters = filters.copy(searchQuery = searchQuery)
+    }
+    
+            Column(
+                modifier = Modifier
             .fillMaxSize()
             .background(DarkBlue)
-    ) {
+            ) {
         // Espacement en haut pour donner plus d'espace à la zone bleue
         Spacer(modifier = Modifier.height(24.dp))
         
         // Barre supérieure avec titre et champ de recherche
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
                 .padding(horizontal = 16.dp)
-        ) {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+                ) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
                 // Titre
-                Text(
+                            Text(
                     text = "CastMate",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = White,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = White,
                     textAlign = TextAlign.Start
-                )
-                
+                    )
+            
                 // Barre de recherche avec filtre
-                Row(
+            Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        modifier = Modifier.weight(1f),
+            ) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier.weight(1f),
                         placeholder = { Text("Search casting", color = GrayBorder) },
-                        leadingIcon = {
+                    leadingIcon = {
                             Icon(Icons.Default.Search, null, tint = GrayBorder)
-                        },
-                        shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = White,
                             unfocusedBorderColor = White.copy(alpha = 0.5f),
                             focusedTextColor = White,
                             unfocusedTextColor = White,
                             focusedPlaceholderColor = GrayBorder,
                             unfocusedPlaceholderColor = GrayBorder
-                        ),
-                        singleLine = true
-                    )
-                    
-                    IconButton(
-                        onClick = { onFilterClick() },
-                        modifier = Modifier
-                            .size(56.dp)
-                            .background(
+                    ),
+                    singleLine = true
+                )
+                
+                IconButton(
+                        onClick = { onFilterClick(filters) },
+                    modifier = Modifier
+                        .size(56.dp)
+                        .background(
                                 White.copy(alpha = 0.2f),
-                                RoundedCornerShape(12.dp)
-                            )
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Tune,
-                            contentDescription = "Filtres",
-                            tint = White
+                            RoundedCornerShape(12.dp)
                         )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Tune,
+                        contentDescription = "Filtres",
+                            tint = White
+                    )
                     }
                 }
+                }
             }
-        }
-        
+            
         // Espacement avant la liste (donner plus d'espace à la zone bleue)
         Spacer(modifier = Modifier.height(20.dp))
         
@@ -237,69 +367,128 @@ fun ActorHomeScreen(
                         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
                     )
             ) {
-            if (isLoading) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(color = DarkBlue)
-                }
-            } else if (errorMessage != null) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    ErrorMessage(
-                        message = errorMessage ?: "Erreur",
-                        onRetry = {
-                            scope.launch {
-                                if (castingRepository == null) return@launch
-                                isLoading = true
-                                errorMessage = null
-                                try {
-                                    val result = castingRepository.getAllCastings()
-                                    result.onSuccess { apiCastings ->
+                if (isLoading) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = DarkBlue)
+                    }
+                } else if (errorMessage != null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        ErrorMessage(
+                            message = errorMessage ?: "Erreur",
+                            onRetry = {
+                                scope.launch {
+                                    if (castingRepository == null) return@launch
+                                    isLoading = true
+                                    errorMessage = null
+                                    try {
+                                        val result = castingRepository.getAllCastings()
+                                        result.onSuccess { apiCastings ->
                                         // Trier les castings par date de création (les plus récents en haut)
                                         val sortedCastings = apiCastings.sortedByDescending { it.getCreationTimestamp() }
                                         castings = sortedCastings.map { it.toCastingItem() }
+                                            isLoading = false
+                                        }
+                                        result.onFailure { exception ->
+                                            errorMessage = getErrorMessage(exception)
+                                            isLoading = false
+                                        }
+                                    } catch (e: Exception) {
+                                        errorMessage = getErrorMessage(e)
                                         isLoading = false
                                     }
-                                    result.onFailure { exception ->
-                                        errorMessage = getErrorMessage(exception)
-                                        isLoading = false
-                                    }
-                                } catch (e: Exception) {
-                                    errorMessage = getErrorMessage(e)
-                                    isLoading = false
+                                }
+                            }
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp),
+                    contentPadding = PaddingValues(top = 16.dp, bottom = 90.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                    // Afficher un indicateur si des filtres sont actifs
+                    if (filters.hasActiveFilters()) {
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "${castings.size} casting(s) trouvé(s)",
+                                    fontSize = 14.sp,
+                                    color = GrayBorder,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                TextButton(onClick = {
+                                    filters = CastingFilters()
+                                    searchQuery = ""
+                                }) {
+                                    Text(
+                                        text = "Réinitialiser",
+                                        fontSize = 12.sp,
+                                        color = DarkBlue
+                                    )
                                 }
                             }
                         }
-                    )
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 16.dp),
-                    contentPadding = PaddingValues(top = 16.dp, bottom = 90.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(castings.filter { 
-                        it.title.contains(searchQuery, ignoreCase = true) ||
-                        it.description.contains(searchQuery, ignoreCase = true)
-                    }) { casting ->
+                    }
+                    
+                    items(castings) { casting ->
                         LocalCastingItemCard(
                             casting = casting,
                             onItemClick = { onCastingClick(casting) },
-                            onFavoriteClick = { 
-                                showComingSoon = "Favoris"
+                            onFavoriteClick = {
+                                scope.launch {
+                                    try {
+                                        val userResult = userRepository?.getCurrentUser()
+                                        if (userResult?.isSuccess == true) {
+                                            val user = userResult.getOrNull()
+                                            val userId = user?.actualId
+                                            if (!userId.isNullOrBlank()) {
+                                                val isCurrentlyFavorite = favoriteIds.contains(casting.id)
+                                                val result = if (isCurrentlyFavorite) {
+                                                    acteurRepository?.removeFavorite(userId, casting.id)
+                                                } else {
+                                                    acteurRepository?.addFavorite(userId, casting.id)
+                                                }
+                                                
+                                                result?.onSuccess {
+                                                    // Mettre à jour la liste locale
+                                                    if (isCurrentlyFavorite) {
+                                                        favoriteIds = favoriteIds - casting.id
+                                                    } else {
+                                                        favoriteIds = favoriteIds + casting.id
+                                                    }
+                                                    // Mettre à jour l'état local des favoris
+                                                    // La liste se mettra à jour automatiquement via LaunchedEffect(favoriteIds)
+                                                }
+                                                result?.onFailure { exception ->
+                                                    android.util.Log.e("ActorHomeScreen", "Erreur favoris: ${exception.message}")
+                                                }
+                                            }
+                                        }
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("ActorHomeScreen", "Exception favoris: ${e.message}")
+                                    }
+                                }
                             }
                         )
                     }
                 }
-            }
+                }
             }
             
             // Barre de navigation positionnée au-dessus du contenu
@@ -307,14 +496,14 @@ fun ActorHomeScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 12.dp)
+                    .padding(bottom = 17.dp)
             ) {
                 ActorBottomNavigationBar(
                     selectedItem = NavigationItem.HOME,
                     onCandidaturesClick = { onMyCandidaturesClick() },
-                    onHomeClick = { /* Déjà sur la page d'accueil */ },
+                onHomeClick = { /* Déjà sur la page d'accueil */ },
                     onProfileClick = { onProfileClick() }
-                )
+            )
             }
         }
     }
@@ -466,15 +655,15 @@ private fun LocalCastingItemCard(
             }
             
             // Informations du casting à droite
-            Column(
-                modifier = Modifier
+        Column(
+            modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight(),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
                 Column(
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
                     // Titre (sans date pour donner plus d'espace)
                     Text(
                         text = casting.title,
@@ -526,8 +715,8 @@ private fun LocalCastingItemCard(
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Black
-                                )
-                                Text(
+                    )
+                    Text(
                                     text = casting.age,
                                     fontSize = 13.sp,
                                     color = Color(0xFF555555)
@@ -550,18 +739,18 @@ private fun LocalCastingItemCard(
                         color = DarkBlue,
                         modifier = Modifier.padding(end = 8.dp)
                     )
-                    IconButton(
-                        onClick = onFavoriteClick,
+                IconButton(
+                    onClick = onFavoriteClick,
                         modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (casting.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                            contentDescription = "Favorite",
-                            tint = RedHeart,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
+                ) {
+                    Icon(
+                        imageVector = if (casting.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        contentDescription = "Favorite",
+                        tint = RedHeart,
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
+            }
             }
         }
     }
@@ -569,10 +758,10 @@ private fun LocalCastingItemCard(
 
 @Composable
 private fun InfoBadge(label: String, value: String) {
-    Row(
+            Row(
         horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+                verticalAlignment = Alignment.CenterVertically
+            ) {
         Text(
             text = label,
             fontSize = 11.sp,

@@ -57,6 +57,7 @@ import com.example.projecct_mobile.ui.theme.LightGray
 import com.example.projecct_mobile.ui.theme.Projecct_MobileTheme
 import com.example.projecct_mobile.ui.theme.Red
 import com.example.projecct_mobile.ui.theme.White
+import com.example.projecct_mobile.utils.SocialLinkValidator
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
@@ -341,32 +342,40 @@ fun SignUpActorStep2Screen(
                             return@Button
                         }
 
-                        val urlFields = listOf(
-                            youtube to "YouTube",
-                            instagram to "Instagram",
-                            tiktok to "TikTok"
-                        )
-
-                        urlFields.forEach { (value, label) ->
-                            if (value.isNotBlank()) {
-                                val sanitized = value.trim()
-                                val isUrl = sanitized.startsWith("http://") || sanitized.startsWith("https://")
-                                val matchesPattern = Patterns.WEB_URL.matcher(sanitized).matches()
-                                val isHandle = sanitized.startsWith("@") && sanitized.length >= 3
-                                if (!(isUrl && matchesPattern) && !isHandle) {
-                                    formError = "$label doit être un lien valide ou commencer par @"
-                                    return@Button
-                                }
-                            }
+                        // Validation des liens Instagram
+                        val instagramValidation = SocialLinkValidator.validateInstagram(instagram)
+                        if (instagramValidation is SocialLinkValidator.ValidationResult.Error) {
+                            formError = instagramValidation.message
+                            return@Button
+                        }
+                        
+                        // Validation des liens YouTube
+                        val youtubeValidation = SocialLinkValidator.validateYouTube(youtube)
+                        if (youtubeValidation is SocialLinkValidator.ValidationResult.Error) {
+                            formError = youtubeValidation.message
+                            return@Button
+                        }
+                        
+                        // Validation des liens TikTok
+                        val tiktokValidation = SocialLinkValidator.validateTikTok(tiktok)
+                        if (tiktokValidation is SocialLinkValidator.ValidationResult.Error) {
+                            formError = tiktokValidation.message
+                            return@Button
                         }
 
                         formError = null
+                        
+                        // Normaliser les liens avant l'envoi
+                        val normalizedInstagram = SocialLinkValidator.normalizeInstagram(instagram.trim())
+                        val normalizedYouTube = SocialLinkValidator.normalizeYouTube(youtube.trim())
+                        val normalizedTikTok = SocialLinkValidator.normalizeTikTok(tiktok.trim())
+                        
                         onNextClick(
                             experienceValue.toString(),
                             cvUrl,
-                            instagram.trim(),
-                            youtube.trim(),
-                            tiktok.trim()
+                            normalizedInstagram,
+                            normalizedYouTube,
+                            normalizedTikTok
                         )
                     },
                     modifier = Modifier
