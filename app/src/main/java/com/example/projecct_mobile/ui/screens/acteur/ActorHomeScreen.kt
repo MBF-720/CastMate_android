@@ -691,7 +691,8 @@ private fun LocalCastingItemCard(
                     ) {
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
                                 text = "rôle",
@@ -702,7 +703,10 @@ private fun LocalCastingItemCard(
                             Text(
                                 text = casting.role,
                                 fontSize = 13.sp,
-                                color = Color(0xFF555555)
+                                color = Color(0xFF555555),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
                             )
                         }
                         if (casting.age.isNotEmpty()) {

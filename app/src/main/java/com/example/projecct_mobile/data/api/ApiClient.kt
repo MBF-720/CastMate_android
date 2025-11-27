@@ -27,7 +27,11 @@ object ApiClient {
      * Initialise le client API avec le contexte de l'application
      */
     fun initialize(context: Context) {
-        tokenManager = TokenManager(context)
+        // Utiliser le contexte de l'application pour garantir la cohérence
+        val appContext = context.applicationContext
+        tokenManager = TokenManager(appContext)
+        
+        android.util.Log.d("ApiClient", "✅ ApiClient initialisé avec contexte: ${appContext::class.java.simpleName}")
         
         val gson: Gson = GsonBuilder()
             .setLenient()
@@ -55,6 +59,8 @@ object ApiClient {
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create(gson))
             .build()
+        
+        android.util.Log.d("ApiClient", "✅ Retrofit configuré avec intercepteurs")
     }
     
     /**

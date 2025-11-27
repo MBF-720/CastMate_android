@@ -45,6 +45,10 @@ import com.example.projecct_mobile.ui.screens.casting.toCastingItem
 import com.example.projecct_mobile.ui.theme.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 @Composable
 fun CastingListAgencyScreen(
@@ -125,8 +129,11 @@ fun CastingListAgencyScreen(
                     filteredList
                 } ?: apiCastings
                 
-                castings = filtered.map { it.toCastingItem() }
-                android.util.Log.d("CastingListAgency", "✅ Castings affichés: ${castings.size}")
+                // Trier les castings par date de création (les plus récents en premier)
+                val sortedCastings = filtered.sortedByDescending { it.getCreationTimestamp() }
+                
+                castings = sortedCastings.map { it.toCastingItem() }
+                android.util.Log.d("CastingListAgency", "✅ Castings affichés (triés par date): ${castings.size}")
                 isLoading = false
             }
 
@@ -661,7 +668,8 @@ private fun LocalAgencyCastingCard(
                     ) {
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
                                 text = "rôle",
@@ -672,7 +680,10 @@ private fun LocalAgencyCastingCard(
                             Text(
                                 text = casting.role,
                                 fontSize = 13.sp,
-                                color = Color(0xFF555555)
+                                color = Color(0xFF555555),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
                             )
                         }
                         if (casting.age.isNotEmpty()) {
@@ -908,4 +919,39 @@ fun CastingListAgencyScreenPreview() {
             initialAgencyEmail = "contact@castmate.com"
         )
     }
+}
+
+/**
+ * Fonction d'extension pour obtenir le timestamp de création d'un casting
+ * Utilisé pour trier les castings par date (les plus récents en premier)
+ */
+private fun Casting.getCreationTimestamp(): Long {
+    // Utiliser createdAt si disponible, sinon updatedAt
+    val dateString = createdAt ?: updatedAt
+    if (dateString != null) {
+        try {
+            // Parser la date ISO pour le tri
+            val formats = listOf(
+                "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+                "yyyy-MM-dd'T'HH:mm:ss'Z'",
+                "yyyy-MM-dd"
+            )
+            var parsedDate: Date? = null
+            for (format in formats) {
+                try {
+                    val sdf = SimpleDateFormat(format, Locale.US)
+                    sdf.timeZone = TimeZone.getTimeZone("UTC")
+                    parsedDate = sdf.parse(dateString)
+                    if (parsedDate != null) break
+                } catch (e: Exception) {
+                    // Continuer avec le format suivant
+                }
+            }
+            return parsedDate?.time ?: 0L
+        } catch (e: Exception) {
+            return 0L
+        }
+    }
+    // Si aucune date n'est disponible, retourner 0 (sera placé en dernier)
+    return 0L
 }

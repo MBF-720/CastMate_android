@@ -112,6 +112,29 @@ class GeminiChatbotRepository {
         val candidatesInfo = if (casting.candidats != null) {
             casting.candidats.mapIndexed { index, candidat ->
                 val acteur = candidat.acteurId
+                val hasVideo = candidat.videoFileId != null || candidat.aiFeedback != null
+                val aiScore = candidat.aiFeedback?.globalScore
+                
+                // Résumé du feedback IA si disponible
+                val aiFeedbackSummary = if (candidat.aiFeedback != null) {
+                    val feedback = candidat.aiFeedback
+                    """
+                    - ✅ VIDÉO D'AUDITION DISPONIBLE
+                    - 🎯 SCORE IA GLOBAL: ${feedback.globalScore}/100
+                    - Émotions: ${feedback.emotions.detected.joinToString(", ")} (Cohérence: ${feedback.emotions.coherence}/100, Intensité: ${feedback.emotions.intensity}/100)
+                    - Posture: ${feedback.posture.score}/100
+                    - Intonation: ${feedback.intonation.score}/100
+                    - Expressivité: ${feedback.expressivite.score}/100
+                    - Points forts: ${feedback.strengths.joinToString(", ")}
+                    - Recommandations IA: ${feedback.recommendations.joinToString(", ")}
+                    - Résumé IA: ${feedback.summary}
+                    """.trimIndent()
+                } else if (hasVideo) {
+                    "- ⏳ VIDÉO D'AUDITION EN COURS DE TRAITEMENT"
+                } else {
+                    "- ⚠️ Aucune vidéo d'audition soumise"
+                }
+                
                 """
                 Candidat ${index + 1}:
                 - ID: ${acteur?.actualId ?: "N/A"}
@@ -119,6 +142,7 @@ class GeminiChatbotRepository {
                 - Email: ${acteur?.email ?: "N/A"}
                 - Statut: ${candidat.statut ?: "N/A"}
                 - Date candidature: ${candidat.dateCandidature ?: "N/A"}
+                $aiFeedbackSummary
                 """.trimIndent()
             }.joinToString("\n\n")
         } else {
@@ -143,15 +167,23 @@ class GeminiChatbotRepository {
         CANDIDATS DISPONIBLES (${casting.candidats?.size ?: 0} candidats):
         $candidatesInfo
         
+        📊 INFORMATIONS IMPORTANTES SUR LES SCORES IA:
+        - Chaque candidat peut soumettre une vidéo d'audition (max 30 secondes)
+        - Notre IA Gemini analyse automatiquement la vidéo et fournit un score sur 100
+        - Le score IA évalue: émotions, posture, intonation, expressivité
+        - Un score IA élevé (70+) indique une bonne performance pour le rôle
+        - Les candidats avec vidéo d'audition ont un avantage car l'agence peut mieux évaluer leurs talents
+        
         INSTRUCTIONS:
         
         1. SALUTATIONS (bonjour, bnj, salut, etc.):
            - Réponds de manière amicale et professionnelle
            - Présente-toi brièvement comme l'assistant IA de CastMate
            - Fais un résumé du casting (titre, nombre de candidats, statuts)
-           - Suggère les meilleurs candidats (priorité aux statuts "ACCEPTE" ou "EN_ATTENTE")
+           - Mentionne le nombre de candidats avec vidéo d'audition et leur score IA moyen
+           - Suggère les meilleurs candidats (priorité aux statuts "ACCEPTE" ou scores IA élevés)
            - Exemple: "Bonjour ! Je suis votre assistant IA CastMate pour le casting '[TITRE]'. 
-             J'ai trouvé [X] candidat(s). Voici les meilleurs candidats pour ce rôle :"
+             J'ai analysé [X] candidat(s), dont [Y] avec vidéo d'audition. Voici les meilleurs candidats :"
         
         2. QUESTIONS HORS APPLICATION (météo, actualités, etc.):
            - Réponds poliment mais rappelle que tu es spécialisé pour CastMate
@@ -161,20 +193,35 @@ class GeminiChatbotRepository {
              aux questions générales. Comment puis-je vous aider avec le casting '[TITRE]' ?"
         
         3. QUESTIONS SUR LE CASTING (filtrage d'acteurs):
-           - Analyse les critères demandés (âge, expérience, localisation, statut, etc.)
+           - Analyse les critères demandés (âge, expérience, localisation, statut, SCORE IA, etc.)
            - Filtre les candidats selon ces critères
-           - Suggère les acteurs correspondants avec leurs scores
-           - Explique pourquoi chaque acteur est suggéré
+           - **UTILISE LE SCORE IA** pour classer les candidats (priorité aux scores élevés)
+           - **MENTIONNE TOUJOURS** le score IA quand disponible
+           - Suggère les acteurs correspondants avec leurs scores IA
+           - Explique pourquoi chaque acteur est suggéré (inclure analyse IA)
+           - Si un candidat a un bon score IA, mentionne ses points forts de l'analyse
         
-        4. RÈGLES DE FILTRAGE:
+        4. QUESTIONS SPÉCIFIQUES SUR LES SCORES IA:
+           - Si on te demande "qui a le meilleur score IA?", classe par score IA décroissant
+           - Si on te demande "qui a soumis une vidéo?", liste ceux avec score IA
+           - Si on te demande des détails sur le score, mentionne les sous-scores (émotions, posture, etc.)
+           - Utilise les recommandations IA pour donner des conseils
+        
+        5. RÈGLES DE FILTRAGE:
            - Ne suggère JAMAIS les acteurs avec statut "REFUSE"
-           - Priorité aux acteurs avec statut "ACCEPTE" si la question est générale
+           - Priorité aux acteurs avec statut "ACCEPTE" ET score IA élevé (70+)
            - Si critères spécifiques, suggère tous les acteurs correspondants (EN_ATTENTE ou ACCEPTE)
+           - Privilégie les candidats avec vidéo d'audition (plus d'informations disponibles)
            - Si aucun acteur ne correspond, explique pourquoi
+        
+        6. FORMAT DES RÉPONSES AVEC SCORE IA:
+           - Exemple: "🎯 Score IA: 85/100 - Excellente performance"
+           - Exemple: "✅ Points forts: Bonne posture (82/100), Expressions naturelles"
+           - Exemple: "📊 Analyse IA: L'acteur montre une grande expressivité..."
         
         RÉPONSE ATTENDUE (format JSON strict, sans texte avant ou après):
         {
-          "answer": "Réponse naturelle, contextuelle et professionnelle en français qui répond directement à la question",
+          "answer": "Réponse naturelle, contextuelle et professionnelle en français qui répond directement à la question. INCLUS les scores IA quand disponibles.",
           "suggestedActors": [
             {
               "acteurId": "ID exact de l'acteur",

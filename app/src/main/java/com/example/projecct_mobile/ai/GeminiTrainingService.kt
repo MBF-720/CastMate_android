@@ -18,7 +18,7 @@ class GeminiTrainingService(private val context: Context) {
     
     companion object {
         private const val TAG = "GeminiTrainingService"
-        private const val MAX_VIDEO_SIZE_MB = 50 // Taille max en MB
+        private const val MAX_VIDEO_SIZE_MB = 10 // Taille max en MB (limite stricte du backend)
         private const val MAX_VIDEO_DURATION_SECONDS = 30
     }
     
@@ -28,6 +28,23 @@ class GeminiTrainingService(private val context: Context) {
      * @return Result contenant le feedback ou une erreur
      */
     suspend fun analyzeActingVideo(videoUri: Uri): Result<TrainingFeedback> {
+        return analyzeActingVideo(videoUri, null, null, null)
+    }
+    
+    /**
+     * Analyser une vidéo d'entraînement d'acteur avec Gemini (avec contexte de casting)
+     * @param videoUri URI de la vidéo sélectionnée
+     * @param roleDescription Description du rôle à jouer (optionnel)
+     * @param synopsis Synopsis du projet/film (optionnel)
+     * @param castingTitle Titre du casting (optionnel)
+     * @return Result contenant le feedback ou une erreur
+     */
+    suspend fun analyzeActingVideo(
+        videoUri: Uri,
+        roleDescription: String? = null,
+        synopsis: String? = null,
+        castingTitle: String? = null
+    ): Result<TrainingFeedback> {
         return withContext(Dispatchers.IO) {
             try {
                 Log.d(TAG, "🎬 Début de l'analyse de la vidéo: $videoUri")
@@ -44,8 +61,8 @@ class GeminiTrainingService(private val context: Context) {
                     )
                 }
                 
-                // Construire le prompt
-                val prompt = buildAnalysisPrompt()
+                // Construire le prompt avec le contexte du casting si disponible
+                val prompt = buildAnalysisPrompt(roleDescription, synopsis, castingTitle)
                 
                 // Encoder en base64
                 val videoBase64 = android.util.Base64.encodeToString(
@@ -86,27 +103,52 @@ class GeminiTrainingService(private val context: Context) {
     
     /**
      * Construire le prompt d'analyse pour Gemini
+     * @param roleDescription Description du rôle à jouer (optionnel)
+     * @param synopsis Synopsis du projet/film (optionnel)
+     * @param castingTitle Titre du casting (optionnel)
      */
-    private fun buildAnalysisPrompt(): String {
+    private fun buildAnalysisPrompt(
+        roleDescription: String? = null,
+        synopsis: String? = null,
+        castingTitle: String? = null
+    ): String {
+        val contextSection = buildString {
+            if (castingTitle != null || roleDescription != null || synopsis != null) {
+                append("\nCONTEXTE DU CASTING:\n")
+                if (castingTitle != null) {
+                    append("- Titre du casting: $castingTitle\n")
+                }
+                if (roleDescription != null && roleDescription.isNotBlank()) {
+                    append("- Description du rôle à jouer: $roleDescription\n")
+                }
+                if (synopsis != null && synopsis.isNotBlank()) {
+                    append("- Synopsis du projet: $synopsis\n")
+                }
+                append("\nIMPORTANT: Évalue la performance de l'acteur en tenant compte de ce contexte. ")
+                append("Analyse si l'interprétation correspond aux attentes du rôle décrit. ")
+                append("Donne des conseils spécifiques pour mieux incarner ce personnage.\n")
+            }
+        }
+        
         return """
 Tu es un coach professionnel en acting et en jeu d'acteur. Analyse cette vidéo d'entraînement d'un acteur (durée max 30 secondes).
-
+$contextSection
 INSTRUCTIONS:
 1. Analyse les aspects suivants:
-   - **Émotions** : Quelles émotions sont exprimées ? Sont-elles cohérentes et intenses ?
-   - **Posture** : La posture corporelle est-elle appropriée ? Points forts et à améliorer ?
-   - **Intonation** : La voix est-elle claire, rythmée et expressive ?
-   - **Expressivité** : Les expressions faciales et le langage corporel sont-ils convaincants ?
+   - **Émotions** : Quelles émotions sont exprimées ? Sont-elles cohérentes et intenses ? ${if (roleDescription != null) "Correspondent-elles au personnage décrit ?" else ""}
+   - **Posture** : La posture corporelle est-elle appropriée ? Points forts et à améliorer ? ${if (roleDescription != null) "Est-elle adaptée au personnage ?" else ""}
+   - **Intonation** : La voix est-elle claire, rythmée et expressive ? ${if (roleDescription != null) "Le ton correspond-il au personnage ?" else ""}
+   - **Expressivité** : Les expressions faciales et le langage corporel sont-ils convaincants ? ${if (roleDescription != null) "Sont-ils adaptés au rôle ?" else ""}
 
 2. Pour chaque aspect, donne :
    - Un score de 0 à 100
    - Un commentaire constructif et bienveillant
-   - Des conseils d'amélioration spécifiques et actionnables
+   - Des conseils d'amélioration spécifiques et actionnables ${if (roleDescription != null) "pour mieux incarner ce personnage" else ""}
 
 3. Fournis également :
    - Un score global (moyenne pondérée des 4 aspects)
    - Une liste de 3-5 points forts à conserver
-   - Une liste de 3-5 recommandations prioritaires
+   - Une liste de 3-5 recommandations prioritaires ${if (roleDescription != null) "pour améliorer l'interprétation du rôle" else ""}
    - Un résumé en 2-3 phrases
 
 IMPORTANT:
@@ -117,6 +159,7 @@ IMPORTANT:
 - Les commentaires doivent être CONCIS (max 2 phrases chacun)
 - Réponds UNIQUEMENT au format JSON suivant (AUCUN texte avant ou après):
 - Le JSON doit être VALIDE et COMPLET (ferme toutes les accolades)
+- RESPECTE EXACTEMENT cette structure (tous les champs sont OBLIGATOIRES):
 
 {
   "globalScore": 75,
@@ -158,41 +201,59 @@ IMPORTANT:
   "summary": "Performance solide avec une bonne base technique. L'acteur montre une diction claire et des expressions naturelles. Pour progresser, il faudrait travailler l'intensité émotionnelle et varier davantage le rythme vocal."
 }
 
+CHAMPS OBLIGATOIRES:
+- emotions.detected (array de strings, même si vide [])
+- emotions.coherence (int 0-100)
+- emotions.intensity (int 0-100)
+- emotions.comment (string)
+- posture.score, posture.strengths (array), posture.improvements (array), posture.comment
+- intonation.score, intonation.clarity, intonation.rhythm, intonation.expressiveness, intonation.comment
+- expressivite.score, expressivite.facialExpressions, expressivite.bodyLanguage, expressivite.comment
+- recommendations (array de strings)
+- strengths (array de strings)
+- summary (string)
+  "posture": {
+    "score": 75,
+    "strengths": ["Bonne présence scénique", "Dos droit"],
+    "improvements": ["Utiliser plus les mains", "Varier les positions"],
+    "comment": "La posture est correcte mais manque de dynamisme."
+  },
+  "intonation": {
+    "score": 70,
+    "clarity": 85,
+    "rhythm": 65,
+    "expressiveness": 70,
+    "comment": "La diction est claire mais le rythme pourrait être plus varié."
+  },
+  "expressivite": {
+    "score": 80,
+    "facialExpressions": "Expressions faciales convaincantes et naturelles.",
+    "bodyLanguage": "Le langage corporel pourrait être plus expressif.",
+    "comment": "Bonne expressivité globale, continuez à travailler l'amplification."
+  },
+  "recommendations": [
+    "Varier davantage le ton de voix",
+    "Utiliser plus l'espace scénique",
+    "Travailler l'intensité émotionnelle"
+  ],
+  "strengths": [
+    "Excellente diction",
+    "Bonne connexion avec la caméra",
+    "Expressions faciales naturelles"
+  ],
+  "summary": "Performance solide avec une bonne base technique. L'acteur montre une diction claire et des expressions naturelles. Pour progresser, il faudrait travailler l'intensité émotionnelle et varier davantage le rythme vocal."
+}
+
 ANALYSE LA VIDÉO MAINTENANT:
         """.trimIndent()
     }
     
     /**
      * Appeler l'API Gemini avec la vidéo encodée
+     * Utilise un streaming pour éviter OutOfMemoryError avec les grandes vidéos
      */
     private suspend fun callGeminiApi(videoBase64: String, prompt: String): String {
         return withContext(Dispatchers.IO) {
-            // Construire la requête JSON
-            val requestBody = JSONObject().apply {
-                put("contents", org.json.JSONArray().apply {
-                    put(JSONObject().apply {
-                        put("parts", org.json.JSONArray().apply {
-                            // Ajouter la vidéo
-                            put(JSONObject().apply {
-                                put("inline_data", JSONObject().apply {
-                                    put("mime_type", "video/mp4")
-                                    put("data", videoBase64)
-                                })
-                            })
-                            // Ajouter le prompt
-                            put(JSONObject().apply {
-                                put("text", prompt)
-                            })
-                        })
-                    })
-                })
-                put("generationConfig", JSONObject().apply {
-                    put("temperature", 0.7)
-                    put("maxOutputTokens", 4096) // Augmenté pour éviter les réponses tronquées
-                    // Note: responseMimeType n'est pas supporté dans l'API v1
-                })
-            }
-            
             // Construire l'URL - Utiliser la même structure que le chatbot (v1 et gemini-2.5-pro)
             val url = "${GeminiConfig.BASE_URL}v1/models/gemini-2.5-pro:generateContent?key=${GeminiConfig.GEMINI_API_KEY}"
             
@@ -202,12 +263,52 @@ ANALYSE LA VIDÉO MAINTENANT:
             connection.setRequestProperty("Content-Type", "application/json")
             connection.doOutput = true
             connection.connectTimeout = 60000 // 60 secondes
-            connection.readTimeout = 60000
+            connection.readTimeout = 120000 // 120 secondes pour les grandes vidéos
             
-            // Envoyer le body
-            connection.outputStream.use { os ->
-                val input = requestBody.toString().toByteArray(Charsets.UTF_8)
-                os.write(input, 0, input.size)
+            // Écrire le JSON directement dans le stream pour éviter OutOfMemoryError
+            // On utilise un BufferedWriter pour améliorer les performances
+            connection.outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
+                writer.write("{")
+                writer.write("\"contents\":[")
+                writer.write("{")
+                writer.write("\"parts\":[")
+                
+                // Partie vidéo
+                writer.write("{")
+                writer.write("\"inline_data\":{")
+                writer.write("\"mime_type\":\"video/mp4\",")
+                writer.write("\"data\":\"")
+                // Écrire la vidéo Base64 par chunks pour éviter de charger tout en mémoire
+                val chunkSize = 8192 // 8KB chunks
+                var offset = 0
+                while (offset < videoBase64.length) {
+                    val end = minOf(offset + chunkSize, videoBase64.length)
+                    writer.write(videoBase64, offset, end - offset)
+                    offset = end
+                }
+                writer.write("\"")
+                writer.write("}")
+                writer.write("},")
+                
+                // Partie prompt
+                writer.write("{")
+                writer.write("\"text\":")
+                // Échapper le prompt JSON
+                writer.write(escapeJsonString(prompt))
+                writer.write("}")
+                
+                writer.write("]")
+                writer.write("}")
+                writer.write("],")
+                
+                // Generation config
+                writer.write("\"generationConfig\":{")
+                writer.write("\"temperature\":0.7,")
+                writer.write("\"maxOutputTokens\":4096")
+                writer.write("}")
+                
+                writer.write("}")
+                writer.flush()
             }
             
             // Lire la réponse
@@ -268,6 +369,19 @@ ANALYSE LA VIDÉO MAINTENANT:
     }
     
     /**
+     * Échapper une chaîne pour l'inclure dans un JSON
+     */
+    private fun escapeJsonString(str: String): String {
+        val escaped = str
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t")
+        return "\"$escaped\""
+    }
+    
+    /**
      * Parser la réponse JSON de Gemini
      */
     private fun parseGeminiFeedback(responseText: String): TrainingFeedback {
@@ -299,67 +413,67 @@ ANALYSE LA VIDÉO MAINTENANT:
             
             val json = JSONObject(jsonText)
             
-            // Parser les émotions
-            val emotionsJson = json.getJSONObject("emotions")
+            // Parser les émotions (gérer les deux formats possibles)
+            val emotionsJson = json.optJSONObject("emotions") ?: JSONObject()
             val emotions = EmotionAnalysis(
-                detected = emotionsJson.getJSONArray("detected").let { arr ->
+                detected = emotionsJson.optJSONArray("detected")?.let { arr ->
                     List(arr.length()) { i -> arr.getString(i) }
-                },
-                coherence = emotionsJson.getInt("coherence"),
-                intensity = emotionsJson.getInt("intensity"),
-                comment = emotionsJson.getString("comment")
+                } ?: emptyList(),
+                coherence = emotionsJson.optInt("coherence", emotionsJson.optInt("score", 0)),
+                intensity = emotionsJson.optInt("intensity", emotionsJson.optInt("score", 0)),
+                comment = emotionsJson.optString("comment", "N/A")
             )
             
             // Parser la posture
-            val postureJson = json.getJSONObject("posture")
+            val postureJson = json.optJSONObject("posture") ?: JSONObject()
             val posture = PostureAnalysis(
-                score = postureJson.getInt("score"),
-                strengths = postureJson.getJSONArray("strengths").let { arr ->
+                score = postureJson.optInt("score", 0),
+                strengths = postureJson.optJSONArray("strengths")?.let { arr ->
                     List(arr.length()) { i -> arr.getString(i) }
-                },
-                improvements = postureJson.getJSONArray("improvements").let { arr ->
+                } ?: emptyList(),
+                improvements = postureJson.optJSONArray("improvements")?.let { arr ->
                     List(arr.length()) { i -> arr.getString(i) }
-                },
-                comment = postureJson.getString("comment")
+                } ?: emptyList(),
+                comment = postureJson.optString("comment", "N/A")
             )
             
             // Parser l'intonation
-            val intonationJson = json.getJSONObject("intonation")
+            val intonationJson = json.optJSONObject("intonation") ?: JSONObject()
             val intonation = IntonationAnalysis(
-                score = intonationJson.getInt("score"),
-                clarity = intonationJson.getInt("clarity"),
-                rhythm = intonationJson.getInt("rhythm"),
-                expressiveness = intonationJson.getInt("expressiveness"),
-                comment = intonationJson.getString("comment")
+                score = intonationJson.optInt("score", 0),
+                clarity = intonationJson.optInt("clarity", intonationJson.optInt("score", 0)),
+                rhythm = intonationJson.optInt("rhythm", intonationJson.optInt("score", 0)),
+                expressiveness = intonationJson.optInt("expressiveness", intonationJson.optInt("score", 0)),
+                comment = intonationJson.optString("comment", "N/A")
             )
             
             // Parser l'expressivité
-            val expressiviteJson = json.getJSONObject("expressivite")
+            val expressiviteJson = json.optJSONObject("expressivite") ?: JSONObject()
             val expressivite = ExpressivityAnalysis(
-                score = expressiviteJson.getInt("score"),
-                facialExpressions = expressiviteJson.getString("facialExpressions"),
-                bodyLanguage = expressiviteJson.getString("bodyLanguage"),
-                comment = expressiviteJson.getString("comment")
+                score = expressiviteJson.optInt("score", 0),
+                facialExpressions = expressiviteJson.optString("facialExpressions", "N/A"),
+                bodyLanguage = expressiviteJson.optString("bodyLanguage", "N/A"),
+                comment = expressiviteJson.optString("comment", "N/A")
             )
             
             // Parser les recommandations et points forts
-            val recommendations = json.getJSONArray("recommendations").let { arr ->
+            val recommendations = json.optJSONArray("recommendations")?.let { arr ->
                 List(arr.length()) { i -> arr.getString(i) }
-            }
+            } ?: emptyList()
             
-            val strengths = json.getJSONArray("strengths").let { arr ->
+            val strengths = json.optJSONArray("strengths")?.let { arr ->
                 List(arr.length()) { i -> arr.getString(i) }
-            }
+            } ?: emptyList()
             
             return TrainingFeedback(
-                globalScore = json.getInt("globalScore"),
+                globalScore = json.optInt("globalScore", 0),
                 emotions = emotions,
                 posture = posture,
                 intonation = intonation,
                 expressivite = expressivite,
                 recommendations = recommendations,
                 strengths = strengths,
-                summary = json.getString("summary")
+                summary = json.optString("summary", "N/A")
             )
             
         } catch (e: Exception) {

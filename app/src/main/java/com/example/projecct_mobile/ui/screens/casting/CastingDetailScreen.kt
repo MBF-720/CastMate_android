@@ -55,6 +55,7 @@ import com.example.projecct_mobile.ui.components.NavigationItem
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+import java.util.TimeZone
 
 @Composable
 fun CastingDetailScreen(
@@ -62,6 +63,7 @@ fun CastingDetailScreen(
     onBackClick: () -> Unit = {},
     onMapClick: () -> Unit = {},
     onSubmitClick: () -> Unit = {},
+    onNavigateToApplication: ((Casting) -> Unit)? = null, // Nouveau callback pour navigation vers candidature avec vidéo
     onNavigateToProfile: (() -> Unit)? = null,
     onNavigateToHome: (() -> Unit)? = null,
     onNavigateToCandidatures: (() -> Unit)? = null
@@ -102,7 +104,39 @@ fun CastingDetailScreen(
     var showCastingClosedDialog by remember { mutableStateOf(false) }
     var isSubmitting by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var hasAlreadyApplied by remember { mutableStateOf(false) }
+    var isLoadingStatus by remember { mutableStateOf(true) }
     val tabs = listOf("overview", "Film", "production")
+    
+    // Vérifier si l'acteur a déjà postulé
+    LaunchedEffect(casting.actualId) {
+        val castingId = casting.actualId
+        if (castingId != null) {
+            isLoadingStatus = true
+            try {
+                val statusResult = castingRepository.getMyStatus(castingId)
+                statusResult.onSuccess { status ->
+                    hasAlreadyApplied = status.hasApplied
+                    isLoadingStatus = false
+                }.onFailure { exception ->
+                    // Si erreur 401, l'acteur n'a pas encore postulé (normal)
+                    if (exception is ApiException.UnauthorizedException) {
+                        hasAlreadyApplied = false
+                    } else {
+                        // Autre erreur, on assume qu'il n'a pas postulé pour permettre l'essai
+                        hasAlreadyApplied = false
+                    }
+                    isLoadingStatus = false
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("CastingDetailScreen", "Erreur vérification statut: ${e.message}")
+                hasAlreadyApplied = false
+                isLoadingStatus = false
+            }
+        } else {
+            isLoadingStatus = false
+        }
+    }
 
     // Télécharger l'affiche si disponible
     LaunchedEffect(casting.actualAfficheFileId) {
@@ -360,7 +394,7 @@ fun CastingDetailScreen(
             }
             
             // Bouton Submit fixe
-                    Button(
+            Button(
                 onClick = {
                     val castingId = casting.actualId
                     
@@ -370,91 +404,92 @@ fun CastingDetailScreen(
                         return@Button
                     }
                     
-                    if (castingId != null && !isSubmitting) {
-                        isSubmitting = true
-                        errorMessage = null // Réinitialiser le message d'erreur
-                        showSuccessDialog = false // S'assurer que le dialogue de succès n'est pas affiché
-                        showAlreadyAppliedDialog = false // S'assurer que le dialogue "déjà postulé" n'est pas affiché
-                        showCastingClosedDialog = false // S'assurer que le dialogue "fermé" n'est pas affiché
-                        scope.launch {
-                            try {
-                                val result = castingRepository.applyToCasting(castingId)
-                                result.onSuccess {
-                                    android.util.Log.d("CastingDetailScreen", "✅ Candidature envoyée avec succès pour le casting: ${casting.titre}")
-                                    errorMessage = null // Pas d'erreur
-                                    onSubmitClick()
-                                    showSuccessDialog = true // Afficher le dialogue de succès SEULEMENT en cas de succès
-                                    isSubmitting = false
-                                }
-                                result.onFailure { exception ->
-                                    android.util.Log.e("CastingDetailScreen", "❌ Erreur lors de la candidature: ${exception.message}", exception)
-                                    showSuccessDialog = false // Ne PAS afficher le dialogue de succès en cas d'erreur
-                                    
-                                    // Vérifier si le message d'erreur indique que le casting est fermé
-                                    val errorMessageText = exception.message?.lowercase() ?: ""
-                                    val isCastingClosed = errorMessageText.contains("n'accepte plus") ||
-                                            errorMessageText.contains("fermé") ||
-                                            errorMessageText.contains("closed") ||
-                                            errorMessageText.contains("n'accepte pas") ||
-                                            (!casting.ouvert)
-                                    
-                                    when {
-                                        isCastingClosed -> {
-                                            // Afficher le dialogue spécial pour "casting fermé"
-                                            showCastingClosedDialog = true
-                                            showAlreadyAppliedDialog = false
-                                            errorMessage = null // Ne pas afficher de message d'erreur en texte
+                    // Naviguer vers l'écran de candidature avec vidéo
+                    if (castingId != null) {
+                        onNavigateToApplication?.invoke(casting) ?: run {
+                            // Fallback : ancien comportement (candidature sans vidéo)
+                            if (!isSubmitting) {
+                                isSubmitting = true
+                                errorMessage = null
+                                showSuccessDialog = false
+                                showAlreadyAppliedDialog = false
+                                showCastingClosedDialog = false
+                                scope.launch {
+                                    try {
+                                        val result = castingRepository.applyToCasting(castingId)
+                                        result.onSuccess {
+                                            android.util.Log.d("CastingDetailScreen", "✅ Candidature envoyée avec succès pour le casting: ${casting.titre}")
+                                            errorMessage = null
+                                            onSubmitClick()
+                                            showSuccessDialog = true
+                                            isSubmitting = false
                                         }
-                                        exception is ApiException.ConflictException -> {
-                                            // Afficher le dialogue spécial pour "déjà postulé"
-                                            showAlreadyAppliedDialog = true
-                                            showCastingClosedDialog = false
-                                            errorMessage = null // Ne pas afficher de message d'erreur en texte
-                                        }
-                                        exception is ApiException.UnauthorizedException -> {
-                                            errorMessage = "Vous devez être connecté pour postuler"
-                                            showAlreadyAppliedDialog = false
-                                            showCastingClosedDialog = false
-                                        }
-                                        exception is ApiException.ForbiddenException -> {
-                                            // Vérifier si l'erreur 403 indique que le casting est fermé
-                                            if (errorMessageText.contains("n'accepte plus") || errorMessageText.contains("fermé")) {
-                                                showCastingClosedDialog = true
-                                                showAlreadyAppliedDialog = false
-                                                errorMessage = null
-                                            } else {
-                                                errorMessage = "Vous ne pouvez pas postuler à ce casting"
-                                                showAlreadyAppliedDialog = false
-                                                showCastingClosedDialog = false
+                                        result.onFailure { exception ->
+                                            android.util.Log.e("CastingDetailScreen", "❌ Erreur lors de la candidature: ${exception.message}", exception)
+                                            showSuccessDialog = false
+                                            
+                                            val errorMessageText = exception.message?.lowercase() ?: ""
+                                            val isCastingClosed = errorMessageText.contains("n'accepte plus") ||
+                                                    errorMessageText.contains("fermé") ||
+                                                    errorMessageText.contains("closed") ||
+                                                    errorMessageText.contains("n'accepte pas") ||
+                                                    (!casting.ouvert)
+                                            
+                                            when {
+                                                isCastingClosed -> {
+                                                    showCastingClosedDialog = true
+                                                    showAlreadyAppliedDialog = false
+                                                    errorMessage = null
+                                                }
+                                                exception is ApiException.ConflictException -> {
+                                                    showAlreadyAppliedDialog = true
+                                                    showCastingClosedDialog = false
+                                                    errorMessage = null
+                                                }
+                                                exception is ApiException.UnauthorizedException -> {
+                                                    errorMessage = "Vous devez être connecté pour postuler"
+                                                    showAlreadyAppliedDialog = false
+                                                    showCastingClosedDialog = false
+                                                }
+                                                exception is ApiException.ForbiddenException -> {
+                                                    if (errorMessageText.contains("n'accepte plus") || errorMessageText.contains("fermé")) {
+                                                        showCastingClosedDialog = true
+                                                        showAlreadyAppliedDialog = false
+                                                        errorMessage = null
+                                                    } else {
+                                                        errorMessage = "Vous ne pouvez pas postuler à ce casting"
+                                                        showAlreadyAppliedDialog = false
+                                                        showCastingClosedDialog = false
+                                                    }
+                                                }
+                                                exception is ApiException.BadRequestException -> {
+                                                    if (errorMessageText.contains("n'accepte plus") || errorMessageText.contains("fermé")) {
+                                                        showCastingClosedDialog = true
+                                                        showAlreadyAppliedDialog = false
+                                                        errorMessage = null
+                                                    } else {
+                                                        errorMessage = "Erreur lors de la candidature: ${exception.message}"
+                                                        showAlreadyAppliedDialog = false
+                                                        showCastingClosedDialog = false
+                                                    }
+                                                }
+                                                else -> {
+                                                    errorMessage = "Erreur: ${exception.message}"
+                                                    showAlreadyAppliedDialog = false
+                                                    showCastingClosedDialog = false
+                                                }
                                             }
+                                            isSubmitting = false
                                         }
-                                        exception is ApiException.BadRequestException -> {
-                                            // Vérifier si l'erreur 400 indique que le casting est fermé
-                                            if (errorMessageText.contains("n'accepte plus") || errorMessageText.contains("fermé")) {
-                                                showCastingClosedDialog = true
-                                                showAlreadyAppliedDialog = false
-                                                errorMessage = null
-                                            } else {
-                                                errorMessage = "Erreur lors de la candidature: ${exception.message}"
-                                                showAlreadyAppliedDialog = false
-                                                showCastingClosedDialog = false
-                                            }
-                                        }
-                                        else -> {
-                                            errorMessage = "Erreur: ${exception.message}"
-                                            showAlreadyAppliedDialog = false
-                                            showCastingClosedDialog = false
-                                        }
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("CastingDetailScreen", "❌ Exception lors de la candidature: ${e.message}", e)
+                                        showSuccessDialog = false
+                                        showAlreadyAppliedDialog = false
+                                        showCastingClosedDialog = false
+                                        errorMessage = "Erreur inconnue: ${e.message}"
+                                        isSubmitting = false
                                     }
-                                    isSubmitting = false
                                 }
-                            } catch (e: Exception) {
-                                android.util.Log.e("CastingDetailScreen", "❌ Exception lors de la candidature: ${e.message}", e)
-                                showSuccessDialog = false // Ne PAS afficher le dialogue de succès en cas d'exception
-                                showAlreadyAppliedDialog = false // Ne PAS afficher le dialogue "déjà postulé" en cas d'exception
-                                showCastingClosedDialog = false // Ne PAS afficher le dialogue "fermé" en cas d'exception
-                                errorMessage = "Erreur inconnue: ${e.message}"
-                                isSubmitting = false
                             }
                         }
                     } else if (castingId == null) {
@@ -464,27 +499,34 @@ fun CastingDetailScreen(
                         showCastingClosedDialog = false
                     }
                 },
-                        modifier = Modifier
-                            .fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
                     .height(52.dp)
                     .padding(horizontal = 20.dp),
                 shape = RoundedCornerShape(26.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = DarkBlue
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = DarkBlue
                 ),
-                enabled = !isSubmitting
-                    ) {
-                if (isSubmitting) {
+                enabled = !isSubmitting && !hasAlreadyApplied && !isLoadingStatus
+            ) {
+                if (isSubmitting || isLoadingStatus) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(20.dp),
                         color = White,
                         strokeWidth = 2.dp
                     )
-                } else {
-                        Text(
-                            text = "Submit",
+                } else if (hasAlreadyApplied) {
+                    Text(
+                        text = "Déjà postulé",
                         fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.Bold,
+                        color = White
+                    )
+                } else {
+                    Text(
+                        text = "Submit",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
                         color = White
                     )
                 }

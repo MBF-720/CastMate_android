@@ -6,6 +6,7 @@ import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import retrofit2.Response
 import retrofit2.http.*
+import retrofit2.http.Streaming
 
 /**
  * Service API pour les castings
@@ -175,6 +176,29 @@ interface CastingApiService {
     ): Response<Unit>
     
     /**
+     * Postuler à un casting avec vidéo d'audition (Acteur)
+     * 
+     * Méthode: POST
+     * URL: /castings/:id/apply
+     * Auth: Requise (JWT)
+     * Rôle: ACTEUR
+     * Content-Type: multipart/form-data
+     * 
+     * Body:
+     * - video: File (optionnel) - Vidéo d'audition (max 10MB, max 30s)
+     * - aiFeedback: String (optionnel) - JSON string du feedback IA
+     * 
+     * Réponse 200: Casting mis à jour avec la candidature
+     */
+    @Multipart
+    @POST("castings/{id}/apply")
+    suspend fun applyToCastingWithVideo(
+        @Path("id") id: String,
+        @Part video: MultipartBody.Part? = null,
+        @Part("aiFeedback") aiFeedback: RequestBody? = null
+    ): Response<Unit>
+    
+    /**
      * Accepter un candidat (Recruteur/Admin)
      * 
      * Méthode: PATCH
@@ -231,5 +255,22 @@ interface CastingApiService {
     suspend fun getMyStatus(
         @Path("id") id: String
     ): Response<CandidateStatusResponse>
+    
+    /**
+     * Récupérer la vidéo d'audition d'un candidat
+     * 
+     * Méthode: GET
+     * URL: /castings/:id/candidates/:acteurId/video
+     * Auth: Requise (JWT)
+     * Permissions: Acteur propriétaire, Recruteur propriétaire du casting, Admin
+     * 
+     * Réponse 200: Flux binaire de la vidéo (video/mp4)
+     */
+    @Streaming
+    @GET("castings/{id}/candidates/{acteurId}/video")
+    suspend fun getCandidateVideo(
+        @Path("id") id: String,
+        @Path("acteurId") acteurId: String
+    ): Response<okhttp3.ResponseBody>
 }
 

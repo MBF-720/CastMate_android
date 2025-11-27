@@ -16,12 +16,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.projecct_mobile.data.model.ChatMessage
 import com.example.projecct_mobile.data.model.ChatbotResponse
 import com.example.projecct_mobile.data.model.SuggestedActor
 import com.example.projecct_mobile.data.repository.CastingRepository
+import com.example.projecct_mobile.data.repository.ChatConversationRepository
 import com.example.projecct_mobile.data.repository.GeminiChatbotRepository
 import com.example.projecct_mobile.ui.theme.*
 import kotlinx.coroutines.launch
@@ -37,8 +40,10 @@ fun ChatbotContent(
     modifier: Modifier = Modifier,
     onViewActorProfile: (String) -> Unit = {}
 ) {
+    val context = LocalContext.current
     val geminiRepository = remember { GeminiChatbotRepository() }
     val castingRepository = remember { CastingRepository() }
+    val conversationRepository = remember { ChatConversationRepository(context) }
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     
@@ -48,25 +53,51 @@ fun ChatbotContent(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var chatHistory by remember { mutableStateOf<List<ChatMessage>>(emptyList()) }
     var currentCasting by remember { mutableStateOf(casting) }
+    var conversationId by remember { mutableStateOf<Long?>(null) }
+    var isLoadingHistory by remember { mutableStateOf(true) }
     
-    // Recharger le casting pour avoir les candidats à jour
+    // Charger la conversation existante et l'historique
     LaunchedEffect(castingId) {
         scope.launch {
-            val result = castingRepository.getCastingById(castingId)
-            result.onSuccess { updatedCasting ->
-                currentCasting = updatedCasting
+            try {
+                // Créer ou récupérer la conversation
+                val conversation = conversationRepository.getOrCreateConversation(castingId, castingTitle)
+                conversationId = conversation.conversationId
+                
+                // Charger l'historique des messages
+                val savedMessages = conversationRepository.getMessages(castingId)
+                
+                if (savedMessages.isEmpty()) {
+                    // Ajouter le message de bienvenue initial
+                    val welcomeMessage = ChatMessage(
+                        text = "Bonjour ! Je suis votre assistant IA pour vous aider à trouver les meilleurs acteurs pour le casting \"$castingTitle\".\n\nPosez-moi une question, par exemple :\n• \"Trouve-moi les acteurs de 25-35 ans\"\n• \"Quels acteurs ont plus de 5 ans d'expérience ?\"\n• \"Montre-moi les candidats de Tunis\"",
+                        isBot = true
+                    )
+                    chatHistory = listOf(welcomeMessage)
+                    
+                    // Sauvegarder le message de bienvenue
+                    conversationRepository.saveMessage(
+                        conversationId = conversationId!!,
+                        text = welcomeMessage.text,
+                        isBot = true
+                    )
+                } else {
+                    // Restaurer l'historique sauvegardé
+                    chatHistory = savedMessages
+                    android.util.Log.d("ChatbotContent", "✅ Historique restauré: ${savedMessages.size} messages")
+                }
+                
+                // Recharger le casting pour avoir les candidats à jour
+                val result = castingRepository.getCastingById(castingId)
+                result.onSuccess { updatedCasting ->
+                    currentCasting = updatedCasting
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("ChatbotContent", "Erreur chargement conversation: ${e.message}", e)
+            } finally {
+                isLoadingHistory = false
             }
         }
-    }
-    
-    // Message de bienvenue initial
-    LaunchedEffect(Unit) {
-        chatHistory = listOf(
-            ChatMessage(
-                text = "Bonjour ! Je suis votre assistant IA pour vous aider à trouver les meilleurs acteurs pour le casting \"$castingTitle\".\n\nPosez-moi une question, par exemple :\n• \"Trouve-moi les acteurs de 25-35 ans\"\n• \"Quels acteurs ont plus de 5 ans d'expérience ?\"\n• \"Montre-moi les candidats de Tunis\"",
-                isBot = true
-            )
-        )
     }
     
     // Scroll automatique vers le bas quand un nouveau message arrive
@@ -84,39 +115,49 @@ fun ChatbotContent(
             .padding(16.dp),
         verticalArrangement = Arrangement.SpaceBetween
     ) {
-        // Zone de chat
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(chatHistory) { message ->
-                ChatMessageBubble(message = message)
+        // Indicateur de chargement initial
+        if (isLoadingHistory) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = DarkBlue)
             }
-            
-            // Afficher les suggestions si disponibles
-            chatbotResponse?.let { response ->
-                item {
-                    SuggestedActorsSection(
-                        response = response,
-                        onViewActorProfile = onViewActorProfile
-                    )
+        } else {
+            // Zone de chat
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(chatHistory) { message ->
+                    ChatMessageBubble(message = message)
+                    
+                    // Afficher les suggestions si le message en a
+                    message.suggestedActors?.let { actors ->
+                        SuggestedActorsInline(
+                            actors = actors,
+                            onViewActorProfile = onViewActorProfile
+                        )
+                    }
                 }
-            }
-            
-            // Afficher l'erreur si présente
-            errorMessage?.let { error ->
-                item {
-                    ErrorBubble(message = error)
+                
+                // Afficher l'erreur si présente
+                errorMessage?.let { error ->
+                    item {
+                        ErrorBubble(message = error)
+                    }
                 }
-            }
-            
-            // Indicateur de chargement
-            if (isLoading) {
-                item {
-                    LoadingBubble()
+                
+                // Indicateur de chargement
+                if (isLoading) {
+                    item {
+                        LoadingBubble()
+                    }
                 }
             }
         }
@@ -126,14 +167,23 @@ fun ChatbotContent(
             query = query,
             onQueryChange = { query = it },
             onSend = {
-                if (query.isNotBlank() && !isLoading) {
+                if (query.isNotBlank() && !isLoading && conversationId != null) {
                     val userMessage = query
                     query = ""
                     errorMessage = null
-                    chatbotResponse = null
                     
                     // Ajouter le message de l'utilisateur
-                    chatHistory = chatHistory + ChatMessage(text = userMessage, isBot = false)
+                    val userChatMessage = ChatMessage(text = userMessage, isBot = false)
+                    chatHistory = chatHistory + userChatMessage
+                    
+                    // Sauvegarder le message utilisateur
+                    scope.launch {
+                        conversationRepository.saveMessage(
+                            conversationId = conversationId!!,
+                            text = userMessage,
+                            isBot = false
+                        )
+                    }
                     
                     // Envoyer la requête au chatbot Gemini
                     isLoading = true
@@ -150,10 +200,20 @@ fun ChatbotContent(
                                     query = userMessage
                                 )
                                 result.onSuccess { response ->
-                                    chatbotResponse = response
-                                    chatHistory = chatHistory + ChatMessage(
+                                    // Créer le message bot avec les suggestions
+                                    val botChatMessage = ChatMessage(
                                         text = response.answer,
-                                        isBot = true
+                                        isBot = true,
+                                        suggestedActors = response.suggestedActors.ifEmpty { null }
+                                    )
+                                    chatHistory = chatHistory + botChatMessage
+                                    
+                                    // Sauvegarder le message bot avec les suggestions
+                                    conversationRepository.saveMessage(
+                                        conversationId = conversationId!!,
+                                        text = response.answer,
+                                        isBot = true,
+                                        suggestedActors = response.suggestedActors.ifEmpty { null }
                                     )
                                 }
                                 result.onFailure { exception ->
@@ -171,18 +231,10 @@ fun ChatbotContent(
                     }
                 }
             },
-            enabled = !isLoading
+            enabled = !isLoading && !isLoadingHistory
         )
     }
 }
-
-/**
- * Message de chat
- */
-private data class ChatMessage(
-    val text: String,
-    val isBot: Boolean
-)
 
 /**
  * Bulle de message de chat
@@ -211,6 +263,41 @@ private fun ChatMessageBubble(message: ChatMessage) {
                 fontSize = 14.sp,
                 color = if (message.isBot) Color(0xFF1A1A1A) else White,
                 lineHeight = 20.sp
+            )
+        }
+    }
+}
+
+/**
+ * Section des acteurs suggérés (affichée inline avec les messages)
+ */
+@Composable
+private fun SuggestedActorsInline(
+    actors: List<SuggestedActor>,
+    onViewActorProfile: (String) -> Unit
+) {
+    if (actors.isEmpty()) {
+        return
+    }
+    
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = "Acteurs suggérés (${actors.size})",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = Color(0xFF666666),
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)
+        )
+        
+        actors.forEach { actor ->
+            SuggestedActorCard(
+                actor = actor,
+                onViewProfile = { onViewActorProfile(actor.acteurId) }
             )
         }
     }

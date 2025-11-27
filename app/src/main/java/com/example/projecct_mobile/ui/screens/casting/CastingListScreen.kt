@@ -546,7 +546,8 @@ fun CastingItemCard(
 fun InfoBadge(label: String, value: String) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth()
     ) {
         Text(
             text = label,
@@ -558,7 +559,10 @@ fun InfoBadge(label: String, value: String) {
             text = value,
             fontSize = 11.sp,
             color = Black,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
         )
     }
 }

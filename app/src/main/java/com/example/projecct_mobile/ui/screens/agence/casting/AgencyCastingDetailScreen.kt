@@ -29,7 +29,9 @@ import com.example.projecct_mobile.data.model.Candidat
 import com.example.projecct_mobile.data.model.Casting
 import com.example.projecct_mobile.data.model.ChatbotResponse
 import com.example.projecct_mobile.data.model.SuggestedActor
+import com.example.projecct_mobile.data.model.TrainingFeedback
 import com.example.projecct_mobile.data.repository.ActeurRepository
+import com.example.projecct_mobile.data.api.ApiClient
 import com.example.projecct_mobile.ui.theme.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -41,7 +43,8 @@ fun AgencyCastingDetailScreen(
     onBackClick: () -> Unit = {},
     onEditClick: () -> Unit = {},
     onDeleteClick: () -> Unit = {},
-    onViewActorProfile: (String) -> Unit = {}
+    onViewActorProfile: (String) -> Unit = {},
+    onNavigateToLogin: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val acteurRepository = remember { ActeurRepository() }
@@ -419,10 +422,11 @@ fun AgencyCastingDetailScreen(
                                     }
                                 }
                             },
-                            onViewProfile = onViewActorProfile
+                            onViewProfile = onViewActorProfile,
+                            onNavigateToLogin = onNavigateToLogin
                         )
                     }
-                    2 -> {
+                   2 -> {
                         // Onglet "Chatbot"
                         ChatbotContent(
                             castingId = currentCasting.actualId ?: "",
@@ -814,7 +818,8 @@ private fun CandidatesContent(
     modifier: Modifier = Modifier,
     onAcceptCandidate: (String) -> Unit = {},
     onRejectCandidate: (String) -> Unit = {},
-    onViewProfile: (String) -> Unit = {}
+    onViewProfile: (String) -> Unit = {},
+    onNavigateToLogin: () -> Unit = {}
 ) {
     if (candidates.isEmpty()) {
         Box(
@@ -863,6 +868,7 @@ private fun CandidatesContent(
             items(candidates) { candidat ->
                 CandidateCard(
                     candidat = candidat,
+                    castingId = castingId,
                     onAccept = {
                         candidat.acteurId?.actualId?.let { onAcceptCandidate(it) }
                     },
@@ -871,7 +877,8 @@ private fun CandidatesContent(
                     },
                     onViewProfile = {
                         candidat.acteurId?.actualId?.let { onViewProfile(it) }
-                    }
+                    },
+                    onNavigateToLogin = onNavigateToLogin
                 )
             }
         }
@@ -881,10 +888,75 @@ private fun CandidatesContent(
 @Composable
 private fun CandidateCard(
     candidat: Candidat,
+    castingId: String,
     onAccept: () -> Unit = {},
     onReject: () -> Unit = {},
-    onViewProfile: () -> Unit = {}
+    onViewProfile: () -> Unit = {},
+    onNavigateToLogin: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val castingRepository = remember { com.example.projecct_mobile.data.repository.CastingRepository() }
+    var showVideoDialog by remember { mutableStateOf(false) }
+    var videoUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var isLoadingVideo by remember { mutableStateOf(false) }
+    var videoError by remember { mutableStateOf<String?>(null) }
+    
+    // Fonction pour télécharger la vidéo via l'endpoint candidat
+           suspend fun downloadVideoViaCandidate(castingId: String, acteurId: String) {
+               try {
+                   val castingService = ApiClient.getCastingService()
+                   val response = castingService.getCandidateVideo(castingId, acteurId)
+                   if (response.isSuccessful && response.body() != null) {
+                       val bytes = response.body()!!.bytes()
+                       val tempFile = java.io.File.createTempFile("audition_video", ".mp4", context.cacheDir)
+                       tempFile.writeBytes(bytes)
+                       
+                       // Utiliser FileProvider pour créer un content:// URI sécurisé
+                       videoUri = androidx.core.content.FileProvider.getUriForFile(
+                           context,
+                           "${context.packageName}.fileprovider",
+                           tempFile
+                       )
+                       showVideoDialog = true
+                       isLoadingVideo = false
+                       videoError = null
+                   } else {
+                val errorCode = response.code()
+                val errorBody = response.errorBody()?.string()
+                android.util.Log.e("CandidateCard", "Erreur téléchargement vidéo: $errorCode - $errorBody")
+                
+                videoError = when (errorCode) {
+                    401 -> {
+                        val errorMsg = try {
+                            val json = org.json.JSONObject(errorBody ?: "{}")
+                            json.optString("message", "Token invalide ou expiré")
+                        } catch (e: Exception) {
+                            "Token invalide ou expiré"
+                        }
+                        if (errorMsg.contains("Token") || errorMsg.contains("expiré") || errorMsg.contains("invalide")) {
+                            "Votre session a expiré. Veuillez vous reconnecter pour accéder à cette vidéo."
+                        } else {
+                            "Vous n'êtes pas autorisé à accéder à cette vidéo"
+                        }
+                    }
+                    403 -> "Accès refusé à cette vidéo. Vous n'avez pas les permissions nécessaires."
+                    404 -> "Vidéo non trouvée. Elle a peut-être été supprimée ou n'est pas encore disponible."
+                    else -> "Erreur lors du téléchargement de la vidéo (code: $errorCode)"
+                }
+                isLoadingVideo = false
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("CandidateCard", "Exception téléchargement vidéo: ${e.message}", e)
+            videoError = "Erreur: ${e.message ?: "Erreur inconnue"}"
+            isLoadingVideo = false
+        }
+    }
+    
+    // Log pour déboguer
+    LaunchedEffect(candidat.videoFileId, candidat.aiFeedback) {
+        android.util.Log.d("CandidateCard", "videoFileId: ${candidat.videoFileId}, aiFeedback: ${candidat.aiFeedback != null}, acteurId: ${candidat.acteurId?.actualId}")
+    }
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -949,6 +1021,27 @@ private fun CandidateCard(
                             color = Color(0xFFBBBBBB)
                         )
                     }
+                    // Afficher le score IA si disponible
+                    candidat.aiFeedback?.let { feedback ->
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Star,
+                                contentDescription = null,
+                                tint = Color(0xFFFFD700),
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = "Score IA: ${feedback.globalScore}/100",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF4CAF50)
+                            )
+                        }
+                    }
                 }
             }
             
@@ -971,6 +1064,148 @@ private fun CandidateCard(
                     fontWeight = FontWeight.Medium
                 )
             }
+            }
+            
+            // Afficher le bouton vidéo si une vidéo est disponible (videoFileId ou aiFeedback présent)
+            // Si aiFeedback existe, cela signifie qu'une vidéo a été envoyée
+            val hasVideo = candidat.videoFileId != null || candidat.aiFeedback != null
+            android.util.Log.d("CandidateCard", "hasVideo: $hasVideo, videoFileId: ${candidat.videoFileId}, aiFeedback: ${candidat.aiFeedback != null}")
+            if (hasVideo) {
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                // Card pour la vidéo avec icône play
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = !isLoadingVideo && (candidat.videoFileId != null || candidat.acteurId?.actualId != null)) {
+                            scope.launch {
+                                isLoadingVideo = true
+                                try {
+                                    val acteurId = candidat.acteurId?.actualId
+                                    if (acteurId == null) {
+                                        android.util.Log.e("CandidateCard", "ActeurId est null")
+                                        isLoadingVideo = false
+                                        return@launch
+                                    }
+                                    
+                                    // Essayer d'abord avec videoFileId, sinon utiliser l'endpoint candidat
+                                    if (candidat.videoFileId != null) {
+                                        // Méthode 1: Télécharger via fileId
+                                           val acteurRepository = ActeurRepository()
+                                           val result = acteurRepository.downloadMedia(candidat.videoFileId)
+                                           result.onSuccess { bytes ->
+                                               val tempFile = java.io.File.createTempFile("audition_video", ".mp4", context.cacheDir)
+                                               tempFile.writeBytes(bytes)
+                                               
+                                               // Utiliser FileProvider pour créer un content:// URI sécurisé
+                                               videoUri = androidx.core.content.FileProvider.getUriForFile(
+                                                   context,
+                                                   "${context.packageName}.fileprovider",
+                                                   tempFile
+                                               )
+                                               showVideoDialog = true
+                                               isLoadingVideo = false
+                                               videoError = null
+                                           }.onFailure { exception ->
+                                            android.util.Log.e("CandidateCard", "Erreur téléchargement via fileId: ${exception.message}")
+                                            // Essayer avec l'endpoint candidat
+                                            downloadVideoViaCandidate(castingId, acteurId)
+                                        }
+                                    } else {
+                                        // Méthode 2: Télécharger via endpoint candidat
+                                        downloadVideoViaCandidate(castingId, acteurId)
+                                    }
+                                } catch (e: Exception) {
+                                    android.util.Log.e("CandidateCard", "Exception: ${e.message}", e)
+                                    videoError = "Erreur: ${e.message ?: "Erreur inconnue"}"
+                                    isLoadingVideo = false
+                                }
+                            }
+                        },
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (candidat.videoFileId != null) DarkBlue.copy(alpha = 0.1f) else Color(0xFFE0E0E0).copy(alpha = 0.5f)
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            // Icône play dans un cercle
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .background(
+                                        color = if (candidat.videoFileId != null) DarkBlue else Color(0xFF9E9E9E),
+                                        shape = CircleShape
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (isLoadingVideo) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(24.dp),
+                                        color = White,
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Icon(
+                                        Icons.Default.PlayArrow,
+                                        contentDescription = "Lire la vidéo",
+                                        tint = White,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                }
+                            }
+                            
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Vidéo d'audition",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF1A1A1A)
+                                )
+                                if (isLoadingVideo) {
+                                    Text(
+                                        text = "Chargement...",
+                                        fontSize = 12.sp,
+                                        color = Color(0xFF666666)
+                                    )
+                                } else if (candidat.videoFileId != null) {
+                                    Text(
+                                        text = "Appuyez pour regarder",
+                                        fontSize = 12.sp,
+                                        color = Color(0xFF666666)
+                                    )
+                                } else {
+                                    Text(
+                                        text = "Vidéo en cours de traitement",
+                                        fontSize = 12.sp,
+                                        color = Color(0xFF999999),
+                                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                                    )
+                                }
+                            }
+                        }
+                        
+                        // Icône flèche (seulement si vidéo disponible)
+                        if (!isLoadingVideo && candidat.videoFileId != null) {
+                            Icon(
+                                Icons.Default.ArrowForward,
+                                contentDescription = null,
+                                tint = DarkBlue,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
             }
             
             // Boutons d'action (seulement si en attente)
@@ -1026,6 +1261,126 @@ private fun CandidateCard(
                 }
             }
         }
+    }
+    
+    // Dialog d'erreur si le téléchargement échoue
+    videoError?.let { error ->
+        AlertDialog(
+            onDismissRequest = { videoError = null },
+            title = { 
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = Color(0xFFF44336),
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Text(
+                        if (error.contains("401") || error.contains("Token") || error.contains("expiré")) 
+                            "Session expirée" 
+                        else 
+                            "Erreur de téléchargement",
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1A1A1A)
+                    )
+                }
+            },
+            text = { 
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        if (error.contains("401") || error.contains("Token") || error.contains("expiré")) {
+                            "Votre session a expiré. Veuillez vous reconnecter pour accéder à cette vidéo."
+                        } else {
+                            error
+                        },
+                        fontSize = 14.sp,
+                        color = Color(0xFF666666),
+                        lineHeight = 20.sp
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { 
+                        videoError = null
+                        // Si c'est une erreur de session expirée, rediriger vers la connexion
+                        if (error.contains("401") || error.contains("Token") || error.contains("expiré") || error.contains("Session")) {
+                            onNavigateToLogin()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = DarkBlue
+                    )
+                ) {
+                    Text("Compris", color = White)
+                }
+            }
+        )
+    }
+    
+    // Dialog pour afficher la vidéo
+    if (showVideoDialog && videoUri != null) {
+        AlertDialog(
+            onDismissRequest = { 
+                showVideoDialog = false
+                videoUri?.let { uri ->
+                    // Nettoyer le fichier temporaire
+                    try {
+                        val file = java.io.File(uri.path ?: "")
+                        if (file.exists()) {
+                            file.delete()
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("CandidateCard", "Erreur suppression fichier: ${e.message}")
+                    }
+                }
+                videoUri = null
+            },
+            title = {
+                Text(
+                    "Vidéo d'audition",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Ouvrir la vidéo avec un Intent
+                    LaunchedEffect(videoUri) {
+                        videoUri?.let { uri ->
+                            try {
+                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                                    setDataAndType(uri, "video/mp4")
+                                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                android.util.Log.e("CandidateCard", "Erreur ouverture vidéo: ${e.message}", e)
+                            }
+                        }
+                    }
+                    Text(
+                        "La vidéo s'ouvre dans votre lecteur vidéo par défaut",
+                        fontSize = 14.sp,
+                        color = Color(0xFF666666),
+                        modifier = Modifier.padding(vertical = 16.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { 
+                    showVideoDialog = false
+                    videoUri = null
+                }) {
+                    Text("Fermer")
+                }
+            }
+        )
     }
 }
 

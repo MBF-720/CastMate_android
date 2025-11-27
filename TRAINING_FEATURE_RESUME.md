@@ -95,7 +95,7 @@ Avec couleur adaptative :
 ### Clé API Gemini
 ```kotlin
 // app/src/main/java/com/example/projecct_mobile/utils/GeminiConfig.kt
-const val GEMINI_API_KEY = "AIzaSyADwL9Vq4JqSBxYmzovCx-VUNDyD_DdBrg"
+const val GEMINI_API_KEY = "AIzaSyBr0weABCTBdyPXER8pnAPWPANfVTQZn5Q"
 ```
 
 **Note** : Cette clé est partagée avec le chatbot agence.

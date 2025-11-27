@@ -299,13 +299,18 @@ class TokenManager(private val context: Context) {
             // Parser le JSON pour extraire l'ID
             val jsonObject = JSONObject(decodedString)
             
-            // Logger toutes les clés du payload pour le débogage
-            val keys = jsonObject.keys()
-            android.util.Log.d("TokenManager", "📋 Clés dans le payload JWT:")
-            while (keys.hasNext()) {
-                val key = keys.next()
-                val value = jsonObject.opt(key)
-                android.util.Log.d("TokenManager", "  - $key: $value")
+            // Logger les clés importantes du payload pour le débogage
+            android.util.Log.d("TokenManager", "📋 Informations du token JWT:")
+            android.util.Log.d("TokenManager", "  - id: ${jsonObject.optString("id", "N/A")}")
+            android.util.Log.d("TokenManager", "  - email: ${jsonObject.optString("email", "N/A")}")
+            android.util.Log.d("TokenManager", "  - role: ${jsonObject.optString("role", "N/A")}")
+            if (jsonObject.has("exp")) {
+                val exp = jsonObject.getLong("exp")
+                val now = System.currentTimeMillis() / 1000
+                val remaining = exp - now
+                android.util.Log.d("TokenManager", "  - exp: $exp (expire dans ${remaining / 60} minutes)")
+            } else {
+                android.util.Log.w("TokenManager", "  - exp: N/A (token sans expiration)")
             }
             
             // Le backend peut stocker l'ID sous différents noms: "id", "userId", "sub", "_id", "actorId", etc.
@@ -329,6 +334,72 @@ class TokenManager(private val context: Context) {
             android.util.Log.e("TokenManager", "❌ Erreur lors du décodage du token JWT: ${e.message}", e)
             null
         }
+    }
+    
+    /**
+     * Vérifie si le token JWT est expiré
+     * @return true si le token est expiré ou invalide, false sinon
+     */
+    suspend fun isTokenExpired(): Boolean {
+        return try {
+            val token = getTokenSync() ?: return true // Pas de token = considéré comme expiré
+            
+            // Un token JWT a 3 parties séparées par des points: header.payload.signature
+            val parts = token.split(".")
+            if (parts.size != 3) {
+                android.util.Log.e("TokenManager", "❌ Token JWT invalide: nombre de parties incorrect")
+                return true
+            }
+            
+            // Décoder le payload (2ème partie)
+            val payload = parts[1]
+            val decodedBytes = Base64.decode(payload, Base64.URL_SAFE or Base64.NO_WRAP)
+            val decodedString = String(decodedBytes, Charsets.UTF_8)
+            
+            // Parser le JSON pour extraire l'expiration
+            val jsonObject = JSONObject(decodedString)
+            
+            // Le champ "exp" contient le timestamp Unix d'expiration
+            if (!jsonObject.has("exp")) {
+                android.util.Log.w("TokenManager", "⚠️ Token JWT sans champ 'exp' - considéré comme valide")
+                return false // Pas de champ exp = considéré comme non expiré (token sans expiration)
+            }
+            
+            val expTimestamp = jsonObject.getLong("exp")
+            val currentTimestamp = System.currentTimeMillis() / 1000 // Timestamp actuel en secondes
+            
+            val isExpired = currentTimestamp >= expTimestamp
+            
+            if (isExpired) {
+                android.util.Log.w("TokenManager", "⚠️ Token JWT expiré: exp=$expTimestamp, maintenant=$currentTimestamp")
+                android.util.Log.w("TokenManager", "⚠️ Différence: ${currentTimestamp - expTimestamp} secondes d'expiration")
+                // Supprimer le token expiré
+                clearToken()
+            } else {
+                val remainingSeconds = expTimestamp - currentTimestamp
+                val remainingMinutes = remainingSeconds / 60
+                val remainingHours = remainingMinutes / 60
+                if (remainingHours > 0) {
+                    android.util.Log.d("TokenManager", "✅ Token JWT valide: expire dans ${remainingHours}h ${remainingMinutes % 60}min")
+                } else {
+                    android.util.Log.d("TokenManager", "✅ Token JWT valide: expire dans ${remainingMinutes} minutes")
+                }
+            }
+            
+            isExpired
+        } catch (e: Exception) {
+            android.util.Log.e("TokenManager", "❌ Erreur lors de la vérification d'expiration du token: ${e.message}", e)
+            true // En cas d'erreur, considérer comme expiré
+        }
+    }
+    
+    /**
+     * Vérifie si le token JWT est valide (présent et non expiré)
+     * @return true si le token est valide, false sinon
+     */
+    suspend fun isTokenValid(): Boolean {
+        val token = getTokenSync() ?: return false
+        return !isTokenExpired()
     }
 }
 

@@ -329,6 +329,108 @@ class CastingRepository {
     }
     
     /**
+     * Postuler à un casting avec vidéo d'audition et feedback IA
+     * 
+     * @param id ID du casting
+     * @param context Context Android pour lire la vidéo
+     * @param videoUri URI de la vidéo (optionnel)
+     * @param aiFeedback Feedback IA en JSON string (optionnel)
+     */
+    suspend fun applyToCastingWithVideo(
+        id: String,
+        context: android.content.Context,
+        videoUri: android.net.Uri? = null,
+        aiFeedback: String? = null
+    ): Result<Unit> {
+        return try {
+            android.util.Log.d("CastingRepository", "📝 Postulation au casting avec vidéo: $id")
+            
+            // Préparer les parts multipart
+            var videoPart: MultipartBody.Part? = null
+            var aiFeedbackBody: okhttp3.RequestBody? = null
+            
+            // Si vidéo fournie, créer la part multipart
+            if (videoUri != null) {
+                val inputStream = context.contentResolver.openInputStream(videoUri)
+                    ?: throw Exception("Impossible de lire la vidéo")
+                
+                // Créer un fichier temporaire
+                val tempFile = File.createTempFile("audition_video", ".mp4", context.cacheDir)
+                tempFile.outputStream().use { output ->
+                    inputStream.copyTo(output)
+                }
+                
+                // Vérifier la taille (max 10 MB - limite stricte du backend Vercel/Firebase)
+                val fileSizeBytes = tempFile.length()
+                val fileSizeMB = fileSizeBytes / (1024.0 * 1024.0) // Conversion en Double
+                val maxSizeMB = 10.0 // Réduit à 10 MB car le backend rejette même 20 MB
+                if (fileSizeMB > maxSizeMB) {
+                    tempFile.delete()
+                    return Result.failure(
+                        ApiException.BadRequestException(
+                            "La vidéo est trop volumineuse (${String.format("%.1f", fileSizeMB)} MB). " +
+                            "Maximum: ${maxSizeMB.toInt()} MB. Veuillez compresser ou réduire la durée de la vidéo."
+                        )
+                    )
+                }
+                
+                android.util.Log.d("CastingRepository", "📹 Taille de la vidéo: ${String.format("%.1f", fileSizeMB)} MB")
+                
+                val requestFile = tempFile.asRequestBody(
+                    URLConnection.guessContentTypeFromName(tempFile.name)?.toMediaTypeOrNull()
+                        ?: "video/mp4".toMediaTypeOrNull()
+                )
+                
+                videoPart = MultipartBody.Part.createFormData("video", tempFile.name, requestFile)
+            }
+            
+            // Si feedback IA fourni, créer le RequestBody
+            if (aiFeedback != null) {
+                aiFeedbackBody = aiFeedback.toRequestBody("application/json".toMediaTypeOrNull())
+            }
+            
+            val response = castingService.applyToCastingWithVideo(id, videoPart, aiFeedbackBody)
+            
+            if (response.isSuccessful) {
+                android.util.Log.d("CastingRepository", "✅ Candidature avec vidéo envoyée avec succès")
+                Result.success(Unit)
+            } else {
+                val errorCode = response.code()
+                val errorBody = response.errorBody()?.string()
+                android.util.Log.e("CastingRepository", "❌ Erreur ${errorCode}: $errorBody")
+                
+                val errorMessage = try {
+                    if (errorBody != null && errorBody.isNotBlank()) {
+                        val jsonObject = com.google.gson.JsonParser.parseString(errorBody).asJsonObject
+                        jsonObject.get("message")?.asString ?: errorBody
+                    } else {
+                        null
+                    }
+                } catch (e: Exception) {
+                    errorBody
+                }
+                
+                val exception = when (errorCode) {
+                    401 -> ApiException.UnauthorizedException("Vous devez être connecté pour postuler")
+                    403 -> ApiException.ForbiddenException("Vous ne pouvez pas postuler à ce casting")
+                    404 -> ApiException.NotFoundException("Casting non trouvé")
+                    409 -> ApiException.ConflictException(errorMessage ?: "Vous avez déjà postulé à ce casting")
+                    400 -> ApiException.BadRequestException(errorMessage ?: "Erreur lors de la candidature")
+                    in 500..599 -> ApiException.ServerException("Erreur serveur: ${errorMessage ?: errorBody}")
+                    else -> ApiException.UnknownException("Erreur ${errorCode}: ${errorMessage ?: errorBody ?: response.message()}")
+                }
+                Result.failure(exception)
+            }
+        } catch (e: ApiException) {
+            android.util.Log.e("CastingRepository", "❌ ApiException: ${e.message}", e)
+            Result.failure(e)
+        } catch (e: Exception) {
+            android.util.Log.e("CastingRepository", "❌ Exception: ${e.message}", e)
+            Result.failure(ApiException.UnknownException("Erreur inconnue: ${e.message}"))
+        }
+    }
+    
+    /**
      * Accepter un candidat (route protégée - Recruteur/Admin uniquement)
      */
     suspend fun acceptCandidate(castingId: String, acteurId: String): Result<Unit> {

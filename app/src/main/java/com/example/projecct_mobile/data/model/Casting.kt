@@ -135,7 +135,13 @@ data class Candidat(
     val statut: String? = null, // "EN_ATTENTE", "ACCEPTE", "REFUSE"
     
     @SerializedName("dateCandidature")
-    val dateCandidature: String? = null // Format ISO
+    val dateCandidature: String? = null, // Format ISO
+    
+    @SerializedName("videoFileId")
+    val videoFileId: String? = null, // ID du fichier vidéo d'audition (optionnel)
+    
+    @SerializedName("aiFeedback")
+    val aiFeedback: TrainingFeedback? = null // Feedback IA de l'analyse vidéo (optionnel)
 )
 
 /**

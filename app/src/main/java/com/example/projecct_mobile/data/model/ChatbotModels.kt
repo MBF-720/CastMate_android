@@ -70,3 +70,14 @@ data class SuggestedActor(
     val matchReasons: List<String> = emptyList()
 )
 
+/**
+ * Message de chat pour l'UI (utilisé dans ChatbotContent)
+ */
+data class ChatMessage(
+    val text: String,
+    val isBot: Boolean,
+    val timestamp: Long = System.currentTimeMillis(),
+    val suggestedActors: List<SuggestedActor>? = null
+)
+
+

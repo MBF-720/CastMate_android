@@ -39,6 +39,7 @@ import com.example.projecct_mobile.ui.screens.auth.*
 import com.example.projecct_mobile.ui.screens.auth.signup.*
 import com.example.projecct_mobile.ui.screens.auth.ResetPasswordScreen
 import com.example.projecct_mobile.ui.screens.casting.*
+import com.example.projecct_mobile.ui.screens.casting.CastingApplicationScreen
 import com.example.projecct_mobile.ui.screens.agenda.*
 import com.example.projecct_mobile.ui.screens.map.*
 import com.example.projecct_mobile.ui.screens.profile.*
@@ -2390,6 +2391,13 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                                 // Naviguer vers le profil de l'acteur
                                 android.util.Log.d("MainActivity", "👤 Voir le profil de l'acteur: $acteurId")
                                 navController.navigate("actorProfile/$acteurId")
+                            },
+                            onNavigateToLogin = {
+                                // Rediriger vers l'écran de connexion agence si la session expire
+                                android.util.Log.d("MainActivity", "🔐 Session expirée - redirection vers connexion agence")
+                                navController.navigate("agencySignIn") {
+                                    popUpTo("agencySignIn") { inclusive = true }
+                                }
                             }
                         )
                     } else {
@@ -2406,6 +2414,11 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                     onSubmitClick = {
                                     // L'appel API est géré directement dans CastingDetailScreen
                                     android.util.Log.d("MainActivity", "Callback onSubmitClick appelé pour le casting: ${currentCasting.titre}")
+                    },
+                    onNavigateToApplication = { casting ->
+                        // Naviguer vers l'écran de candidature avec vidéo
+                        android.util.Log.d("MainActivity", "🎬 Navigation vers candidature avec vidéo pour: ${casting.titre}")
+                        navController.navigate("castingApplication/${casting.actualId ?: ""}")
                     },
                     onNavigateToProfile = {
                                     // Navigue vers la page settings de l'acteur
@@ -2444,6 +2457,78 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                     }
                 }
             }
+            }
+        }
+        
+        // Route pour l'écran de candidature avec vidéo
+        composable(
+            route = "castingApplication/{castingId}",
+            arguments = listOf(
+                navArgument("castingId") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val castingId = backStackEntry.arguments?.getString("castingId") ?: ""
+            var casting by remember { mutableStateOf<com.example.projecct_mobile.data.model.Casting?>(null) }
+            var isLoading by remember { mutableStateOf(true) }
+            var errorMessage by remember { mutableStateOf<String?>(null) }
+            val castingRepository = remember { com.example.projecct_mobile.data.repository.CastingRepository() }
+            
+            LaunchedEffect(castingId) {
+                if (castingId.isNotBlank()) {
+                    val result = castingRepository.getCastingById(castingId)
+                    result.onSuccess { 
+                        casting = it
+                        isLoading = false
+                    }.onFailure { exception ->
+                        errorMessage = exception.message
+                        isLoading = false
+                    }
+                } else {
+                    errorMessage = "ID de casting invalide"
+                    isLoading = false
+                }
+            }
+            
+            when {
+                isLoading -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = com.example.projecct_mobile.ui.theme.DarkBlue)
+                    }
+                }
+                errorMessage != null -> {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = errorMessage ?: "Erreur",
+                            color = com.example.projecct_mobile.ui.theme.Red,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(onClick = { navController.popBackStack() }) {
+                            Text("Retour")
+                        }
+                    }
+                }
+                casting != null -> {
+                    CastingApplicationScreen(
+                        casting = casting!!,
+                        onBackClick = {
+                            navController.popBackStack()
+                        },
+                        onSuccess = {
+                            // Retourner à la liste des castings ou au détail
+                            navController.popBackStack()
+                        }
+                    )
+                }
             }
         }
         
