@@ -57,6 +57,7 @@ import com.example.projecct_mobile.ui.components.ErrorMessage
 import com.example.projecct_mobile.ui.components.getErrorMessage
 import com.example.projecct_mobile.ui.components.ActorBottomNavigationBar
 import com.example.projecct_mobile.ui.components.NavigationItem
+import com.example.projecct_mobile.ui.components.ImageCropScreen
 import com.example.projecct_mobile.ui.theme.*
 import com.example.projecct_mobile.utils.SocialLinkValidator
 import kotlinx.coroutines.launch
@@ -116,6 +117,10 @@ fun ActorProfileScreen(
     var selectedPhotoFile by remember { mutableStateOf<File?>(null) }
     var isUploadingPhoto by remember { mutableStateOf(false) }
     
+    // États pour l'écran de recadrage
+    var showCropScreen by remember { mutableStateOf(false) }
+    var imageToCrop by remember { mutableStateOf<File?>(null) }
+    
     // État pour le CV PDF
     var selectedDocumentFile by remember { mutableStateOf<File?>(null) }
     var isUploadingDocument by remember { mutableStateOf(false) }
@@ -145,13 +150,10 @@ fun ActorProfileScreen(
         
         val copiedFile = copyUriToCache(context, uri, "profile_photo")
         if (copiedFile != null) {
-            selectedPhotoFile = copiedFile
-            // Prévisualiser la nouvelle photo
-            val bitmap = BitmapFactory.decodeFile(copiedFile.absolutePath)
-            if (bitmap != null) {
-                profileImage = bitmap.asImageBitmap()
-                android.util.Log.e("ActorProfileScreen", "✅ Nouvelle photo sélectionnée: ${copiedFile.name}")
-            }
+            // Au lieu de directement assigner, ouvrir l'écran de recadrage
+            imageToCrop = copiedFile
+            showCropScreen = true
+            android.util.Log.e("ActorProfileScreen", "✅ Photo sélectionnée, ouverture de l'écran de recadrage")
         }
     }
     
@@ -441,6 +443,31 @@ fun ActorProfileScreen(
     var followersCount by remember { mutableStateOf(0) }
     var followingCount by remember { mutableStateOf(0) }
     var projectsCount by remember { mutableStateOf(0) }
+    
+    // Afficher l'écran de recadrage si nécessaire
+    if (showCropScreen && imageToCrop != null) {
+        ImageCropScreen(
+            imageFile = imageToCrop!!,
+            onCropComplete = { croppedFile ->
+                // Utiliser le fichier recadré
+                selectedPhotoFile = croppedFile
+                // Prévisualiser la photo recadrée
+                val bitmap = BitmapFactory.decodeFile(croppedFile.absolutePath)
+                if (bitmap != null) {
+                    profileImage = bitmap.asImageBitmap()
+                    android.util.Log.e("ActorProfileScreen", "✅ Photo recadrée et prévisualisée: ${croppedFile.name}")
+                }
+                showCropScreen = false
+                imageToCrop = null
+            },
+            onCancel = {
+                showCropScreen = false
+                imageToCrop = null
+                android.util.Log.e("ActorProfileScreen", "❌ Recadrage annulé")
+            }
+        )
+        return // Ne pas afficher le reste de l'UI quand l'écran de recadrage est actif
+    }
     
     Column(modifier = Modifier.fillMaxSize()) {
         // Header avec gradient bleu foncé et forme ondulée blanche

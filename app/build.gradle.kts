@@ -101,6 +101,9 @@ dependencies {
     // JavaMail API pour envoyer des emails depuis Android (⚠️ NON RECOMMANDÉ EN PRODUCTION)
     implementation("com.sun.mail:android-mail:1.6.7")
     implementation("com.sun.mail:android-activation:1.6.7")
+    
+    // Image Cropping Library
+    implementation("com.github.Tanish-Ranjan:crop-kit:1.1.0")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
