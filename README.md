@@ -296,14 +296,18 @@ Ce projet est sous licence propriétaire. Tous droits réservés.
 
 ## 👥 Équipe
 
-Développé pour la plateforme CastMate.
+Développé par l'équipe CastMate :
+- **Oussema Negzaoui**
+- **Mohamed Ben Fredj**
 
 ## 📞 Support
 
-Pour toute question ou problème, veuillez ouvrir une issue sur le repository.
+Pour toute question ou problème, contactez-nous :
+- **Email** : [mohamedbenfredj8@gmail.com](mailto:mohamedbenfredj8@gmail.com)
+- Ou ouvrez une issue sur le repository
 
 ---
 
 **Version** : 1.0  
-**Dernière mise à jour** : 2024
+**Dernière mise à jour** : 30 novembre 2025
 
