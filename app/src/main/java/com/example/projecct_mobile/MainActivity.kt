@@ -2,7 +2,7 @@ package com.example.projecct_mobile
 
 import android.os.Bundle
 import android.widget.Toast
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -51,6 +51,7 @@ import com.example.projecct_mobile.ui.screens.agence.profile.ActorProfileDetails
 import com.example.projecct_mobile.ui.screens.settings.SettingsScreen
 import com.example.projecct_mobile.ui.screens.acteur.ActorSettingsScreen
 import com.example.projecct_mobile.ui.screens.acteur.ActorTrainingScreen
+import com.example.projecct_mobile.ui.screens.acteur.ActorTrainingLevelsScreen
 import com.example.projecct_mobile.ui.screens.acteur.MyCandidaturesScreen
 import com.example.projecct_mobile.ui.components.getErrorMessage
 import com.example.projecct_mobile.ui.theme.Projecct_MobileTheme
@@ -98,7 +99,7 @@ data class AgencySignupData(
     val documentUrl: String? = null
 )
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
@@ -1632,11 +1633,10 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                         navController.navigate("myCandidatures")
                     },
                     onTrainingClick = {
-                        navController.navigate("actorTraining")
+                        navController.navigate("actorTrainingLevels")
                     },
                     onSettingsClick = {
-                        // TODO: Naviguer vers les réglages de l'application
-                        android.util.Log.d("MainActivity", "Réglages - À implémenter")
+                        navController.navigate("applicationSettings")
                     },
                     onLogoutClick = {
                         scope.launch {
@@ -2606,6 +2606,25 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
             )
         }
         
+        composable("applicationSettings") {
+            com.example.projecct_mobile.ui.screens.acteur.ActorApplicationSettingsScreen(
+                onBackClick = {
+                    navController.popBackStack()
+                },
+                onHashpackClick = {
+                    navController.navigate("hashpackSettings")
+                }
+            )
+        }
+        
+        composable("hashpackSettings") {
+            com.example.projecct_mobile.ui.screens.acteur.HashPackSettingsScreen(
+                onBackClick = {
+                    navController.popBackStack()
+                }
+            )
+        }
+        
         composable("actorProfile") {
             ActorProfileScreen(
                 onBackClick = {
@@ -2635,6 +2654,14 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
         
         composable("actorTraining") {
             ActorTrainingScreen(
+                onBackClick = {
+                    navController.popBackStack()
+                }
+            )
+        }
+        
+        composable("actorTrainingLevels") {
+            ActorTrainingLevelsScreen(
                 onBackClick = {
                     navController.popBackStack()
                 }

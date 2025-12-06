@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit
  */
 object ApiClient {
     
-    private const val BASE_URL = "https://cast-mate.vercel.app/"
+    const val BASE_URL = "https://cast-mate.vercel.app/"
     
     // Instance singleton du client Retrofit
     private var retrofit: Retrofit? = null
@@ -33,6 +33,8 @@ object ApiClient {
         
         android.util.Log.d("ApiClient", "✅ ApiClient initialisé avec contexte: ${appContext::class.java.simpleName}")
         
+        // Configuration Gson standard (les adaptateurs personnalisés ont été retirés
+        // car le backend renvoie maintenant un format JSON cohérent)
         val gson: Gson = GsonBuilder()
             .setLenient()
             .setDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
@@ -140,6 +142,33 @@ object ApiClient {
             .build()
         
         return geminiRetrofit.create(GeminiApiService::class.java)
+    }
+    
+    /**
+     * Crée une instance du service d'entraînement
+     */
+    fun getTrainingService(): TrainingApiService {
+        return getRetrofit().create(TrainingApiService::class.java)
+    }
+    
+    /**
+     * Récupère l'OkHttpClient configuré avec l'authentification
+     * Utile pour configurer Coil avec le même client authentifié
+     */
+    fun getOkHttpClient(): OkHttpClient {
+        val tokenManager = getTokenManager()
+        val loggingInterceptor = HttpLoggingInterceptor().apply {
+            level = HttpLoggingInterceptor.Level.BODY
+        }
+        
+        return OkHttpClient.Builder()
+            .addInterceptor(loggingInterceptor)
+            .addInterceptor(AuthInterceptor(tokenManager))
+            .addInterceptor(ErrorInterceptor(tokenManager, GsonBuilder().setLenient().create()))
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .build()
     }
 }
 

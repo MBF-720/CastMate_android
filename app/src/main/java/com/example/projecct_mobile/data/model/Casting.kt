@@ -1,5 +1,6 @@
 package com.example.projecct_mobile.data.model
 
+import com.example.projecct_mobile.data.api.ApiClient
 import com.google.gson.annotations.SerializedName
 
 /**
@@ -19,7 +20,10 @@ data class CastingMedia(
     val afficheLength: Double? = null,
     
     @SerializedName("afficheUploadDate")
-    val afficheUploadDate: String? = null
+    val afficheUploadDate: String? = null,
+    
+    @SerializedName("afficheUrl")
+    val afficheUrl: String? = null // ✅ NOUVEAU : URL complète de l'image fournie par le backend
 )
 
 /**
@@ -213,6 +217,26 @@ data class Casting(
     // Propriété calculée pour obtenir l'afficheFileId (priorité à media.afficheFileId)
     val actualAfficheFileId: String?
         get() = media?.afficheFileId ?: afficheFileId
+    
+    // Propriété calculée pour obtenir l'afficheUrl (priorité à media.afficheUrl)
+    // Normalise l'URL en remplaçant localhost par l'URL de production
+    val actualAfficheUrl: String?
+        get() {
+            val urlFromMedia = media?.afficheUrl
+            if (!urlFromMedia.isNullOrBlank()) {
+                // Remplacer localhost par la BASE_URL si nécessaire
+                return urlFromMedia
+                    .replace("http://localhost:3000", ApiClient.BASE_URL.trimEnd('/'))
+                    .replace("http://127.0.0.1:3000", ApiClient.BASE_URL.trimEnd('/'))
+            }
+            // Fallback pour les anciens castings sans afficheUrl mais avec afficheFileId
+            val fileId = media?.afficheFileId ?: afficheFileId
+            return if (!fileId.isNullOrBlank()) {
+                "${ApiClient.BASE_URL.trimEnd('/')}/media/$fileId"
+            } else {
+                null
+            }
+        }
 }
 
 /**

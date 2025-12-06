@@ -33,6 +33,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import android.graphics.BitmapFactory
 import kotlinx.coroutines.launch
+import coil.compose.rememberAsyncImagePainter
+import coil.request.ImageRequest
 import com.example.projecct_mobile.data.local.TokenManager
 import com.example.projecct_mobile.data.model.Casting
 import com.example.projecct_mobile.data.repository.AgenceRepository
@@ -43,6 +45,7 @@ import com.example.projecct_mobile.ui.components.getErrorMessage
 import com.example.projecct_mobile.ui.screens.casting.CastingItem
 import com.example.projecct_mobile.ui.screens.casting.toCastingItem
 import com.example.projecct_mobile.ui.theme.*
+import com.example.projecct_mobile.ui.utils.CoilImageLoader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
@@ -546,34 +549,9 @@ private fun LocalAgencyCastingCard(
     onEditClick: () -> Unit
 ) {
     val context = LocalContext.current
+    val imageLoader = remember { CoilImageLoader.getImageLoader(context) }
     val agenceRepository = remember { AgenceRepository() }
     val scope = rememberCoroutineScope()
-    
-    var afficheImage by remember { mutableStateOf<ImageBitmap?>(null) }
-    var isLoadingImage by remember { mutableStateOf(false) }
-    
-    // Charger l'image si afficheFileId existe
-    LaunchedEffect(casting.afficheFileId) {
-        if (casting.afficheFileId != null && casting.afficheFileId.isNotBlank()) {
-            isLoadingImage = true
-            val result = agenceRepository.downloadMedia(casting.afficheFileId)
-            result.onSuccess { bytes ->
-                try {
-                    val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                    afficheImage = bitmap?.asImageBitmap()
-                } catch (e: Exception) {
-                    android.util.Log.e("LocalAgencyCastingCard", "Erreur décodage image: ${e.message}")
-                }
-                isLoadingImage = false
-            }
-            result.onFailure {
-                android.util.Log.e("LocalAgencyCastingCard", "Erreur chargement image: ${it.message}")
-                isLoadingImage = false
-            }
-        } else if (casting.afficheFileId == null) {
-            isLoadingImage = false
-        }
-    }
     
     Card(
         modifier = Modifier
@@ -607,27 +585,39 @@ private fun LocalAgencyCastingCard(
                     .border(1.dp, DarkBlue.copy(alpha = 0.2f), RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                when {
-                    isLoadingImage -> {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            color = DarkBlue,
-                            strokeWidth = 2.dp
-                        )
+                if (casting.afficheUrl != null) {
+                    val painter = rememberAsyncImagePainter(
+                        model = ImageRequest.Builder(context)
+                            .data(casting.afficheUrl)
+                            .crossfade(true)
+                            .build(),
+                        imageLoader = imageLoader
+                    )
+                    
+                    when (painter.state) {
+                        is coil.compose.AsyncImagePainter.State.Loading -> {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                color = DarkBlue,
+                                strokeWidth = 2.dp
+                            )
+                        }
+                        is coil.compose.AsyncImagePainter.State.Error -> {
+                            Text("📷", fontSize = 48.sp)
+                        }
+                        else -> {
+                            Image(
+                                painter = painter,
+                                contentDescription = "Affiche du casting",
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(12.dp)),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
                     }
-                    afficheImage != null -> {
-                        Image(
-                            bitmap = afficheImage!!,
-                            contentDescription = "Affiche du casting",
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(RoundedCornerShape(12.dp)),
-                            contentScale = ContentScale.Crop
-                        )
-                    }
-                    else -> {
-                        Text("📷", fontSize = 48.sp)
-                    }
+                } else {
+                    Text("📷", fontSize = 48.sp)
                 }
             }
             

@@ -1217,17 +1217,17 @@ fun ActorProfileScreen(
                         Spacer(modifier = Modifier.height(12.dp))
                         
                         // Liens sociaux en mode édition
-                Text(
-                    text = "Réseaux sociaux",
+                        Text(
+                            text = "Réseaux sociaux",
                             fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.Bold,
                             color = Color(0xFF1A1A1A),
                             modifier = Modifier.padding(top = 8.dp, bottom = 12.dp)
-                )
-                
+                        )
+                        
                         EditableField(
                             label = "Instagram",
-                    value = instagram,
+                            value = instagram,
                             onValueChange = { instagram = it },
                             placeholder = "https://instagram.com/votre-compte"
                         )
@@ -1235,7 +1235,7 @@ fun ActorProfileScreen(
                         
                         EditableField(
                             label = "YouTube",
-                    value = youtube,
+                            value = youtube,
                             onValueChange = { youtube = it },
                             placeholder = "https://youtube.com/votre-chaine"
                         )
@@ -1243,7 +1243,7 @@ fun ActorProfileScreen(
                         
                         EditableField(
                             label = "TikTok",
-                    value = tiktok,
+                            value = tiktok,
                             onValueChange = { tiktok = it },
                             placeholder = "https://tiktok.com/@votre-compte"
                         )
@@ -1483,9 +1483,9 @@ fun ActorProfileScreen(
                 ActorBottomNavigationBar(
                     selectedItem = NavigationItem.PROFILE,
                     onCandidaturesClick = onMyCandidaturesClick,
-                onHomeClick = onHomeClick,
+                    onHomeClick = onHomeClick,
                     onProfileClick = onProfileClick
-            )
+                )
             }
         }
     }

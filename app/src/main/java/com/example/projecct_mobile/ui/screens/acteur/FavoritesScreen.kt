@@ -33,6 +33,8 @@ import android.graphics.BitmapFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import coil.compose.rememberAsyncImagePainter
+import coil.request.ImageRequest
 import com.example.projecct_mobile.data.model.ApiException
 import com.example.projecct_mobile.data.model.Casting
 import com.example.projecct_mobile.data.repository.ActeurRepository
@@ -44,6 +46,7 @@ import com.example.projecct_mobile.ui.screens.casting.toCastingItem
 import com.example.projecct_mobile.ui.theme.*
 import com.example.projecct_mobile.ui.components.ActorBottomNavigationBar
 import com.example.projecct_mobile.ui.components.NavigationItem
+import com.example.projecct_mobile.ui.utils.CoilImageLoader
 
 /**
  * Page des favoris pour les acteurs
@@ -308,41 +311,8 @@ private fun FavoriteCastingItemCard(
     onFavoriteClick: () -> Unit
 ) {
     val context = LocalContext.current
+    val imageLoader = remember { CoilImageLoader.getImageLoader(context) }
     val acteurRepository = remember { ActeurRepository() }
-    var afficheImage by remember { mutableStateOf<ImageBitmap?>(null) }
-    var isLoadingImage by remember { mutableStateOf(false) }
-    
-    // Télécharger l'affiche si disponible
-    LaunchedEffect(casting.afficheFileId) {
-        if (casting.afficheFileId != null && afficheImage == null && !isLoadingImage) {
-            isLoadingImage = true
-            try {
-                val result = acteurRepository.downloadMedia(casting.afficheFileId)
-                result.onSuccess { bytes ->
-                    if (bytes != null && bytes.isNotEmpty()) {
-                        withContext(Dispatchers.IO) {
-                            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                            bitmap?.let {
-                                afficheImage = it.asImageBitmap()
-                            }
-                        }
-                    }
-                    isLoadingImage = false
-                }
-                result.onFailure { exception ->
-                    if (exception !is ApiException.ForbiddenException) {
-                        android.util.Log.e("FavoritesScreen", "Erreur téléchargement affiche: ${exception.message}")
-                    }
-                    isLoadingImage = false
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("FavoritesScreen", "Exception téléchargement affiche: ${e.message}")
-                isLoadingImage = false
-            }
-        } else if (casting.afficheFileId == null) {
-            isLoadingImage = false
-        }
-    }
     
     Card(
         modifier = Modifier
@@ -376,27 +346,39 @@ private fun FavoriteCastingItemCard(
                     .border(1.dp, DarkBlue.copy(alpha = 0.2f), RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                when {
-                    isLoadingImage -> {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            color = DarkBlue,
-                            strokeWidth = 2.dp
-                        )
+                if (casting.afficheUrl != null) {
+                    val painter = rememberAsyncImagePainter(
+                        model = ImageRequest.Builder(context)
+                            .data(casting.afficheUrl)
+                            .crossfade(true)
+                            .build(),
+                        imageLoader = imageLoader
+                    )
+                    
+                    when (painter.state) {
+                        is coil.compose.AsyncImagePainter.State.Loading -> {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                color = DarkBlue,
+                                strokeWidth = 2.dp
+                            )
+                        }
+                        is coil.compose.AsyncImagePainter.State.Error -> {
+                            Text("📷", fontSize = 48.sp)
+                        }
+                        else -> {
+                            Image(
+                                painter = painter,
+                                contentDescription = "Affiche du casting",
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(12.dp)),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
                     }
-                    afficheImage != null -> {
-                        Image(
-                            bitmap = afficheImage!!,
-                            contentDescription = "Affiche du casting",
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(RoundedCornerShape(12.dp)),
-                            contentScale = ContentScale.Crop
-                        )
-                    }
-                    else -> {
-                        Text("📷", fontSize = 48.sp)
-                    }
+                } else {
+                    Text("📷", fontSize = 48.sp)
                 }
             }
             

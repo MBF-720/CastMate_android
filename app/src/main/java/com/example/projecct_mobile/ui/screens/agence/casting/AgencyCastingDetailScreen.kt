@@ -24,6 +24,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.rememberAsyncImagePainter
+import coil.request.ImageRequest
 import com.example.projecct_mobile.data.model.ApiException
 import com.example.projecct_mobile.data.model.Candidat
 import com.example.projecct_mobile.data.model.Casting
@@ -33,6 +35,7 @@ import com.example.projecct_mobile.data.model.TrainingFeedback
 import com.example.projecct_mobile.data.repository.ActeurRepository
 import com.example.projecct_mobile.data.api.ApiClient
 import com.example.projecct_mobile.ui.theme.*
+import com.example.projecct_mobile.ui.utils.CoilImageLoader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -47,46 +50,16 @@ fun AgencyCastingDetailScreen(
     onNavigateToLogin: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val imageLoader = remember { CoilImageLoader.getImageLoader(context) }
+    val afficheUrl = casting.actualAfficheUrl
     val acteurRepository = remember { ActeurRepository() }
     val castingRepository = remember { com.example.projecct_mobile.data.repository.CastingRepository() }
     val scope = rememberCoroutineScope()
-    var afficheImage by remember { mutableStateOf<ImageBitmap?>(null) }
-    var isLoadingImage by remember { mutableStateOf(false) }
     var selectedTabIndex by remember { mutableStateOf(0) }
     val tabs = listOf("Détails", "Candidats", "Chatbot")
     var currentCasting by remember { mutableStateOf(casting) }
     var isUpdatingStatus by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    
-    // Télécharger l'affiche si disponible
-    LaunchedEffect(casting.actualAfficheFileId) {
-        if (casting.actualAfficheFileId != null && afficheImage == null && !isLoadingImage) {
-            isLoadingImage = true
-            try {
-                val result = acteurRepository.downloadMedia(casting.actualAfficheFileId!!)
-                result.onSuccess { bytes ->
-                    if (bytes != null && bytes.isNotEmpty()) {
-                        withContext(Dispatchers.IO) {
-                            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                            bitmap?.let {
-                                afficheImage = it.asImageBitmap()
-                            }
-                        }
-                    }
-                    isLoadingImage = false
-                }
-                result.onFailure { exception ->
-                    android.util.Log.e("AgencyCastingDetail", "Erreur téléchargement affiche: ${exception.message}")
-                    isLoadingImage = false
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("AgencyCastingDetail", "Exception téléchargement affiche: ${e.message}")
-                isLoadingImage = false
-            }
-        } else if (casting.actualAfficheFileId == null) {
-            isLoadingImage = false
-        }
-    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Affichage du message d'erreur si nécessaire
@@ -115,13 +88,51 @@ fun AgencyCastingDetailScreen(
                 .height(350.dp)
         ) {
             // Affiche du casting en arrière-plan
-            if (afficheImage != null) {
-                Image(
-                    bitmap = afficheImage!!,
-                    contentDescription = "Affiche du casting",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
+            if (afficheUrl != null) {
+                val painter = rememberAsyncImagePainter(
+                    model = ImageRequest.Builder(context)
+                        .data(afficheUrl)
+                        .crossfade(true)
+                        .build(),
+                    imageLoader = imageLoader
                 )
+                
+                when (painter.state) {
+                    is coil.compose.AsyncImagePainter.State.Loading -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                color = White,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+                    }
+                    is coil.compose.AsyncImagePainter.State.Error -> {
+                        // Image par défaut avec gradient
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    brush = Brush.verticalGradient(
+                                        colors = listOf(
+                                            DarkBlue,
+                                            Color(0xFF1E3A8A)
+                                        )
+                                    )
+                                )
+                        )
+                    }
+                    else -> {
+                        Image(
+                            painter = painter,
+                            contentDescription = "Affiche du casting",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
+                }
             } else {
                 // Image par défaut avec gradient
                 Box(
@@ -136,18 +147,6 @@ fun AgencyCastingDetailScreen(
                             )
                         )
                 )
-            }
-            
-            if (isLoadingImage) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(
-                        color = White,
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
             }
 
             // Overlay sombre pour améliorer la lisibilité

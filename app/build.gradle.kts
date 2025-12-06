@@ -104,6 +104,12 @@ dependencies {
     
     // Image Cropping Library
     implementation("com.github.Tanish-Ranjan:crop-kit:1.1.0")
+    
+    // Coil pour charger les images depuis des URLs
+    implementation(libs.coil.compose)
+    
+    // Biometric Authentication
+    implementation("androidx.biometric:biometric:1.1.0")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

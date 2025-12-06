@@ -39,7 +39,11 @@ import androidx.compose.ui.unit.sp
 import android.graphics.BitmapFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import coil.compose.SubcomposeAsyncImage
+import coil.compose.SubcomposeAsyncImageContent
+import coil.request.ImageRequest
 import com.example.projecct_mobile.data.model.Casting
+import com.example.projecct_mobile.ui.utils.CoilImageLoader
 import com.example.projecct_mobile.data.model.ApiException
 import com.example.projecct_mobile.data.model.AgenceProfile
 import com.example.projecct_mobile.data.repository.ActeurRepository
@@ -69,12 +73,12 @@ fun CastingDetailScreen(
     onNavigateToCandidatures: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
+    val imageLoader = remember { CoilImageLoader.getImageLoader(context) }
+    val afficheUrl = casting.actualAfficheUrl
     val acteurRepository = remember { ActeurRepository() }
     val castingRepository = remember { CastingRepository() }
     val userRepository = remember { UserRepository() }
     val scope = rememberCoroutineScope()
-    var afficheImage by remember { mutableStateOf<ImageBitmap?>(null) }
-    var isLoadingImage by remember { mutableStateOf(false) }
     var isFavorite by remember { mutableStateOf(false) }
     
     // Charger l'état des favoris pour ce casting
@@ -138,39 +142,6 @@ fun CastingDetailScreen(
         }
     }
 
-    // Télécharger l'affiche si disponible
-    LaunchedEffect(casting.actualAfficheFileId) {
-        if (casting.actualAfficheFileId != null && afficheImage == null && !isLoadingImage) {
-            isLoadingImage = true
-            try {
-                val result = acteurRepository.downloadMedia(casting.actualAfficheFileId!!)
-                result.onSuccess { bytes ->
-                    if (bytes != null && bytes.isNotEmpty()) {
-                        withContext(Dispatchers.IO) {
-                            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                            bitmap?.let {
-                                afficheImage = it.asImageBitmap()
-                            }
-                        }
-                    }
-                    isLoadingImage = false
-                }
-                result.onFailure { exception ->
-                    if (exception is ApiException.ForbiddenException) {
-                        android.util.Log.d("CastingDetailScreen", "⚠️ Accès refusé à l'affiche (403)")
-                    } else {
-                        android.util.Log.e("CastingDetailScreen", "Erreur téléchargement affiche: ${exception.message}")
-                    }
-                    isLoadingImage = false
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("CastingDetailScreen", "Exception téléchargement affiche: ${e.message}")
-                isLoadingImage = false
-            }
-        } else if (casting.actualAfficheFileId == null) {
-            isLoadingImage = false
-        }
-    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Image en arrière-plan (fixe)
@@ -180,13 +151,65 @@ fun CastingDetailScreen(
                 .height(350.dp)
         ) {
             // Affiche du casting en arrière-plan
-            if (afficheImage != null) {
-                Image(
-                    bitmap = afficheImage!!,
+            if (afficheUrl != null) {
+                LaunchedEffect(afficheUrl) {
+                    android.util.Log.d("CastingDetailScreen", "🖼️ Chargement image: $afficheUrl")
+                }
+                
+                SubcomposeAsyncImage(
+                    model = ImageRequest.Builder(context)
+                        .data(afficheUrl)
+                        .crossfade(true)
+                        .listener(
+                            onStart = {
+                                android.util.Log.d("CastingDetailScreen", "⏳ Début chargement image: $afficheUrl")
+                            },
+                            onSuccess = { _, _ ->
+                                android.util.Log.d("CastingDetailScreen", "✅ Image chargée avec succès: $afficheUrl")
+                            },
+                            onError = { _, result ->
+                                android.util.Log.e("CastingDetailScreen", "❌ Erreur chargement image: ${result.throwable.message}")
+                                android.util.Log.e("CastingDetailScreen", "❌ URL: $afficheUrl")
+                            }
+                        )
+                        .build(),
+                    imageLoader = imageLoader,
                     contentDescription = "Affiche du casting",
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
-                )
+                ) {
+                    when (painter.state) {
+                        is coil.compose.AsyncImagePainter.State.Loading -> {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    color = White,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            }
+                        }
+                        is coil.compose.AsyncImagePainter.State.Error -> {
+                            // Image par défaut avec gradient
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        brush = Brush.verticalGradient(
+                                            colors = listOf(
+                                                Color(0xFFE57373),
+                                                Color(0xFFAD1457)
+                                            )
+                                        )
+                                    )
+                            )
+                        }
+                        else -> {
+                            SubcomposeAsyncImageContent()
+                        }
+                    }
+                }
             } else {
                 // Image par défaut avec gradient
                 Box(
@@ -203,17 +226,6 @@ fun CastingDetailScreen(
                 )
             }
             
-            if (isLoadingImage) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(
-                        color = White,
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
-            }
             
             // Barre de navigation en haut
                 Row(

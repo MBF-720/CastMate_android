@@ -42,6 +42,9 @@ data class ActeurProfile(
     @SerializedName("media")
     val media: UserMedia? = null,
 
+    @SerializedName("hashpackAccountId")
+    val hashpackAccountId: String? = null,
+
     @SerializedName("createdAt")
     val createdAt: String? = null,
 

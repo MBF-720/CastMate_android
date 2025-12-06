@@ -46,7 +46,8 @@ data class CastingItem(
     val age: String,
     val compensation: String,
     val isFavorite: Boolean = false,
-    val afficheFileId: String? = null,
+    val afficheFileId: String? = null, // Conservé pour compatibilité
+    val afficheUrl: String? = null, // ✅ NOUVEAU : URL complète de l'image
     val ouvert: Boolean = true // Statut du casting (Ouvert/Fermé)
 )
 
@@ -67,7 +68,12 @@ fun com.example.projecct_mobile.data.model.Casting.toCastingItem(isFavorite: Boo
         age = this.age ?: "",
         compensation = this.prix?.toString() ?: "Non spécifié",
         isFavorite = isFavorite,
-        afficheFileId = this.actualAfficheFileId, // Utiliser actualAfficheFileId qui gère media.afficheFileId
+        afficheFileId = this.actualAfficheFileId, // Conservé pour compatibilité
+        afficheUrl = this.actualAfficheUrl?.let { url ->
+            // Normaliser l'URL en remplaçant localhost par l'URL de production
+            url.replace("http://localhost:3000", "https://cast-mate.vercel.app")
+               .replace("http://127.0.0.1:3000", "https://cast-mate.vercel.app")
+        }, // ✅ NOUVEAU : Utiliser actualAfficheUrl qui gère media.afficheUrl
         ouvert = this.ouvert ?: true // Statut du casting
     )
 }
