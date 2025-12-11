@@ -1,0 +1,554 @@
+[
+  {
+    "id": "TC001",
+    "title": "Email/Password Authentication Success",
+    "description": "Verify that a user can successfully authenticate using valid email and password credentials.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the sign-in screen."
+      },
+      {
+        "type": "action",
+        "description": "Input valid email and password."
+      },
+      {
+        "type": "action",
+        "description": "Click the sign-in button."
+      },
+      {
+        "type": "assertion",
+        "description": "Check that authentication is successful and the JWT token is stored securely."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify user is redirected to the appropriate home screen based on role."
+      }
+    ]
+  },
+  {
+    "id": "TC002",
+    "title": "Google Sign-In Authentication Success",
+    "description": "Verify that a user can successfully authenticate using Google Sign-In and a JWT token is securely stored.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the sign-in screen."
+      },
+      {
+        "type": "action",
+        "description": "Click on the Google Sign-In button and complete authentication flow."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify authentication is successful and JWT token is stored securely."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm user is redirected to the correct home screen depending on user role."
+      }
+    ]
+  },
+  {
+    "id": "TC003",
+    "title": "Authentication Failure with Invalid Credentials",
+    "description": "Ensure authentication fails and appropriate error messages are displayed when using invalid email or password.",
+    "category": "error handling",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the sign-in screen."
+      },
+      {
+        "type": "action",
+        "description": "Input invalid email and/or password."
+      },
+      {
+        "type": "action",
+        "description": "Click the sign-in button."
+      },
+      {
+        "type": "assertion",
+        "description": "Check that authentication fails and relevant error message is displayed to user."
+      }
+    ]
+  },
+  {
+    "id": "TC004",
+    "title": "Actor Home Screen Casting List Display and Search",
+    "description": "Verify that the actor home screen displays casting listings correctly and search function returns accurate filtered results.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Log in as an actor user."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm casting list is populated with available castings."
+      },
+      {
+        "type": "action",
+        "description": "Enter a search term related to casting titles or locations."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the displayed casting list filters correctly based on the search term."
+      }
+    ]
+  },
+  {
+    "id": "TC005",
+    "title": "Casting Creation by Agency",
+    "description": "Verify that an agency can create a new casting with valid information and submit it successfully.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Log in as an agency user."
+      },
+      {
+        "type": "action",
+        "description": "Navigate to the casting creation screen."
+      },
+      {
+        "type": "action",
+        "description": "Input all required casting details including title, description, location, date, and media uploads."
+      },
+      {
+        "type": "action",
+        "description": "Submit the casting creation form."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm casting is successfully created and appears in agency's casting list."
+      }
+    ]
+  },
+  {
+    "id": "TC006",
+    "title": "Casting Application by Actor",
+    "description": "Test the actor's ability to apply for a casting and verify application status updates correctly.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Log in as an actor user."
+      },
+      {
+        "type": "action",
+        "description": "Navigate to a casting detail screen."
+      },
+      {
+        "type": "action",
+        "description": "Submit an application for the casting."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify application is recorded and status is updated in 'My Candidatures' screen."
+      }
+    ]
+  },
+  {
+    "id": "TC007",
+    "title": "Casting List Filtering Functionalities",
+    "description": "Validate that filtering options on casting lists work correctly for actors and agencies.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Log in as actor or agency."
+      },
+      {
+        "type": "action",
+        "description": "Apply various filters such as date range, location, type of casting, or status."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the casting list updates to show only items matching the filter criteria."
+      }
+    ]
+  },
+  {
+    "id": "TC008",
+    "title": "Agenda Interview Scheduling for Agency",
+    "description": "Ensure agencies can schedule interviews with actors via the agenda and that updates are synchronized.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Log in as an agency user."
+      },
+      {
+        "type": "action",
+        "description": "Navigate to the agenda or interview scheduling screen."
+      },
+      {
+        "type": "action",
+        "description": "Select casting and actor, pick date and time for interview."
+      },
+      {
+        "type": "action",
+        "description": "Confirm interview scheduling."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify interview appears correctly in agenda calendar for agency and actor."
+      }
+    ]
+  },
+  {
+    "id": "TC009",
+    "title": "Profile Update Functionalities for Actors and Agencies",
+    "description": "Verify users can update profile information and settings correctly with persistence across sessions.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Log in as an actor user."
+      },
+      {
+        "type": "action",
+        "description": "Navigate to profile management screen."
+      },
+      {
+        "type": "action",
+        "description": "Modify profile details including name, contact info, and media uploads."
+      },
+      {
+        "type": "action",
+        "description": "Save changes."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify updated information is persisted and displays correctly upon app restart."
+      },
+      {
+        "type": "action",
+        "description": "Repeat steps for agency user profile management."
+      }
+    ]
+  },
+  {
+    "id": "TC010",
+    "title": "AI Chatbot Interaction for Agencies",
+    "description": "Test chatbot conversation flows with AI technologies Gemini and Groq, checking message sending and response accuracy.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Log in as an agency user."
+      },
+      {
+        "type": "action",
+        "description": "Navigate to the AI Chatbot screen."
+      },
+      {
+        "type": "action",
+        "description": "Send a set of queries to the chatbot."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify that the chatbot responds appropriately and messages display without delay."
+      }
+    ]
+  },
+  {
+    "id": "TC011",
+    "title": "AI Training Module Functionality for Actors",
+    "description": "Ensure actors can initiate AI training sessions and receive feedback within the training module.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Log in as an actor user."
+      },
+      {
+        "type": "action",
+        "description": "Navigate to AI Training screen."
+      },
+      {
+        "type": "action",
+        "description": "Start a training session and interact with training content."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify training session completes and feedback is provided correctly."
+      }
+    ]
+  },
+  {
+    "id": "TC012",
+    "title": "Favorites Management for Actors",
+    "description": "Validate that actors can add or remove casting listings to their favorites and that favorites are persisted.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Log in as an actor user."
+      },
+      {
+        "type": "action",
+        "description": "Navigate to a casting listing."
+      },
+      {
+        "type": "action",
+        "description": "Add the casting to favorites."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm the casting appears in the favorites list."
+      },
+      {
+        "type": "action",
+        "description": "Remove the casting from favorites."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the casting is removed from favorites and this change persists across app sessions."
+      }
+    ]
+  },
+  {
+    "id": "TC013",
+    "title": "Interactive Map Casting Location Accuracy",
+    "description": "Verify that the interactive map correctly displays casting locations geographically for all castings.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Log in as any user."
+      },
+      {
+        "type": "action",
+        "description": "Navigate to the interactive map screen."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm that castings are accurately represented by map markers according to their location data."
+      },
+      {
+        "type": "action",
+        "description": "Use map zoom and pan functionalities."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify map remains responsive and markers update accordingly."
+      }
+    ]
+  },
+  {
+    "id": "TC014",
+    "title": "Password Reset Flow with Email Validation",
+    "description": "Ensure users can request password reset emails and complete password reset successfully.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the password reset request screen."
+      },
+      {
+        "type": "action",
+        "description": "Input registered email address and submit request."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify that password reset email is sent."
+      },
+      {
+        "type": "action",
+        "description": "Use the link or token from email to navigate to reset password screen."
+      },
+      {
+        "type": "action",
+        "description": "Input new password and confirm password."
+      },
+      {
+        "type": "action",
+        "description": "Submit password reset form."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify password is successfully reset and user can log in with new password."
+      }
+    ]
+  },
+  {
+    "id": "TC015",
+    "title": "Media Uploads: Photos, Videos, PDFs",
+    "description": "Validate that the media upload functionality works correctly for photos, videos, and PDF files during casting creation and profile editing.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Log in as actor or agency user."
+      },
+      {
+        "type": "action",
+        "description": "Navigate to casting creation screen or profile editing screen."
+      },
+      {
+        "type": "action",
+        "description": "Attach photo, video, and PDF files using media upload controls."
+      },
+      {
+        "type": "action",
+        "description": "Submit the form with uploads."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify that media uploads complete without data loss or corruption and appear correctly in UI."
+      }
+    ]
+  },
+  {
+    "id": "TC016",
+    "title": "Role-Based Navigation Bar Functionality",
+    "description": "Verify that navigation bars are correctly displayed and functional for actors and agencies with respective role access.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Log in as actor user and observe navigation bar."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm navigation bar contains actor-specific screens and navigation works properly."
+      },
+      {
+        "type": "action",
+        "description": "Log out and log in as agency user."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm navigation bar contains agency-specific screens and all navigations function without errors."
+      }
+    ]
+  },
+  {
+    "id": "TC017",
+    "title": "API Client Retrofit Configuration and Error Handling",
+    "description": "Test that API calls use Retrofit correctly with secure interceptors and handle errors gracefully with appropriate user feedback.",
+    "category": "error handling",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Perform actions that trigger various API calls (e.g., login, casting creation, profile update)."
+      },
+      {
+        "type": "assertion",
+        "description": "Check the Retrofit client attaches valid JWT tokens in request headers."
+      },
+      {
+        "type": "action",
+        "description": "Simulate API errors like 401 Unauthorized, 404 Not Found, and 500 Server Errors."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify error interceptors handle these errors properly and display user-friendly error messages."
+      }
+    ]
+  },
+  {
+    "id": "TC018",
+    "title": "Sign-Up Flow Validation for Actor and Agency",
+    "description": "Validate multi-step sign-up processes for actor and agency users including data input validation and successful account creation.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to sign-up screen and select actor sign-up."
+      },
+      {
+        "type": "action",
+        "description": "Complete all required sign-up steps with valid data."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify account is created successfully and user can log in afterwards."
+      },
+      {
+        "type": "action",
+        "description": "Repeat flow for agency sign-up and verify similar success."
+      },
+      {
+        "type": "action",
+        "description": "Provide invalid or incomplete data in sign-up forms."
+      },
+      {
+        "type": "assertion",
+        "description": "Check that validation errors are displayed clearly and prevent submission."
+      }
+    ]
+  },
+  {
+    "id": "TC019",
+    "title": "Media Upload Edge Case: Large File Handling and Unsupported Formats",
+    "description": "Verify that the media upload feature handles large file sizes and rejects unsupported formats correctly with meaningful errors.",
+    "category": "error handling",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Attempt to upload a very large photo, video, or PDF file beyond size limits."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify upload is rejected and appropriate error message about file size is displayed."
+      },
+      {
+        "type": "action",
+        "description": "Attempt to upload unsupported file formats."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify upload is rejected and user sees clear error indicating unsupported format."
+      }
+    ]
+  },
+  {
+    "id": "TC020",
+    "title": "Session Expiry and Token Refresh Handling",
+    "description": "Ensure the app responds correctly when the JWT token expires, prompting user to re-authenticate or refresh token without data loss.",
+    "category": "security",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Authenticate and obtain valid JWT token."
+      },
+      {
+        "type": "action",
+        "description": "Simulate token expiry during an API call."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify app prompts user to re-authenticate or refreshes token automatically if supported."
+      },
+      {
+        "type": "assertion",
+        "description": "Ensure no unsaved data is lost and user experience is seamless."
+      }
+    ]
+  }
+]

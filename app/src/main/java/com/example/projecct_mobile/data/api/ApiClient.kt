@@ -1,0 +1,175 @@
+package com.example.projecct_mobile.data.api
+
+import android.content.Context
+import com.example.projecct_mobile.data.local.TokenManager
+import com.google.gson.Gson
+import com.google.gson.GsonBuilder
+import okhttp3.OkHttpClient
+import okhttp3.logging.HttpLoggingInterceptor
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
+import java.util.concurrent.TimeUnit
+
+/**
+ * Configuration du client API Retrofit
+ */
+object ApiClient {
+    
+    private const val BASE_URL = "https://cast-mate.vercel.app/"
+    
+    // Instance singleton du client Retrofit
+    private var retrofit: Retrofit? = null
+    
+    // Instance du TokenManager
+    private var tokenManager: TokenManager? = null
+    
+    /**
+     * Initialise le client API avec le contexte de l'application
+     */
+    fun initialize(context: Context) {
+        // Utiliser le contexte de l'application pour garantir la cohérence
+        val appContext = context.applicationContext
+        tokenManager = TokenManager(appContext)
+        
+        android.util.Log.d("ApiClient", "✅ ApiClient initialisé avec contexte: ${appContext::class.java.simpleName}")
+        
+        val gson: Gson = GsonBuilder()
+            .setLenient()
+            .setDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
+            .create()
+        
+        // Intercepteur de logging (pour le debug)
+        val loggingInterceptor = HttpLoggingInterceptor().apply {
+            level = HttpLoggingInterceptor.Level.BODY // En production, utiliser Level.NONE
+        }
+        
+        // Configuration d'OkHttp avec les intercepteurs
+        val okHttpClient = OkHttpClient.Builder()
+            .addInterceptor(loggingInterceptor)
+            .addInterceptor(AuthInterceptor(tokenManager!!))
+            .addInterceptor(ErrorInterceptor(tokenManager!!, gson))
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .build()
+        
+        // Configuration de Retrofit
+        retrofit = Retrofit.Builder()
+            .baseUrl(BASE_URL)
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create(gson))
+            .build()
+        
+        android.util.Log.d("ApiClient", "✅ Retrofit configuré avec intercepteurs")
+    }
+    
+    /**
+     * Récupère l'instance du TokenManager
+     */
+    fun getTokenManager(): TokenManager {
+        return tokenManager ?: throw IllegalStateException("ApiClient n'est pas initialisé. Appelez initialize() d'abord.")
+    }
+    
+    /**
+     * Récupère l'instance Retrofit
+     */
+    private fun getRetrofit(): Retrofit {
+        return retrofit ?: throw IllegalStateException("ApiClient n'est pas initialisé. Appelez initialize() d'abord.")
+    }
+    
+    /**
+     * Crée une instance du service d'authentification
+     */
+    fun getAuthService(): AuthApiService {
+        return getRetrofit().create(AuthApiService::class.java)
+    }
+    
+    /**
+     * Crée une instance du service des castings
+     */
+    fun getCastingService(): CastingApiService {
+        return getRetrofit().create(CastingApiService::class.java)
+    }
+    
+    /**
+     * Crée une instance du service des utilisateurs
+     */
+    fun getUserService(): UserApiService {
+        return getRetrofit().create(UserApiService::class.java)
+    }
+    
+    /**
+     * Crée une instance du service des acteurs
+     */
+    fun getActeurService(): ActeurApiService {
+        return getRetrofit().create(ActeurApiService::class.java)
+    }
+    
+    /**
+     * Crée une instance du service des agences
+     */
+    fun getAgenceService(): AgenceApiService {
+        return getRetrofit().create(AgenceApiService::class.java)
+    }
+    
+    /**
+     * Crée une instance du service des médias
+     */
+    fun getMediaService(): MediaApiService {
+        return getRetrofit().create(MediaApiService::class.java)
+    }
+    
+    /**
+     * Crée une instance du service des interviews
+     */
+    fun getInterviewService(): InterviewApiService {
+        return getRetrofit().create(InterviewApiService::class.java)
+    }
+    
+    /**
+     * Obtient le service Gemini (utilise une URL de base différente)
+     */
+    fun getGeminiService(): GeminiApiService {
+        val gson: Gson = GsonBuilder()
+            .setLenient()
+            .create()
+        
+        val geminiRetrofit = Retrofit.Builder()
+            .baseUrl("https://generativelanguage.googleapis.com/")
+            .addConverterFactory(GsonConverterFactory.create(gson))
+            .client(
+                OkHttpClient.Builder()
+                    .connectTimeout(30, TimeUnit.SECONDS)
+                    .readTimeout(60, TimeUnit.SECONDS) // Plus long pour Gemini
+                    .writeTimeout(30, TimeUnit.SECONDS)
+                    .build()
+            )
+            .build()
+        
+        return geminiRetrofit.create(GeminiApiService::class.java)
+    }
+    
+    /**
+     * Obtient le service Groq (100% gratuit, utilise une URL de base différente)
+     */
+    fun getGroqService(): GroqApiService {
+        val gson: Gson = GsonBuilder()
+            .setLenient()
+            .create()
+        
+        val groqRetrofit = Retrofit.Builder()
+            .baseUrl("https://api.groq.com/openai/v1/")
+            .addConverterFactory(GsonConverterFactory.create(gson))
+            .client(
+                OkHttpClient.Builder()
+                    .connectTimeout(30, TimeUnit.SECONDS)
+                    .readTimeout(120, TimeUnit.SECONDS) // Plus long pour les réponses
+                    .writeTimeout(30, TimeUnit.SECONDS)
+                    .build()
+            )
+            .build()
+        
+        return groqRetrofit.create(GroqApiService::class.java)
+    }
+}
+

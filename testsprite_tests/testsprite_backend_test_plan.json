@@ -1,0 +1,52 @@
+[
+  {
+    "id": "TC001",
+    "title": "secure_authentication_email_password_google_signin",
+    "description": "Verify secure user authentication functionality using both email/password and Google Sign-In methods, ensuring JWT tokens are issued and stored securely."
+  },
+  {
+    "id": "TC002",
+    "title": "casting_management_creation_application_filtering",
+    "description": "Test the casting management APIs for creating new castings, applying to castings, and filtering casting listings for both actors and agencies."
+  },
+  {
+    "id": "TC003",
+    "title": "agenda_interview_scheduling_and_display",
+    "description": "Validate agenda management APIs including calendar views and interview scheduling features for actors and agencies."
+  },
+  {
+    "id": "TC004",
+    "title": "user_profile_crud_operations",
+    "description": "Ensure full CRUD operations on user profiles and settings for both actors and agencies are functioning correctly."
+  },
+  {
+    "id": "TC005",
+    "title": "ai_chatbot_agency_interaction",
+    "description": "Test AI chatbot interaction APIs for agencies, verifying responsiveness and context-aware conversations using Gemini and Groq technologies."
+  },
+  {
+    "id": "TC006",
+    "title": "ai_training_module_functionality",
+    "description": "Verify the AI training module APIs for initiating training sessions and receiving feedback to improve actors' skills."
+  },
+  {
+    "id": "TC007",
+    "title": "favorites_management_for_actors",
+    "description": "Test the favorites feature APIs to ensure actors can save, retrieve, and manage their preferred castings persistently."
+  },
+  {
+    "id": "TC008",
+    "title": "interactive_map_casting_location_display",
+    "description": "Validate the interactive map APIs to ensure accurate display and location of castings geographically."
+  },
+  {
+    "id": "TC009",
+    "title": "password_reset_email_flow",
+    "description": "Test the password reset APIs including email validation and reset mechanisms to ensure reliable password recovery."
+  },
+  {
+    "id": "TC010",
+    "title": "media_upload_photos_videos_pdfs",
+    "description": "Verify media upload APIs supporting photos, videos, and PDFs for casting creation and profile management workflows without data loss."
+  }
+]

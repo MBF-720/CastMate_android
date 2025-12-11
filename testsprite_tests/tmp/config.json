@@ -1,0 +1,15 @@
+{
+  "status": "commited",
+  "type": "frontend",
+  "scope": "codebase",
+  "localEndpoint": "http://localhost:8080",
+  "executionArgs": {
+    "projectName": "CastMate_android_3",
+    "projectPath": "C:\\Users\\Negza\\Desktop\\CastMate_android_3",
+    "testIds": [],
+    "additionalInstruction": "",
+    "envs": {
+      "API_KEY": "sk-user-YYBAXCGQsA53uy6M-Wtoj4V_aJUwsAGvCYRZ9iUFSyficBYLUy71a7LPTnqIRvnoHWpH6erI1Ex3t-NghouJoCJWnJZNWBtbTRdBRV-rNhxK1knN-HptNPvSFHif4iaJWYI"
+    }
+  }
+}
