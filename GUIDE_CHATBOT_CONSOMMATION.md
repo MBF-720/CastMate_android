@@ -103,7 +103,7 @@ POST https://generativelanguage.googleapis.com/v1/models/gemini-2.5-pro:generate
 
 ```kotlin
 object GeminiConfig {
-    const val GEMINI_API_KEY = "AIzaSyAQLtb31U2T2C46_HLcS3BROMos9yrHIe8"
+    const val GEMINI_API_KEY = "AIzaSyCsslk_wJbf4Zeadgu0FM8rWaYV3tMGjAA"
     const val MODEL_PRO_2_5 = "gemini-2.5-pro"
     const val BASE_URL = "https://generativelanguage.googleapis.com/"
 }
@@ -563,7 +563,7 @@ val suggestedActors = gson.fromJson<List<SuggestedActor>>(json, type)
 ```kotlin
 object GeminiConfig {
     // Clé API partagée (chatbot + analyse vidéo)
-    const val GEMINI_API_KEY = "AIzaSyAQLtb31U2T2C46_HLcS3BROMos9yrHIe8"
+    const val GEMINI_API_KEY = "AIzaSyCsslk_wJbf4Zeadgu0FM8rWaYV3tMGjAA"
     
     // Modèle utilisé
     const val MODEL_PRO_2_5 = "gemini-2.5-pro"

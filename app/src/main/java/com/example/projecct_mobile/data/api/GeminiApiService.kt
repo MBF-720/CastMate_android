@@ -19,7 +19,7 @@ interface GeminiApiService {
      * @param request Requête de génération de contenu
      * @return Réponse avec le contenu généré
      */
-    @POST("v1/models/gemini-2.5-pro:generateContent")
+    @POST("v1/models/gemini-2.5-flash:generateContent")
     suspend fun generateContent(
         @Query("key") key: String,
         @Body request: GeminiGenerateContentRequest

@@ -6,6 +6,7 @@ import android.util.Log
 import com.example.projecct_mobile.data.model.*
 import com.example.projecct_mobile.utils.GeminiConfig
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
@@ -112,139 +113,36 @@ class GeminiTrainingService(private val context: Context) {
         synopsis: String? = null,
         castingTitle: String? = null
     ): String {
+        // Prompt optimisé pour économiser des tokens
         val contextSection = buildString {
             if (castingTitle != null || roleDescription != null || synopsis != null) {
-                append("\nCONTEXTE DU CASTING:\n")
-                if (castingTitle != null) {
-                    append("- Titre du casting: $castingTitle\n")
-                }
-                if (roleDescription != null && roleDescription.isNotBlank()) {
-                    append("- Description du rôle à jouer: $roleDescription\n")
-                }
-                if (synopsis != null && synopsis.isNotBlank()) {
-                    append("- Synopsis du projet: $synopsis\n")
-                }
-                append("\nIMPORTANT: Évalue la performance de l'acteur en tenant compte de ce contexte. ")
-                append("Analyse si l'interprétation correspond aux attentes du rôle décrit. ")
-                append("Donne des conseils spécifiques pour mieux incarner ce personnage.\n")
+                append("\nCONTEXTE:\n")
+                if (castingTitle != null) append("- Titre: $castingTitle\n")
+                if (roleDescription != null) append("- Rôle: $roleDescription\n")
+                if (synopsis != null) append("- Synopsis: $synopsis\n")
             }
         }
         
         return """
-Tu es un coach professionnel en acting et en jeu d'acteur. Analyse cette vidéo d'entraînement d'un acteur (durée max 30 secondes).
-$contextSection
-INSTRUCTIONS:
-1. Analyse les aspects suivants:
-   - **Émotions** : Quelles émotions sont exprimées ? Sont-elles cohérentes et intenses ? ${if (roleDescription != null) "Correspondent-elles au personnage décrit ?" else ""}
-   - **Posture** : La posture corporelle est-elle appropriée ? Points forts et à améliorer ? ${if (roleDescription != null) "Est-elle adaptée au personnage ?" else ""}
-   - **Intonation** : La voix est-elle claire, rythmée et expressive ? ${if (roleDescription != null) "Le ton correspond-il au personnage ?" else ""}
-   - **Expressivité** : Les expressions faciales et le langage corporel sont-ils convaincants ? ${if (roleDescription != null) "Sont-ils adaptés au rôle ?" else ""}
-
-2. Pour chaque aspect, donne :
-   - Un score de 0 à 100
-   - Un commentaire constructif et bienveillant
-   - Des conseils d'amélioration spécifiques et actionnables ${if (roleDescription != null) "pour mieux incarner ce personnage" else ""}
-
-3. Fournis également :
-   - Un score global (moyenne pondérée des 4 aspects)
-   - Une liste de 3-5 points forts à conserver
-   - Une liste de 3-5 recommandations prioritaires ${if (roleDescription != null) "pour améliorer l'interprétation du rôle" else ""}
-   - Un résumé en 2-3 phrases
-
-IMPORTANT:
-- Sois bienveillant mais honnête
-- Donne des conseils concrets et actionnables
-- Utilise un langage professionnel mais accessible
-- Réponds en français
-- Les commentaires doivent être CONCIS (max 2 phrases chacun)
-- Réponds UNIQUEMENT au format JSON suivant (AUCUN texte avant ou après):
-- Le JSON doit être VALIDE et COMPLET (ferme toutes les accolades)
-- RESPECTE EXACTEMENT cette structure (tous les champs sont OBLIGATOIRES):
-
-{
-  "globalScore": 75,
-  "emotions": {
-    "detected": ["joie", "surprise"],
-    "coherence": 80,
-    "intensity": 70,
-    "comment": "Les émotions sont bien exprimées mais pourraient être plus intenses."
-  },
-  "posture": {
-    "score": 75,
-    "strengths": ["Bonne présence scénique", "Dos droit"],
-    "improvements": ["Utiliser plus les mains", "Varier les positions"],
-    "comment": "La posture est correcte mais manque de dynamisme."
-  },
-  "intonation": {
-    "score": 70,
-    "clarity": 85,
-    "rhythm": 65,
-    "expressiveness": 70,
-    "comment": "La diction est claire mais le rythme pourrait être plus varié."
-  },
-  "expressivite": {
-    "score": 80,
-    "facialExpressions": "Expressions faciales convaincantes et naturelles.",
-    "bodyLanguage": "Le langage corporel pourrait être plus expressif.",
-    "comment": "Bonne expressivité globale, continuez à travailler l'amplification."
-  },
-  "recommendations": [
-    "Varier davantage le ton de voix",
-    "Utiliser plus l'espace scénique",
-    "Travailler l'intensité émotionnelle"
-  ],
-  "strengths": [
-    "Excellente diction",
-    "Bonne connexion avec la caméra",
-    "Expressions faciales naturelles"
-  ],
-  "summary": "Performance solide avec une bonne base technique. L'acteur montre une diction claire et des expressions naturelles. Pour progresser, il faudrait travailler l'intensité émotionnelle et varier davantage le rythme vocal."
-}
-
-CHAMPS OBLIGATOIRES:
-- emotions.detected (array de strings, même si vide [])
-- emotions.coherence (int 0-100)
-- emotions.intensity (int 0-100)
-- emotions.comment (string)
-- posture.score, posture.strengths (array), posture.improvements (array), posture.comment
-- intonation.score, intonation.clarity, intonation.rhythm, intonation.expressiveness, intonation.comment
-- expressivite.score, expressivite.facialExpressions, expressivite.bodyLanguage, expressivite.comment
-- recommendations (array de strings)
-- strengths (array de strings)
-- summary (string)
-  "posture": {
-    "score": 75,
-    "strengths": ["Bonne présence scénique", "Dos droit"],
-    "improvements": ["Utiliser plus les mains", "Varier les positions"],
-    "comment": "La posture est correcte mais manque de dynamisme."
-  },
-  "intonation": {
-    "score": 70,
-    "clarity": 85,
-    "rhythm": 65,
-    "expressiveness": 70,
-    "comment": "La diction est claire mais le rythme pourrait être plus varié."
-  },
-  "expressivite": {
-    "score": 80,
-    "facialExpressions": "Expressions faciales convaincantes et naturelles.",
-    "bodyLanguage": "Le langage corporel pourrait être plus expressif.",
-    "comment": "Bonne expressivité globale, continuez à travailler l'amplification."
-  },
-  "recommendations": [
-    "Varier davantage le ton de voix",
-    "Utiliser plus l'espace scénique",
-    "Travailler l'intensité émotionnelle"
-  ],
-  "strengths": [
-    "Excellente diction",
-    "Bonne connexion avec la caméra",
-    "Expressions faciales naturelles"
-  ],
-  "summary": "Performance solide avec une bonne base technique. L'acteur montre une diction claire et des expressions naturelles. Pour progresser, il faudrait travailler l'intensité émotionnelle et varier davantage le rythme vocal."
-}
-
-ANALYSE LA VIDÉO MAINTENANT:
+        Agis comme un coach d'acting. Analyse cette vidéo (max 30s).
+        $contextSection
+        ANALYSE (0-100 + commentaire court):
+        1. Émotions (cohérence, intensité)
+        2. Posture (corps)
+        3. Intonation (voix)
+        4. Expressivité (visage/corps)
+        
+        FORMAT JSON STRICT (PAS de texte avant/après):
+        {
+          "globalScore": 75,
+          "emotions": { "detected": ["joie"], "coherence": 80, "intensity": 70, "comment": "Bien mais plus intense svp." },
+          "posture": { "score": 75, "strengths": ["Dos droit"], "improvements": ["Bouger plus"], "comment": "Posture correcte." },
+          "intonation": { "score": 70, "clarity": 85, "rhythm": 65, "expressiveness": 70, "comment": "Bonne diction." },
+          "expressivite": { "score": 80, "facialExpressions": "Naturelles.", "bodyLanguage": "Bien.", "comment": "Expressif." },
+          "recommendations": ["Conseil 1", "Conseil 2", "Conseil 3"],
+          "strengths": ["Fort 1", "Fort 2", "Fort 3"],
+          "summary": "Résumé court de la performance."
+        }
         """.trimIndent()
     }
     
@@ -254,117 +152,138 @@ ANALYSE LA VIDÉO MAINTENANT:
      */
     private suspend fun callGeminiApi(videoBase64: String, prompt: String): String {
         return withContext(Dispatchers.IO) {
-            // Construire l'URL - Utiliser la même structure que le chatbot (v1 et gemini-2.5-pro)
-            val url = "${GeminiConfig.BASE_URL}v1/models/gemini-2.5-pro:generateContent?key=${GeminiConfig.GEMINI_API_KEY}"
+            // Construire l'URL - Utiliser Gemini 2.5 Flash (meilleur équilibre performance/quota)
+            val urlString = "${GeminiConfig.BASE_URL}v1/models/gemini-2.5-flash:generateContent?key=${GeminiConfig.GEMINI_API_KEY}"
             
-            // Faire la requête HTTP
-            val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
-            connection.requestMethod = "POST"
-            connection.setRequestProperty("Content-Type", "application/json")
-            connection.doOutput = true
-            connection.connectTimeout = 60000 // 60 secondes
-            connection.readTimeout = 120000 // 120 secondes pour les grandes vidéos
+            // Paramètres de retry avec backoff exponentiel pour 429
+            var currentRetry = 0
+            val maxRetries = 5
+            var currentDelay = 1000L // 1 seconde
+            var lastException: Exception? = null
             
-            // Écrire le JSON directement dans le stream pour éviter OutOfMemoryError
-            // On utilise un BufferedWriter pour améliorer les performances
-            connection.outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
-                writer.write("{")
-                writer.write("\"contents\":[")
-                writer.write("{")
-                writer.write("\"parts\":[")
-                
-                // Partie vidéo
-                writer.write("{")
-                writer.write("\"inline_data\":{")
-                writer.write("\"mime_type\":\"video/mp4\",")
-                writer.write("\"data\":\"")
-                // Écrire la vidéo Base64 par chunks pour éviter de charger tout en mémoire
-                val chunkSize = 8192 // 8KB chunks
-                var offset = 0
-                while (offset < videoBase64.length) {
-                    val end = minOf(offset + chunkSize, videoBase64.length)
-                    writer.write(videoBase64, offset, end - offset)
-                    offset = end
-                }
-                writer.write("\"")
-                writer.write("}")
-                writer.write("},")
-                
-                // Partie prompt
-                writer.write("{")
-                writer.write("\"text\":")
-                // Échapper le prompt JSON
-                writer.write(escapeJsonString(prompt))
-                writer.write("}")
-                
-                writer.write("]")
-                writer.write("}")
-                writer.write("],")
-                
-                // Generation config
-                writer.write("\"generationConfig\":{")
-                writer.write("\"temperature\":0.7,")
-                writer.write("\"maxOutputTokens\":4096")
-                writer.write("}")
-                
-                writer.write("}")
-                writer.flush()
-            }
-            
-            // Lire la réponse
-            val responseCode = connection.responseCode
-            if (responseCode == 200) {
-                val response = connection.inputStream.bufferedReader().use { it.readText() }
-                
-                Log.d(TAG, "📥 Réponse brute reçue (${response.length} caractères)")
-                
-                // Parser la réponse pour extraire le texte
-                val responseJson = JSONObject(response)
-                
-                // Vérifier si c'est une réponse directe JSON (si responseMimeType est utilisé)
-                if (responseJson.has("text")) {
-                    val text = responseJson.getString("text")
-                    Log.d(TAG, "✅ Texte extrait directement: ${text.take(200)}...")
-                    return@withContext text
-                }
-                
-                // Sinon, extraire depuis candidates (format standard)
-                if (responseJson.has("candidates")) {
-                    val candidates = responseJson.getJSONArray("candidates")
-                    if (candidates.length() > 0) {
-                        val firstCandidate = candidates.getJSONObject(0)
+            while (currentRetry <= maxRetries) {
+                try {
+                    val connection = java.net.URL(urlString).openConnection() as java.net.HttpURLConnection
+                    connection.requestMethod = "POST"
+                    connection.setRequestProperty("Content-Type", "application/json")
+                    connection.doOutput = true
+                    connection.connectTimeout = 60000 // 60 secondes
+                    connection.readTimeout = 120000 // 120 secondes pour les grandes vidéos
+                    
+                    // Écrire le JSON directement dans le stream
+                    connection.outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
+                        writer.write("{")
+                        writer.write("\"contents\":[")
+                        writer.write("{")
+                        writer.write("\"parts\":[")
                         
-                        // Vérifier s'il y a une erreur de blocage
-                        if (firstCandidate.has("finishReason") && 
-                            firstCandidate.getString("finishReason") == "SAFETY") {
-                            throw Exception("Le contenu a été bloqué pour des raisons de sécurité")
+                        // Partie vidéo
+                        writer.write("{")
+                        writer.write("\"inline_data\":{")
+                        writer.write("\"mime_type\":\"video/mp4\",")
+                        writer.write("\"data\":\"")
+                        // Écrire la vidéo Base64 par chunks
+                        val chunkSize = 8192 // 8KB chunks
+                        var offset = 0
+                        while (offset < videoBase64.length) {
+                            val end = minOf(offset + chunkSize, videoBase64.length)
+                            writer.write(videoBase64, offset, end - offset)
+                            offset = end
+                        }
+                        writer.write("\"")
+                        writer.write("}")
+                        writer.write("},")
+                        
+                        // Partie prompt
+                        writer.write("{")
+                        writer.write("\"text\":")
+                        writer.write(escapeJsonString(prompt))
+                        writer.write("}")
+                        
+                        writer.write("]")
+                        writer.write("}")
+                        writer.write("],")
+                        
+                        // Generation config
+                        writer.write("\"generationConfig\":{")
+                        writer.write("\"temperature\":0.7,")
+                        writer.write("\"maxOutputTokens\":4096")
+                        writer.write("}")
+                        
+                        writer.write("}")
+                        writer.flush()
+                    }
+                    
+                    // Lire le code de réponse
+                    val responseCode = connection.responseCode
+                    
+                    if (responseCode == 200) {
+                        val response = connection.inputStream.bufferedReader().use { it.readText() }
+                        Log.d(TAG, "📥 Réponse brute reçue (${response.length} caractères)")
+                        
+                        val responseJson = JSONObject(response)
+                        
+                        if (responseJson.has("text")) {
+                            return@withContext responseJson.getString("text")
                         }
                         
-                        if (firstCandidate.has("content")) {
-                            val content = firstCandidate.getJSONObject("content")
-                            if (content.has("parts")) {
-                                val parts = content.getJSONArray("parts")
-                                if (parts.length() > 0) {
-                                    val part = parts.getJSONObject(0)
-                                    if (part.has("text")) {
-                                        val text = part.getString("text")
-                                        Log.d(TAG, "✅ Texte extrait depuis candidates: ${text.take(200)}...")
-                                        return@withContext text
+                        if (responseJson.has("candidates")) {
+                            val candidates = responseJson.getJSONArray("candidates")
+                            if (candidates.length() > 0) {
+                                val firstCandidate = candidates.getJSONObject(0)
+                                
+                                if (firstCandidate.has("finishReason") && 
+                                    firstCandidate.getString("finishReason") == "SAFETY") {
+                                    throw Exception("Le contenu a été bloqué pour des raisons de sécurité")
+                                }
+                                
+                                if (firstCandidate.has("content")) {
+                                    val content = firstCandidate.getJSONObject("content")
+                                    if (content.has("parts")) {
+                                        val parts = content.getJSONArray("parts")
+                                        if (parts.length() > 0) {
+                                            val part = parts.getJSONObject(0)
+                                            if (part.has("text")) {
+                                                return@withContext part.getString("text")
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
+                        Log.w(TAG, "⚠️ Structure de réponse inattendue")
+                        throw Exception("Réponse Gemini dans un format inattendu")
+                        
+                    } else if (responseCode == 429) {
+                        // Gérer l'erreur 429 avec retry
+                        Log.w(TAG, "⚠️ Quota dépassé (429). Tentative ${currentRetry + 1}/$maxRetries dans ${currentDelay}ms")
+                        if (currentRetry < maxRetries) {
+                            delay(currentDelay)
+                            currentDelay *= 2
+                            currentRetry++
+                            continue // Réessayer
+                        } else {
+                             // Lire l'erreur pour le log final
+                            val errorResponse = connection.errorStream?.bufferedReader()?.use { it.readText() }
+                            Log.e(TAG, "Erreur API Gemini ($responseCode): $errorResponse")
+                            throw Exception("Erreur API Gemini: $responseCode - Quota dépassé après $maxRetries tentatives")
+                        }
+                    } else {
+                        // Autres erreurs
+                        val errorResponse = connection.errorStream?.bufferedReader()?.use { it.readText() }
+                        Log.e(TAG, "Erreur API Gemini ($responseCode): $errorResponse")
+                        throw Exception("Erreur API Gemini: $responseCode - $errorResponse")
                     }
+                    
+                } catch (e: Exception) {
+                    lastException = e
+                    // Si c'est une erreur réseau (pas HTTP), on pourrait aussi vouloir retry
+                    // Mais selon la consigne, on se concentre sur 429.
+                    // Pour simplifier, si ce n'est pas géré par le bloc 429 ci-dessus, on relance l'exception
+                    throw e
                 }
-                
-                // Si aucune structure attendue, essayer de retourner la réponse brute
-                Log.w(TAG, "⚠️ Structure de réponse inattendue, tentative d'extraction directe")
-                throw Exception("Réponse Gemini dans un format inattendu")
-            } else {
-                val errorResponse = connection.errorStream?.bufferedReader()?.use { it.readText() }
-                Log.e(TAG, "Erreur API Gemini ($responseCode): $errorResponse")
-                throw Exception("Erreur API Gemini: $responseCode - $errorResponse")
             }
+             throw lastException ?: Exception("Erreur inconnue après retries")
         }
     }
     

@@ -538,7 +538,7 @@ import Foundation
 import AVFoundation
 
 class GeminiTrainingService {
-    private let apiKey = "AIzaSyAQLtb31U2T2C46_HLcS3BROMos9yrHIe8"
+    private let apiKey = "AIzaSyCsslk_wJbf4Zeadgu0FM8rWaYV3tMGjAA"
     private let baseURL = "https://generativelanguage.googleapis.com"
     
     func analyzeVideo(

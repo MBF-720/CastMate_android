@@ -11,14 +11,15 @@ object GeminiConfig {
      * - Chatbot agence (filtrage d'acteurs)
      * - Entraînement acteur (analyse vidéo)
      */
-    const val GEMINI_API_KEY = "AIzaSyBkl_3EQ48ujM_dhEvyxrHqPqqpKU1hKB8"
+    const val GEMINI_API_KEY = "AIzaSyDeXr1mMFY-_68owmm8QiFx3c_l3wcjLu8"
     
     /**
      * Modèles Gemini disponibles
      */
-    const val MODEL_FLASH = "gemini-1.5-flash"  // Rapide et économique
-    const val MODEL_PRO = "gemini-1.5-pro"      // Plus performant mais plus cher
-    const val MODEL_PRO_2_5 = "gemini-2.5-pro" // Modèle utilisé par le chatbot
+    const val MODEL_FLASH = "gemini-1.5-flash"    // Rapide et économique
+    const val MODEL_PRO = "gemini-1.5-pro"        // Plus performant mais plus cher
+    const val MODEL_PRO_2_5 = "gemini-2.5-pro"    // Ancien modèle
+    const val MODEL_FLASH_2_5 = "gemini-2.5-flash" // Modèle utilisé (meilleur équilibre)
     
     /**
      * URL de base pour l'API Gemini

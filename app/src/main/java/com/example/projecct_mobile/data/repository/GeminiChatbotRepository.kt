@@ -10,6 +10,7 @@ import com.example.projecct_mobile.data.model.gemini.*
 import com.example.projecct_mobile.utils.GeminiConfig
 import com.google.gson.Gson
 import com.google.gson.JsonParser
+import kotlinx.coroutines.delay
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -66,9 +67,36 @@ class GeminiChatbotRepository {
                 )
             )
             
-            // Appeler l'API Gemini
-            val response = geminiService.generateContent(GEMINI_API_KEY, geminiRequest)
+            // Appeler l'API Gemini avec retry et backoff exponentiel pour 429
+            var currentRetry = 0
+            val maxRetries = 5
+            var currentDelay = 1000L // 1 seconde
+            var response: retrofit2.Response<GeminiGenerateContentResponse>? = null
+
+            while (currentRetry < maxRetries) {
+                try {
+                    response = geminiService.generateContent(GEMINI_API_KEY, geminiRequest)
+
+                    if (response.code() == 429) {
+                        android.util.Log.w("GeminiChatbot", "⚠️ Quota dépassé (429). Tentative ${currentRetry + 1}/$maxRetries dans ${currentDelay}ms")
+                        delay(currentDelay)
+                        currentDelay *= 2
+                        currentRetry++
+                    } else {
+                        // Si ce n'est pas une 429, on sort de la boucle (succès ou autre erreur)
+                        break
+                    }
+                } catch (e: Exception) {
+                    // Si exception réseau, on peut aussi envisager de retry, mais ici on se concentre sur 429
+                    throw e
+                }
+            }
             
+            // Si après les retries on a toujours null (ne devrait pas arriver sauf exception) ou 429
+            if (response == null) {
+                 return Result.failure(ApiException.UnknownException("Échec de l'appel Gemini après retries"))
+            }
+
             if (response.isSuccessful && response.body() != null) {
                 val geminiResponse = response.body()!!
                 
@@ -106,149 +134,40 @@ class GeminiChatbotRepository {
     }
     
     /**
-     * Construit le prompt système pour Gemini
+     * Construit le prompt système optimisé pour Gemini
      */
     private fun buildSystemPrompt(casting: Casting): String {
-        val candidatesInfo = if (casting.candidats != null) {
-            casting.candidats.mapIndexed { index, candidat ->
+        // Limiter aux 20 premiers candidats pour économiser des tokens
+        val candidatesList = casting.candidats?.take(20) ?: emptyList()
+        
+        val candidatesInfo = if (candidatesList.isNotEmpty()) {
+            candidatesList.mapIndexed { index, candidat ->
                 val acteur = candidat.acteurId
                 val hasVideo = candidat.videoFileId != null || candidat.aiFeedback != null
-                val aiScore = candidat.aiFeedback?.globalScore
                 
-                // Résumé du feedback IA si disponible
-                val aiFeedbackSummary = if (candidat.aiFeedback != null) {
-                    val feedback = candidat.aiFeedback
-                    """
-                    - ✅ VIDÉO D'AUDITION DISPONIBLE
-                    - 🎯 SCORE IA GLOBAL: ${feedback.globalScore}/100
-                    - Émotions: ${feedback.emotions.detected.joinToString(", ")} (Cohérence: ${feedback.emotions.coherence}/100, Intensité: ${feedback.emotions.intensity}/100)
-                    - Posture: ${feedback.posture.score}/100
-                    - Intonation: ${feedback.intonation.score}/100
-                    - Expressivité: ${feedback.expressivite.score}/100
-                    - Points forts: ${feedback.strengths.joinToString(", ")}
-                    - Recommandations IA: ${feedback.recommendations.joinToString(", ")}
-                    - Résumé IA: ${feedback.summary}
-                    """.trimIndent()
-                } else if (hasVideo) {
-                    "- ⏳ VIDÉO D'AUDITION EN COURS DE TRAITEMENT"
-                } else {
-                    "- ⚠️ Aucune vidéo d'audition soumise"
-                }
+                // Résumé ultra-court du feedback IA
+                val aiSummary = candidat.aiFeedback?.let { fb ->
+                    "Score IA: ${fb.globalScore}/100 (Pts forts: ${fb.strengths.take(2).joinToString()})"
+                } ?: if (hasVideo) "Vidéo dispo" else "Pas de vidéo"
                 
-                """
-                Candidat ${index + 1}:
-                - ID: ${acteur?.actualId ?: "N/A"}
-                - Nom: ${acteur?.prenom ?: ""} ${acteur?.nom ?: ""}
-                - Email: ${acteur?.email ?: "N/A"}
-                - Statut: ${candidat.statut ?: "N/A"}
-                - Date candidature: ${candidat.dateCandidature ?: "N/A"}
-                $aiFeedbackSummary
-                """.trimIndent()
-            }.joinToString("\n\n")
+                "C${index+1}: ${acteur?.prenom} ${acteur?.nom} (${candidat.statut}). $aiSummary"
+            }.joinToString("\n")
         } else {
             "Aucun candidat"
         }
         
         return """
-        Tu es un assistant IA spécialisé de CastMate, une plateforme de casting en ligne qui connecte les agences avec les acteurs talentueux.
+        Tu es l'assistant IA de CastMate pour le casting: "${casting.titre}".
+        Rôle: ${casting.descriptionRole ?: "N/A"}.
         
-        ⚠️ IMPORTANT : Tu es l'assistant IA intégré à l'application CastMate. Tu n'es PAS ChatGPT ni un autre assistant générique. 
-        Tu es spécialisé pour aider les agences de casting à trouver les meilleurs acteurs parmi leurs candidats.
-        
-        CONTEXTE DU CASTING "${casting.titre ?: "N/A"}":
-        - Description du rôle: ${casting.descriptionRole ?: "N/A"}
-        - Synopsis: ${casting.synopsis ?: "N/A"}
-        - Types: ${if (casting.types != null) casting.types.joinToString(", ") else "N/A"}
-        - Âge requis: ${casting.age ?: "N/A"}
-        - Lieu: ${casting.lieu ?: "N/A"}
-        - Conditions: ${casting.conditions ?: "N/A"}
-        - Prix: ${casting.prix ?: "N/A"} DT
-        
-        CANDIDATS DISPONIBLES (${casting.candidats?.size ?: 0} candidats):
+        Candidats (Top 20):
         $candidatesInfo
         
-        📊 INFORMATIONS IMPORTANTES SUR LES SCORES IA:
-        - Chaque candidat peut soumettre une vidéo d'audition (max 30 secondes)
-        - Notre IA Gemini analyse automatiquement la vidéo et fournit un score sur 100
-        - Le score IA évalue: émotions, posture, intonation, expressivité
-        - Un score IA élevé (70+) indique une bonne performance pour le rôle
-        - Les candidats avec vidéo d'audition ont un avantage car l'agence peut mieux évaluer leurs talents
-        
-        INSTRUCTIONS:
-        
-        1. SALUTATIONS (bonjour, bnj, salut, etc.):
-           - Réponds de manière amicale et professionnelle
-           - Présente-toi brièvement comme l'assistant IA de CastMate
-           - Fais un résumé du casting (titre, nombre de candidats, statuts)
-           - Mentionne le nombre de candidats avec vidéo d'audition et leur score IA moyen
-           - Suggère les meilleurs candidats (priorité aux statuts "ACCEPTE" ou scores IA élevés)
-           - Exemple: "Bonjour ! Je suis votre assistant IA CastMate pour le casting '[TITRE]'. 
-             J'ai analysé [X] candidat(s), dont [Y] avec vidéo d'audition. Voici les meilleurs candidats :"
-        
-        2. QUESTIONS HORS APPLICATION (météo, actualités, etc.):
-           - Réponds poliment mais rappelle que tu es spécialisé pour CastMate
-           - Redirige la conversation vers le casting
-           - Exemple: "Je suis désolé, mais je suis l'assistant IA de CastMate spécialisé pour 
-             vous aider à trouver les meilleurs acteurs pour vos castings. Je ne peux pas répondre 
-             aux questions générales. Comment puis-je vous aider avec le casting '[TITRE]' ?"
-        
-        3. QUESTIONS SUR LE CASTING (filtrage d'acteurs):
-           - Analyse les critères demandés (âge, expérience, localisation, statut, SCORE IA, etc.)
-           - Filtre les candidats selon ces critères
-           - **UTILISE LE SCORE IA** pour classer les candidats (priorité aux scores élevés)
-           - **MENTIONNE TOUJOURS** le score IA quand disponible
-           - Suggère les acteurs correspondants avec leurs scores IA
-           - Explique pourquoi chaque acteur est suggéré (inclure analyse IA)
-           - Si un candidat a un bon score IA, mentionne ses points forts de l'analyse
-        
-        4. QUESTIONS SPÉCIFIQUES SUR LES SCORES IA:
-           - Si on te demande "qui a le meilleur score IA?", classe par score IA décroissant
-           - Si on te demande "qui a soumis une vidéo?", liste ceux avec score IA
-           - Si on te demande des détails sur le score, mentionne les sous-scores (émotions, posture, etc.)
-           - Utilise les recommandations IA pour donner des conseils
-        
-        5. RÈGLES DE FILTRAGE:
-           - Ne suggère JAMAIS les acteurs avec statut "REFUSE"
-           - Priorité aux acteurs avec statut "ACCEPTE" ET score IA élevé (70+)
-           - Si critères spécifiques, suggère tous les acteurs correspondants (EN_ATTENTE ou ACCEPTE)
-           - Privilégie les candidats avec vidéo d'audition (plus d'informations disponibles)
-           - Si aucun acteur ne correspond, explique pourquoi
-        
-        6. FORMAT DES RÉPONSES AVEC SCORE IA:
-           - Exemple: "🎯 Score IA: 85/100 - Excellente performance"
-           - Exemple: "✅ Points forts: Bonne posture (82/100), Expressions naturelles"
-           - Exemple: "📊 Analyse IA: L'acteur montre une grande expressivité..."
-        
-        RÉPONSE ATTENDUE (format JSON strict, sans texte avant ou après):
-        {
-          "answer": "Réponse naturelle, contextuelle et professionnelle en français qui répond directement à la question. INCLUS les scores IA quand disponibles.",
-          "suggestedActors": [
-            {
-              "acteurId": "ID exact de l'acteur",
-              "nom": "Nom de famille",
-              "prenom": "Prénom",
-              "matchScore": 0.95,
-              "matchReasons": ["Raison précise 1", "Raison précise 2"]
-            }
-          ]
-        }
-        
-        EXEMPLES:
-        - Question: "bnj" → Réponds: "Bonjour ! Je suis votre assistant IA CastMate pour le casting '[TITRE]'. 
-          J'ai trouvé [X] candidat(s). Voici les meilleurs candidats :" + suggère les acteurs acceptés/en attente
-        
-        - Question: "Quelle est la météo ?" → Réponds: "Je suis désolé, mais je suis l'assistant IA de CastMate 
-          spécialisé pour vous aider à trouver les meilleurs acteurs. Comment puis-je vous aider avec le casting '[TITRE]' ?"
-        
-        - Question: "Trouve-moi les acteurs de 25-35 ans" → Réponds: "J'ai trouvé [X] acteur(s) correspondant à 
-          votre critère d'âge..." + liste les acteurs avec scores
-        
-        IMPORTANT:
-        - Sois naturel, professionnel mais accessible
-        - Réponds TOUJOURS à la question, même pour une salutation
-        - Pour salutations/questions générales: suggère les acteurs acceptés/en attente
-        - Pour questions hors sujet: rappelle que tu es l'assistant CastMate
-        - Retourne UNIQUEMENT du JSON valide, rien d'autre
+        RÈGLES:
+        1. Réponds aux questions sur les candidats.
+        2. Suggère les meilleurs profils (Score IA élevé ou statut ACCEPTE).
+        3. Si hors-sujet, redirige poliment.
+        4. Réponds en JSON: { "answer": "Ta réponse...", "suggestedActors": [ { "acteurId": "ID", "nom": "Nom", "matchScore": 0.9, "matchReasons": ["Raison"] } ] }
         """.trimIndent()
     }
     

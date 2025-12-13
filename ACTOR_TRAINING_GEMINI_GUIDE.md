@@ -79,7 +79,7 @@ La clé API Gemini est centralisée dans `GeminiConfig.kt` :
 // app/src/main/java/com/example/projecct_mobile/utils/GeminiConfig.kt
 
 object GeminiConfig {
-    const val GEMINI_API_KEY = "AIzaSyBr0weABCTBdyPXER8pnAPWPANfVTQZn5Q"
+    const val GEMINI_API_KEY = "AIzaSyCsslk_wJbf4Zeadgu0FM8rWaYV3tMGjAA"
     const val MODEL_FLASH = "gemini-1.5-flash"
     const val MODEL_PRO = "gemini-1.5-pro"
     const val BASE_URL = "https://generativelanguage.googleapis.com/"
