@@ -74,6 +74,25 @@ interface TrainingApiService {
         @Path("id") id: String,
         @Body request: HashpackAddressRequest
     ): Response<ActeurProfile>
+    
+    /**
+     * Récupérer le classement d'un acteur
+     * GET /training/ranking/:acteurId
+     */
+    @GET("training/ranking/{acteurId}")
+    suspend fun getActorRanking(
+        @Path("acteurId") acteurId: String
+    ): Response<com.example.projecct_mobile.data.model.ActorRanking>
+    
+    /**
+     * Récupérer le leaderboard global
+     * GET /training/leaderboard?page=1&limit=50
+     */
+    @GET("training/leaderboard")
+    suspend fun getLeaderboard(
+        @Query("page") page: Int = 1,
+        @Query("limit") limit: Int = 50
+    ): Response<com.example.projecct_mobile.data.model.LeaderboardResponse>
 }
 
 /**

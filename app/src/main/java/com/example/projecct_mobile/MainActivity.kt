@@ -1395,6 +1395,7 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                     navController.popBackStack()
                 },
                 externalErrorMessage = errorMessage,
+                externalIsLoading = isLoading,
                 onSaveCastingClick = { titre, descriptionRole, synopsis, dateDebut, dateFin, prix, types, age, ouvert, conditions, lieu, afficheFile ->
                     isLoading = true
                     errorMessage = null
@@ -1520,6 +1521,7 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                         navController.popBackStack()
                     },
                     externalErrorMessage = errorMessage,
+                    externalIsLoading = isLoading,
                     existingCasting = casting,
                     onSaveCastingClick = { titre, descriptionRole, synopsis, dateDebut, dateFin, prix, types, age, ouvert, conditions, lieu, afficheFile ->
                         isLoading = true
@@ -2135,6 +2137,9 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                 onMyCandidaturesClick = {
                     navController.navigate("myCandidatures")
                 },
+                onRankingClick = {
+                    navController.navigate("ranking")
+                },
                 onLogoutClick = {
                     scope.launch {
                         sharedAuthRepository.logout()
@@ -2142,6 +2147,14 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                     navController.navigate("home") {
                         popUpTo("welcome") { inclusive = false }
                     }
+                }
+            )
+        }
+        
+        composable("ranking") {
+            RankingScreen(
+                onBackClick = {
+                    navController.popBackStack()
                 }
             )
         }

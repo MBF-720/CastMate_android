@@ -103,6 +103,7 @@ fun CreateCastingScreen(
         afficheFile: File?
     ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _ -> },
     externalErrorMessage: String? = null,
+    externalIsLoading: Boolean = false,
     existingCasting: com.example.projecct_mobile.data.model.Casting? = null
 ) {
     // Pré-remplir les champs si on est en mode édition
@@ -132,8 +133,10 @@ fun CreateCastingScreen(
     var ageTo by remember { mutableStateOf(initialAge.second) }
     var conditions by remember { mutableStateOf(existingCasting?.conditions ?: "") }
     var lieu by remember { mutableStateOf(existingCasting?.lieu ?: "") }
-    var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    
+    // Utiliser le loading externe s'il est fourni
+    val actualIsLoading = externalIsLoading
     
     // États pour les erreurs de validation par champ
     var titreError by remember { mutableStateOf<String?>(null) }
@@ -966,12 +969,12 @@ fun CreateCastingScreen(
                     
                     val prixValue = prix.toDoubleOrNull() ?: 0.0
                     
-                    isLoading = true
                     // Construire la chaîne d'âge
                     val ageString = if (ageFrom > 0 || ageTo > 0) "$ageFrom-$ageTo ans" else null
                     // Convertir selectedType en liste (ou null si aucun sélectionné)
                     val typesList = selectedType?.let { listOf(it) } ?: emptyList()
                     
+                    // Le loading sera géré par MainActivity via externalIsLoading
                     onSaveCastingClick(
                         titre,
                         descriptionRole,
@@ -986,7 +989,6 @@ fun CreateCastingScreen(
                         lieu,
                         selectedAfficheFile
                     )
-                    isLoading = false
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1001,14 +1003,14 @@ fun CreateCastingScreen(
                     containerColor = DarkBlue,
                     disabledContainerColor = GrayBorder.copy(alpha = 0.5f)
                 ),
-                enabled = !isLoading && titre.isNotBlank() && descriptionRole.isNotBlank() &&
+                enabled = !actualIsLoading && titre.isNotBlank() && descriptionRole.isNotBlank() &&
                     synopsis.isNotBlank() && dateDebut.isNotBlank() && dateFin.isNotBlank() &&
                     prix.isNotBlank() && conditions.isNotBlank() && lieu.isNotBlank() &&
                     titreError == null && descriptionRoleError == null && synopsisError == null &&
                     dateDebutError == null && dateFinError == null && prixError == null &&
                     lieuError == null && conditionsError == null
             ) {
-                if (isLoading) {
+                if (actualIsLoading) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(28.dp),
                         color = White,

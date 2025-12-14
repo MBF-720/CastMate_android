@@ -69,14 +69,33 @@ class ErrorInterceptor(
             403 -> {
                 // IMPORTANT: Ne pas lancer l'exception ici pour éviter le crash
                 // Laisser la réponse être retournée avec le code 403
-                // L'erreur sera gérée dans le repository (updateActeur)
+                // L'erreur sera gérée dans le repository
                 val error = parseError(response)
                 val errorMessage = error?.message ?: "Accès refusé"
+                
                 android.util.Log.e("ErrorInterceptor", "❌❌❌ ERREUR 403: $errorMessage ❌❌❌")
                 android.util.Log.e("ErrorInterceptor", "❌ URL de la requête: ${request.url}")
                 android.util.Log.e("ErrorInterceptor", "❌ Méthode: ${request.method}")
+                
+                // Diagnostic spécifique selon le message d'erreur
+                when {
+                    errorMessage.contains("Rôles requis", ignoreCase = true) && 
+                    errorMessage.contains("ACTEUR", ignoreCase = true) -> {
+                        android.util.Log.e("ErrorInterceptor", "⚠️ Diagnostic: L'utilisateur connecté est un ACTEUR, pas un RECRUTEUR")
+                    }
+                    errorMessage.contains("non authentifié", ignoreCase = true) -> {
+                        android.util.Log.e("ErrorInterceptor", "⚠️ Diagnostic: Utilisateur non authentifié - token invalide ou manquant")
+                    }
+                    errorMessage.contains("Rôle non défini", ignoreCase = true) -> {
+                        android.util.Log.e("ErrorInterceptor", "⚠️ Diagnostic: Le token ne contient pas de rôle valide")
+                    }
+                    else -> {
+                        android.util.Log.e("ErrorInterceptor", "⚠️ Diagnostic: Erreur 403 générique - vérifier les logs backend")
+                    }
+                }
+                
                 // Ne pas lancer l'exception - laisser la réponse être retournée
-                // L'erreur sera gérée dans updateActeur
+                // L'erreur sera gérée dans le repository avec un message spécifique
                 return response
             }
             
@@ -133,43 +152,54 @@ class ErrorInterceptor(
         return try {
             val errorBody = response.peekBody(Long.MAX_VALUE).string()
             if (errorBody.isNotBlank()) {
-                try {
-                    val jsonObject = JsonParser.parseString(errorBody).asJsonObject
-                    val statusCode = jsonObject.get("statusCode")?.asInt ?: response.code
-                    val error = jsonObject.get("error")?.asString
-                    
-                    val messageValue = jsonObject.get("message")
-                    val messageText = when {
-                        messageValue?.isJsonArray == true -> {
-                            messageValue.asJsonArray.firstOrNull()?.asString ?: "Erreur de validation"
-                        }
-                        messageValue?.isJsonPrimitive == true -> {
-                            messageValue.asString
-                        }
-                        else -> "Requête invalide"
-                    }
-                    
-                    val details = jsonObject.get("message")?.takeIf { it.isJsonObject }
-                        ?.asJsonObject?.entrySet()?.associate { entry ->
-                            val value = entry.value
-                            val messages = if (value.isJsonArray) {
-                                value.asJsonArray.map { it.asString }
-                            } else {
-                                listOf(value.asString)
+                // Essayer de parser comme JSON d'abord
+                val trimmedBody = errorBody.trim()
+                if (trimmedBody.startsWith("{") || trimmedBody.startsWith("[")) {
+                    try {
+                        val jsonObject = JsonParser.parseString(errorBody).asJsonObject
+                        val statusCode = jsonObject.get("statusCode")?.asInt ?: response.code
+                        val error = jsonObject.get("error")?.asString
+                        
+                        val messageValue = jsonObject.get("message")
+                        val messageText = when {
+                            messageValue?.isJsonArray == true -> {
+                                messageValue.asJsonArray.firstOrNull()?.asString ?: "Erreur de validation"
                             }
-                            entry.key to messages
+                            messageValue?.isJsonPrimitive == true -> {
+                                messageValue.asString
+                            }
+                            else -> "Requête invalide"
                         }
-                    
-                    ApiError(
-                        statusCode = statusCode,
-                        message = messageText,
-                        error = error,
-                        details = details
-                    )
-                } catch (e: Exception) {
+                        
+                        val details = jsonObject.get("message")?.takeIf { it.isJsonObject }
+                            ?.asJsonObject?.entrySet()?.associate { entry ->
+                                val value = entry.value
+                                val messages = if (value.isJsonArray) {
+                                    value.asJsonArray.map { it.asString }
+                                } else {
+                                    listOf(value.asString)
+                                }
+                                entry.key to messages
+                            }
+                        
+                        ApiError(
+                            statusCode = statusCode,
+                            message = messageText,
+                            error = error,
+                            details = details
+                        )
+                    } catch (e: Exception) {
+                        // Si le parsing JSON échoue, traiter comme texte brut
+                        ApiError(
+                            statusCode = response.code,
+                            message = errorBody.trim()
+                        )
+                    }
+                } else {
+                    // Texte brut (comme "Forbidden"), utiliser directement
                     ApiError(
                         statusCode = response.code,
-                        message = errorBody.take(200)
+                        message = errorBody.trim()
                     )
                 }
             } else {

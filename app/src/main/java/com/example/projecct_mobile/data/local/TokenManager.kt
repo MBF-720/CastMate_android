@@ -43,12 +43,27 @@ class TokenManager(private val context: Context) {
     }
 
     suspend fun getTokenSync(): String? {
-        return context.dataStore.data.first()[TOKEN_KEY]
+        return context.dataStore.data.first()[TOKEN_KEY]?.trim() // Trim les espaces
+    }
+    
+    /**
+     * Obtient le token de manière synchrone (bloquante).
+     * À utiliser uniquement dans les contexts non-suspend comme les intercepteurs OkHttp.
+     */
+    fun getTokenBlocking(): String? {
+        return try {
+            kotlinx.coroutines.runBlocking {
+                context.dataStore.data.first()[TOKEN_KEY]?.trim() // Trim les espaces
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("TokenManager", "Erreur lors de la récupération du token: ${e.message}")
+            null
+        }
     }
 
     suspend fun saveToken(token: String) {
         context.dataStore.edit { preferences ->
-            preferences[TOKEN_KEY] = token
+            preferences[TOKEN_KEY] = token.trim() // Trim avant de sauvegarder
         }
     }
 

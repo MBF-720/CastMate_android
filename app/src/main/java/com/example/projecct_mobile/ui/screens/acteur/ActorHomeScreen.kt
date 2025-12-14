@@ -40,6 +40,8 @@ import coil.request.ImageRequest
 import com.example.projecct_mobile.data.model.ApiException
 import com.example.projecct_mobile.data.repository.ActeurRepository
 import com.example.projecct_mobile.data.repository.CastingRepository
+import com.example.projecct_mobile.data.repository.RankingRepository
+import com.example.projecct_mobile.data.model.ActorRanking
 import com.example.projecct_mobile.ui.components.ComingSoonAlert
 import com.example.projecct_mobile.ui.components.ErrorMessage
 import com.example.projecct_mobile.ui.components.getErrorMessage
@@ -56,6 +58,88 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import com.example.projecct_mobile.data.model.ActorRank
+
+/**
+ * Carte de ranking affichant le placement de l'acteur
+ */
+@Composable
+private fun RankingCard(
+    ranking: ActorRanking?,
+    isLoading: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = White.copy(alpha = 0.15f)
+        )
+    ) {
+        if (isLoading || ranking == null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    color = White,
+                    strokeWidth = 2.dp
+                )
+            }
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "🏆 Mon Classement",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = White
+                    )
+                    Text(
+                        text = if (ranking.globalPosition != null) {
+                            "Position #${ranking.globalPosition}"
+                        } else {
+                            "Aucune position"
+                        },
+                        fontSize = 14.sp,
+                        color = White.copy(alpha = 0.9f)
+                    )
+                }
+                
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = ranking.rank.displayName,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = White
+                    )
+                    Text(
+                        text = "${ranking.globalScore} pts",
+                        fontSize = 12.sp,
+                        color = White.copy(alpha = 0.8f)
+                    )
+                }
+            }
+        }
+    }
+}
 
 /**
  * Page d'accueil pour les acteurs avec menu utilisateur
@@ -69,6 +153,7 @@ fun ActorHomeScreen(
     onHistoryClick: () -> Unit = {},
     onLogoutClick: () -> Unit = {},
     onMyCandidaturesClick: () -> Unit = {},
+    onRankingClick: () -> Unit = {},
     loadData: Boolean = true,
     initialCastings: List<CastingItem> = emptyList(),
     initialUserName: String = "",
@@ -99,9 +184,14 @@ fun ActorHomeScreen(
     val userRepository = remember(loadData) {
         if (loadData) UserRepository() else null
     }
+    val rankingRepository = remember(loadData) {
+        if (loadData) RankingRepository() else null
+    }
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
     var favoriteIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var actorRanking by remember { mutableStateOf<ActorRanking?>(null) }
+    var isLoadingRanking by remember { mutableStateOf(false) }
     
     // Fonction pour appliquer tous les filtres
     val applyFilters = remember { 
@@ -152,7 +242,7 @@ fun ActorHomeScreen(
         }
     }
     
-    // Charger les informations utilisateur
+    // Charger les informations utilisateur et le ranking
     LaunchedEffect(Unit, loadData) {
         if (!loadData) return@LaunchedEffect
         val acteurResult = acteurRepository?.getCurrentActeur()
@@ -163,6 +253,19 @@ fun ActorHomeScreen(
                 .joinToString(" ")
                 .ifBlank { "Utilisateur" }
             userEmail = acteur.email ?: userEmail
+            
+            // Charger le ranking
+            val acteurId = acteur.actualId
+            if (!acteurId.isNullOrBlank()) {
+                isLoadingRanking = true
+                rankingRepository?.getActorRanking(acteurId)?.onSuccess { ranking ->
+                    actorRanking = ranking
+                    isLoadingRanking = false
+                }?.onFailure { exception ->
+                    android.util.Log.w("ActorHomeScreen", "Impossible de charger le ranking: ${exception.message}")
+                    isLoadingRanking = false
+                }
+            }
         }
         acteurResult?.onFailure { exception ->
             // Si on ne peut pas charger le profil acteur, utiliser l'email depuis TokenManager
@@ -310,6 +413,15 @@ fun ActorHomeScreen(
                         color = White,
                     textAlign = TextAlign.Start
                     )
+                    
+                    // Carte de ranking (placement de l'acteur)
+                    if (actorRanking != null || isLoadingRanking) {
+                        RankingCard(
+                            ranking = actorRanking,
+                            isLoading = isLoadingRanking,
+                            onClick = onRankingClick
+                        )
+                    }
             
                 // Barre de recherche avec filtre
             Row(

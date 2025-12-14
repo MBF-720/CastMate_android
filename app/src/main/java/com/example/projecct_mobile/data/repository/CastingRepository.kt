@@ -166,6 +166,63 @@ class CastingRepository {
         afficheFile: File? = null
     ): Result<Casting> {
         return try {
+            // Diagnostic complet du rôle utilisateur
+            try {
+                val tokenManager = com.example.projecct_mobile.data.api.ApiClient.getTokenManager()
+                val userRoleFromStore = tokenManager.getUserRoleSync()
+                val token = tokenManager.getTokenSync()
+                
+                android.util.Log.d("CastingRepository", "========== DIAGNOSTIC RÔLE ==========")
+                android.util.Log.d("CastingRepository", "👤 Rôle depuis DataStore: $userRoleFromStore")
+                
+                // Extraire le rôle directement depuis le token JWT
+                if (token != null) {
+                    try {
+                        val parts = token.split(".")
+                        if (parts.size == 3) {
+                            val payload = parts[1]
+                            val decodedBytes = android.util.Base64.decode(payload, android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP)
+                            val decodedString = String(decodedBytes, Charsets.UTF_8)
+                            val jsonObject = org.json.JSONObject(decodedString)
+                            
+                            val roleFromToken = jsonObject.optString("role", null)
+                            val typeFromToken = jsonObject.optString("type", null)
+                            val idFromToken = jsonObject.optString("id", null) ?: jsonObject.optString("sub", null)
+                            
+                            android.util.Log.d("CastingRepository", "📋 Rôle depuis token JWT: $roleFromToken")
+                            android.util.Log.d("CastingRepository", "📋 Type depuis token JWT: $typeFromToken")
+                            android.util.Log.d("CastingRepository", "📋 ID depuis token JWT: $idFromToken")
+                            
+                            // Vérifier si le rôle permet de créer un casting
+                            val roleUpper = roleFromToken?.uppercase()?.trim()
+                            val canCreate = roleUpper == "RECRUTEUR" || roleUpper == "ADMIN"
+                            
+                            android.util.Log.d("CastingRepository", "✅ Peut créer casting: $canCreate")
+                            
+                            if (!canCreate) {
+                                android.util.Log.e("CastingRepository", "❌ Rôle insuffisant pour créer un casting")
+                                android.util.Log.e("CastingRepository", "❌ Rôle requis: RECRUTEUR ou ADMIN")
+                                android.util.Log.e("CastingRepository", "❌ Rôle actuel: $roleFromToken (normalisé: $roleUpper)")
+                                if (typeFromToken != null) {
+                                    android.util.Log.e("CastingRepository", "❌ Type utilisateur: $typeFromToken (doit être AGENCE pour RECRUTEUR)")
+                                }
+                            } else {
+                                android.util.Log.d("CastingRepository", "✅ Rôle valide pour créer un casting")
+                            }
+                        } else {
+                            android.util.Log.e("CastingRepository", "❌ Token JWT invalide: ${parts.size} parties au lieu de 3")
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("CastingRepository", "❌ Erreur lors du décodage du token: ${e.message}", e)
+                    }
+                } else {
+                    android.util.Log.e("CastingRepository", "❌ Token JWT null")
+                }
+                android.util.Log.d("CastingRepository", "====================================")
+            } catch (e: Exception) {
+                android.util.Log.e("CastingRepository", "❌ Erreur lors du diagnostic: ${e.message}", e)
+            }
+            
             val request = CreateCastingRequest(
                 titre = titre,
                 descriptionRole = descriptionRole,
@@ -181,17 +238,91 @@ class CastingRepository {
             )
             
             val payloadJson = gson.toJson(request)
-            val payloadBody = payloadJson.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
-            val affichePart = afficheFile?.let { createFilePart("affiche", it) }
-
+            android.util.Log.d("CastingRepository", "📤 Payload JSON: $payloadJson")
+            
+            // Le backend attend le payload comme une chaîne JSON dans un champ multipart text/plain
+            val payloadBody = payloadJson.toRequestBody("text/plain; charset=utf-8".toMediaTypeOrNull())
+            val affichePart = afficheFile?.let { 
+                android.util.Log.d("CastingRepository", "📎 Fichier affiche: ${it.name} (${it.length()} bytes)")
+                createFilePart("affiche", it) 
+            }
+            
+            android.util.Log.d("CastingRepository", "📤 Envoi requête POST /castings")
             val response = castingService.createCasting(payloadBody, affichePart)
             
             if (response.isSuccessful && response.body() != null) {
+                android.util.Log.d("CastingRepository", "✅ Casting créé avec succès")
                 Result.success(response.body()!!)
             } else {
-                Result.failure(
-                    ApiException.BadRequestException("Erreur lors de la création du casting")
-                )
+                val errorCode = response.code()
+                val errorBody = response.errorBody()?.string()
+                android.util.Log.e("CastingRepository", "❌ Erreur ${errorCode}: $errorBody")
+                
+                // Extraire le message d'erreur (peut être JSON ou texte brut)
+                val errorMessage = try {
+                    if (errorBody != null && errorBody.isNotBlank()) {
+                        // Essayer de parser comme JSON
+                        if (errorBody.trimStart().startsWith("{") || errorBody.trimStart().startsWith("[")) {
+                            try {
+                                val jsonObject = com.google.gson.JsonParser.parseString(errorBody).asJsonObject
+                                jsonObject.get("message")?.asString ?: errorBody.trim()
+                            } catch (e: Exception) {
+                                // Si le parsing JSON échoue, utiliser le texte brut
+                                errorBody.trim()
+                            }
+                        } else {
+                            // Texte brut, utiliser directement
+                            errorBody.trim()
+                        }
+                    } else {
+                        null
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("CastingRepository", "⚠️ Erreur lors de l'extraction du message: ${e.message}")
+                    errorBody
+                }
+                
+                val exception = when (errorCode) {
+                    400 -> ApiException.BadRequestException(errorMessage ?: "Données invalides")
+                    401 -> ApiException.UnauthorizedException("Vous devez être connecté pour créer un casting")
+                     403 -> {
+                        // Gestion spécifique des différents types d'erreurs 403 selon le message du backend
+                        val finalMessage = when {
+                            !errorMessage.isNullOrBlank() -> {
+                                when {
+                                    errorMessage.contains("Rôles requis", ignoreCase = true) && 
+                                    errorMessage.contains("ACTEUR", ignoreCase = true) -> {
+                                        android.util.Log.e("CastingRepository", "🚫 Erreur 403: Rôle insuffisant - L'utilisateur est un ACTEUR")
+                                        "Seuls les recruteurs peuvent créer des castings. Veuillez vous connecter avec un compte recruteur."
+                                    }
+                                    errorMessage.contains("non authentifié", ignoreCase = true) -> {
+                                        android.util.Log.e("CastingRepository", "🚫 Erreur 403: Utilisateur non authentifié")
+                                        "Session expirée. Veuillez vous reconnecter."
+                                    }
+                                    errorMessage.contains("Rôle non défini", ignoreCase = true) -> {
+                                        android.util.Log.e("CastingRepository", "🚫 Erreur 403: Rôle non défini dans le token")
+                                        "Erreur d'authentification. Veuillez vous reconnecter."
+                                    }
+                                    else -> {
+                                        android.util.Log.e("CastingRepository", "🚫 Erreur 403 Forbidden: $errorMessage")
+                                        errorMessage
+                                    }
+                                }
+                            }
+                            else -> {
+                                android.util.Log.e("CastingRepository", "🚫 Erreur 403 Forbidden: Message vide, utilisation du message par défaut")
+                                "Vous n'avez pas les droits requis pour créer un casting (RECRUTEUR ou ADMIN uniquement)"
+                            }
+                        }
+                        
+                        ApiException.ForbiddenException(finalMessage)
+                    }
+                    404 -> ApiException.NotFoundException("Ressource non trouvée")
+                    in 500..599 -> ApiException.ServerException("Erreur serveur: ${errorMessage ?: errorBody}")
+                    else -> ApiException.UnknownException(errorMessage ?: "Erreur lors de la création du casting")
+                }
+                
+                Result.failure(exception)
             }
         } catch (e: ApiException) {
             Result.failure(e)
@@ -234,7 +365,8 @@ class CastingRepository {
             )
             
             val payloadJson = gson.toJson(request)
-            val payloadBody = payloadJson.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
+            // Le backend attend le payload comme une chaîne JSON dans un champ multipart text/plain
+            val payloadBody = payloadJson.toRequestBody("text/plain; charset=utf-8".toMediaTypeOrNull())
             val affichePart = afficheFile?.let { createFilePart("affiche", it) }
 
             val response = castingService.updateCasting(id, payloadBody, affichePart)
@@ -242,9 +374,31 @@ class CastingRepository {
             if (response.isSuccessful && response.body() != null) {
                 Result.success(response.body()!!)
             } else {
-                Result.failure(
-                    ApiException.BadRequestException("Erreur lors de la mise à jour du casting")
-                )
+                val errorCode = response.code()
+                val errorBody = response.errorBody()?.string()
+                android.util.Log.e("CastingRepository", "❌ Erreur ${errorCode}: $errorBody")
+                
+                val errorMessage = try {
+                    if (errorBody != null && errorBody.isNotBlank()) {
+                        val jsonObject = com.google.gson.JsonParser.parseString(errorBody).asJsonObject
+                        jsonObject.get("message")?.asString ?: errorBody
+                    } else {
+                        null
+                    }
+                } catch (e: Exception) {
+                    errorBody
+                }
+                
+                val exception = when (errorCode) {
+                    400 -> ApiException.BadRequestException(errorMessage ?: "Données invalides")
+                    401 -> ApiException.UnauthorizedException("Vous devez être connecté pour modifier un casting")
+                    403 -> ApiException.ForbiddenException(errorMessage ?: "Vous ne pouvez modifier que vos propres castings")
+                    404 -> ApiException.NotFoundException("Casting non trouvé")
+                    in 500..599 -> ApiException.ServerException("Erreur serveur: ${errorMessage ?: errorBody}")
+                    else -> ApiException.UnknownException(errorMessage ?: "Erreur lors de la mise à jour du casting")
+                }
+                
+                Result.failure(exception)
             }
         } catch (e: ApiException) {
             Result.failure(e)
@@ -343,7 +497,13 @@ class CastingRepository {
         aiFeedback: String? = null
     ): Result<Unit> {
         return try {
-            android.util.Log.d("CastingRepository", "📝 Postulation au casting avec vidéo: $id")
+            android.util.Log.d("CastingRepository", "========== CANDIDATURE AU CASTING ==========")
+            android.util.Log.d("CastingRepository", "📝 Postulation au casting: $id")
+            android.util.Log.d("CastingRepository", "📹 Vidéo fournie: ${videoUri != null}")
+            android.util.Log.d("CastingRepository", "🤖 Feedback IA fourni: ${aiFeedback != null}")
+            
+            // Note: Le token et le rôle sont vérifiés automatiquement par AuthInterceptor
+            // qui ajoute le header Authorization et log tous les détails
             
             // Préparer les parts multipart
             var videoPart: MultipartBody.Part? = null
@@ -385,9 +545,19 @@ class CastingRepository {
             }
             
             // Si feedback IA fourni, créer le RequestBody
+            // Le backend attend aiFeedback comme une chaîne JSON dans un champ multipart text/plain
             if (aiFeedback != null) {
-                aiFeedbackBody = aiFeedback.toRequestBody("application/json".toMediaTypeOrNull())
+                android.util.Log.d("CastingRepository", "🤖 AI Feedback présent: ${aiFeedback.length} caractères")
+                aiFeedbackBody = aiFeedback.toRequestBody("text/plain; charset=utf-8".toMediaTypeOrNull())
+            } else {
+                android.util.Log.d("CastingRepository", "🤖 Pas de feedback IA")
             }
+            
+            android.util.Log.d("CastingRepository", "📤 Envoi de la candidature:")
+            android.util.Log.d("CastingRepository", "   - Casting ID: $id")
+            android.util.Log.d("CastingRepository", "   - Vidéo: ${if (videoPart != null) "OUI" else "NON"}")
+            android.util.Log.d("CastingRepository", "   - AI Feedback: ${if (aiFeedbackBody != null) "OUI" else "NON"}")
+            android.util.Log.d("CastingRepository", "============================================")
             
             val response = castingService.applyToCastingWithVideo(id, videoPart, aiFeedbackBody)
             

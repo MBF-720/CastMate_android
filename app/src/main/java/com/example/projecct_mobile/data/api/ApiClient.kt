@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit
  */
 object ApiClient {
     
-    const val BASE_URL = "https://cast-mate.vercel.app/"
+    const val BASE_URL = "https://cast-mate.vercel.app"  // SANS le slash final
     
     // Instance singleton du client Retrofit
     private var retrofit: Retrofit? = null

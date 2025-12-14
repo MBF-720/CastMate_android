@@ -58,6 +58,8 @@ import com.example.projecct_mobile.ui.components.getErrorMessage
 import com.example.projecct_mobile.ui.components.ActorBottomNavigationBar
 import com.example.projecct_mobile.ui.components.NavigationItem
 import com.example.projecct_mobile.ui.components.ImageCropScreen
+import com.example.projecct_mobile.ui.components.ProfilePhoto
+import com.example.projecct_mobile.ui.components.GalleryPhoto
 import com.example.projecct_mobile.ui.theme.*
 import com.example.projecct_mobile.utils.SocialLinkValidator
 import kotlinx.coroutines.launch
@@ -127,10 +129,9 @@ fun ActorProfileScreen(
     var isDownloadingDocument by remember { mutableStateOf(false) }
     var lastDownloadedDocumentFileId by remember { mutableStateOf<String?>(null) }
     
-    // État pour la galerie de photos
-    var galleryPhotos by remember { mutableStateOf<List<Pair<String, ImageBitmap>>>(emptyList()) }
+    // État pour la galerie de photos - Simplifié pour utiliser Coil
+    var galleryFileIds by remember { mutableStateOf<List<String>>(emptyList()) }
     var isUploadingGalleryPhotos by remember { mutableStateOf(false) }
-    var isLoadingGallery by remember { mutableStateOf(false) }
     var isSelectionMode by remember { mutableStateOf(false) }
     var selectedPhotoIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var isDeletingPhotos by remember { mutableStateOf(false) }
@@ -288,101 +289,21 @@ fun ActorProfileScreen(
         }
     }
     
-    // Télécharger la photo quand acteurProfile est disponible
-    // Utiliser un état pour suivre le dernier photoFileId téléchargé
-    var lastDownloadedPhotoFileId by remember { mutableStateOf<String?>(null) }
+    // ⚠️ SUPPRIMÉ : Téléchargement manuel de la photo de profil
+    // Coil s'occupe maintenant de charger les images directement via les URLs avec authentification JWT
     
-    
-    LaunchedEffect(acteurProfile?.media?.photoFileId) {
-        val photoFileId = acteurProfile?.media?.photoFileId
-        android.util.Log.e("ActorProfileScreen", "🔵 LaunchedEffect(photoFileId) déclenché: '$photoFileId', dernier téléchargé: '$lastDownloadedPhotoFileId'")
-        
-        // Télécharger la photo si elle n'a pas encore été téléchargée ou si le photoFileId a changé
-        if (!photoFileId.isNullOrBlank() && photoFileId != lastDownloadedPhotoFileId && selectedPhotoFile == null) {
-            try {
-                android.util.Log.e("ActorProfileScreen", "🚀🚀🚀 Téléchargement de la photo: $photoFileId 🚀🚀🚀")
-                val mediaResult = acteurRepository?.downloadMedia(photoFileId)
-                android.util.Log.e("ActorProfileScreen", "📥 Résultat téléchargement: ${mediaResult?.isSuccess}")
-                
-                if (mediaResult?.isSuccess == true) {
-                    val bytes = mediaResult.getOrNull()
-                    android.util.Log.e("ActorProfileScreen", "📦 Bytes reçus: ${bytes?.size ?: 0} bytes")
-                    
-                    if (bytes != null && bytes.isNotEmpty()) {
-                        val bitmap = withContext(Dispatchers.IO) {
-                            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                        }
-                        
-                        if (bitmap != null) {
-                            android.util.Log.e("ActorProfileScreen", "🖼️ Bitmap décodé: ${bitmap.width}x${bitmap.height}")
-                            profileImage = bitmap.asImageBitmap()
-                            lastDownloadedPhotoFileId = photoFileId
-                            android.util.Log.e("ActorProfileScreen", "✅✅✅ Photo chargée avec succès! ✅✅✅")
-                        } else {
-                            android.util.Log.e("ActorProfileScreen", "❌ Bitmap est null après décodage")
-                        }
-                    } else {
-                        android.util.Log.e("ActorProfileScreen", "⚠️ Bytes vides ou null")
-                    }
-                } else {
-                    val exception = mediaResult?.exceptionOrNull()
-                    android.util.Log.e("ActorProfileScreen", "❌ Erreur téléchargement: ${exception?.message}", exception)
-                }
-            } catch (e: CancellationException) {
-                android.util.Log.e("ActorProfileScreen", "⚠️ Téléchargement annulé")
-            } catch (e: Exception) {
-                android.util.Log.e("ActorProfileScreen", "❌ Exception téléchargement: ${e.message}", e)
-                e.printStackTrace()
-            }
-        }
-    }
-    
-    // Charger la galerie quand le profil est chargé
+    // Charger la liste des fileIds de la galerie quand le profil est chargé
     LaunchedEffect(acteurProfile?.media?.gallery) {
         val gallery = acteurProfile?.media?.gallery
         if (gallery.isNullOrEmpty()) {
-            galleryPhotos = emptyList()
-            return@LaunchedEffect
+            galleryFileIds = emptyList()
+            android.util.Log.d("ActorProfileScreen", "📸 Galerie vide")
+        } else {
+            // Extraire seulement les fileIds - Coil s'occupera du chargement
+            val fileIds = gallery.mapNotNull { it.fileId.takeIf { id -> id.isNotBlank() } }
+            galleryFileIds = fileIds
+            android.util.Log.d("ActorProfileScreen", "📸 Galerie chargée: ${fileIds.size} photos")
         }
-        
-        isLoadingGallery = true
-        
-        // Extraire les fileIds
-        val photos = gallery.mapNotNull { mediaRef ->
-            mediaRef.fileId?.takeIf { it.isNotBlank() }
-        }
-        
-        // Charger les photos en utilisant le cache (en parallèle)
-        val loadedPhotos = photos.map { fileId ->
-            async {
-                try {
-                    // Vérifier d'abord le cache
-                    val cachedBitmap = GalleryPhotoCache.get(context, fileId)
-                    if (cachedBitmap != null) {
-                        android.util.Log.d("ActorProfileScreen", "✅ Photo $fileId chargée depuis le cache")
-                        Pair(fileId, cachedBitmap)
-                    } else {
-                        // Si pas en cache, télécharger
-                        android.util.Log.d("ActorProfileScreen", "📥 Téléchargement photo $fileId...")
-                        val mediaResult = acteurRepository?.downloadMedia(fileId)
-                        mediaResult?.getOrNull()?.let { bytes ->
-                            if (bytes.isNotEmpty()) {
-                                // Mettre en cache et décoder
-                                val imageBitmap = GalleryPhotoCache.put(context, fileId, bytes)
-                                imageBitmap?.let { Pair(fileId, it) }
-                            } else null
-                        } ?: null
-                    }
-                } catch (e: Exception) {
-                    android.util.Log.e("ActorProfileScreen", "❌ Erreur chargement photo galerie $fileId: ${e.message}")
-                    null
-                }
-            }
-        }.awaitAll().filterNotNull()
-        
-        galleryPhotos = loadedPhotos
-        isLoadingGallery = false
-        android.util.Log.d("ActorProfileScreen", "✅ Galerie chargée: ${loadedPhotos.size}/${photos.size} photos")
     }
     
     // Fonction helper pour convertir un nom d'utilisateur ou URL en URL complète
@@ -666,7 +587,6 @@ fun ActorProfileScreen(
                                                             acteurProfile = profileWithMedia
                                                             selectedPhotoFile = null
                                                             selectedDocumentFile = null
-                                                            lastDownloadedPhotoFileId = null
                                                             lastDownloadedDocumentFileId = null
                                                             isUploadingPhoto = false
                                                             isUploadingDocument = false
@@ -809,41 +729,30 @@ fun ActorProfileScreen(
                                 .background(White.copy(alpha = 0.9f)),
                             contentAlignment = Alignment.Center
                         ) {
-                            when {
-                                profileImage != null -> {
-                                    Image(
-                                        bitmap = profileImage!!,
-                                        contentDescription = "Photo de profil",
-                modifier = Modifier
-                    .fillMaxSize()
-                                            .clip(CircleShape),
-                                        contentScale = ContentScale.Crop
-                                    )
-                                    if (isEditing) {
-                                        Box(
-                                            modifier = Modifier
-                                                .align(Alignment.BottomEnd)
-                                                .size(32.dp)
-                                                .clip(CircleShape)
-                                                .background(DarkBlue)
-                                                .padding(6.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                                            Icon(
-                                                imageVector = Icons.Default.CameraAlt,
-                                                contentDescription = "Changer la photo",
-                                                tint = White,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-            }
-                                    }
-                                }
-                                else -> {
+                            // Utiliser ProfilePhoto avec Coil pour charger l'image depuis l'URL
+                            ProfilePhoto(
+                                photoFileId = acteurProfile?.media?.photoFileId,
+                                modifier = Modifier.fillMaxSize(),
+                                shape = CircleShape,
+                                contentScale = ContentScale.Crop
+                            )
+                            
+                            // Icône de caméra en mode édition
+                            if (isEditing) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomEnd)
+                                        .size(32.dp)
+                                        .clip(CircleShape)
+                                        .background(DarkBlue)
+                                        .padding(6.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
                                     Icon(
-                                        imageVector = if (isEditing) Icons.Default.CameraAlt else Icons.Default.Person,
-                                        contentDescription = "Photo de profil",
-                                        tint = DarkBlue,
-                                        modifier = Modifier.size(48.dp)
+                                        imageVector = Icons.Default.CameraAlt,
+                                        contentDescription = "Changer la photo",
+                                        tint = White,
+                                        modifier = Modifier.size(18.dp)
                                     )
                                 }
                             }
@@ -1075,8 +984,7 @@ fun ActorProfileScreen(
                     
                     // Section Galerie de photos
                     GallerySection(
-                        galleryPhotos = galleryPhotos,
-                        isLoadingGallery = isLoadingGallery,
+                        galleryPhotos = galleryFileIds,
                         isUploadingGalleryPhotos = isUploadingGalleryPhotos,
                         isSelectionMode = isSelectionMode,
                         selectedPhotoIds = selectedPhotoIds,
@@ -1505,10 +1413,10 @@ fun ActorProfileScreen(
     
     // Vue plein écran pour la galerie
     selectedPhotoIndex?.let { index ->
-        if (galleryPhotos.isNotEmpty() && index in galleryPhotos.indices) {
-            android.util.Log.d("ActorProfileScreen", "🖼️ Ouverture vue plein écran: index=$index, totalPhotos=${galleryPhotos.size}")
+        if (galleryFileIds.isNotEmpty() && index in galleryFileIds.indices) {
+            android.util.Log.d("ActorProfileScreen", "🖼️ Ouverture vue plein écran: index=$index, totalPhotos=${galleryFileIds.size}")
             FullScreenGalleryViewer(
-                photos = galleryPhotos,
+                photos = galleryFileIds,
                 initialIndex = index,
                 onDismiss = { 
                     android.util.Log.d("ActorProfileScreen", "🖼️ Fermeture vue plein écran")
@@ -1516,7 +1424,7 @@ fun ActorProfileScreen(
                 }
             )
         } else {
-            android.util.Log.e("ActorProfileScreen", "❌ Index invalide: index=$index, galleryPhotos.size=${galleryPhotos.size}")
+            android.util.Log.e("ActorProfileScreen", "❌ Index invalide: index=$index, galleryFileIds.size=${galleryFileIds.size}")
         }
     }
 }
@@ -1863,8 +1771,7 @@ private fun ProfileNavigationItem(
  */
 @Composable
 private fun GallerySection(
-    galleryPhotos: List<Pair<String, ImageBitmap>>,
-    isLoadingGallery: Boolean,
+    galleryPhotos: List<String>,
     isUploadingGalleryPhotos: Boolean,
     isSelectionMode: Boolean,
     selectedPhotoIds: Set<String>,
@@ -1980,16 +1887,7 @@ private fun GallerySection(
         
         Spacer(modifier = Modifier.height(12.dp))
         
-        if (isLoadingGallery) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(color = DarkBlue)
-            }
-        } else if (galleryPhotos.isEmpty()) {
+        if (galleryPhotos.isEmpty()) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = LightGray.copy(alpha = 0.3f)),
@@ -2033,11 +1931,10 @@ private fun GallerySection(
                 contentPadding = PaddingValues(0.dp)
             ) {
                 items(galleryPhotos.size) { index ->
-                    val (fileId, bitmap) = galleryPhotos[index]
+                    val fileId = galleryPhotos[index]
                     val isSelected = selectedPhotoIds.contains(fileId)
                     GalleryPhotoItem(
                         fileId = fileId,
-                        bitmap = bitmap,
                         isSelected = isSelected,
                         isSelectionMode = isSelectionMode,
                         onLongPress = { onPhotoLongPress(fileId) },
@@ -2061,7 +1958,6 @@ private fun GallerySection(
 @Composable
 private fun GalleryPhotoItem(
     fileId: String,
-    bitmap: ImageBitmap,
     isSelected: Boolean,
     isSelectionMode: Boolean,
     onLongPress: () -> Unit,
@@ -2096,9 +1992,9 @@ private fun GalleryPhotoItem(
             )
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
-                Image(
-                    bitmap = bitmap,
-                    contentDescription = "Photo galerie",
+                // Utiliser GalleryPhoto avec Coil pour charger l'image
+                GalleryPhoto(
+                    fileId = fileId,
                     modifier = Modifier
                         .fillMaxSize()
                         .then(
@@ -2110,6 +2006,7 @@ private fun GalleryPhotoItem(
                                 Modifier
                             }
                         ),
+                    shape = RoundedCornerShape(8.dp),
                     contentScale = ContentScale.Crop
                 )
                 
@@ -2155,7 +2052,7 @@ private fun GalleryPhotoItem(
  */
 @Composable
 private fun FullScreenGalleryViewer(
-    photos: List<Pair<String, ImageBitmap>>,
+    photos: List<String>,
     initialIndex: Int,
     onDismiss: () -> Unit
 ) {
@@ -2236,40 +2133,39 @@ private fun FullScreenGalleryViewer(
             
             // Afficher la photo actuelle avec transition
             val density = LocalDensity.current
-            val currentPhoto = photos.getOrNull(currentIndex)
+            val currentPhotoFileId = photos.getOrNull(currentIndex)
             
             android.util.Log.d("FullScreenGalleryViewer", "📐 screenWidth=$screenWidth, currentIndex=$currentIndex, offsetX=$offsetX, photosCount=${photos.size}")
             
-            if (currentPhoto != null) {
-                val (fileId, bitmap) = currentPhoto
-                android.util.Log.d("FullScreenGalleryViewer", "🖼️ Affichage photo actuelle $currentIndex: fileId=$fileId, bitmap=${bitmap.width}x${bitmap.height}")
+            if (currentPhotoFileId != null) {
+                android.util.Log.d("FullScreenGalleryViewer", "🖼️ Affichage photo actuelle $currentIndex: fileId=$currentPhotoFileId")
                 
-                // Photo actuelle
+                // Photo actuelle avec Coil
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .offset(x = with(density) { offsetX.toDp() })
                 ) {
-                    Image(
-                        bitmap = bitmap,
-                        contentDescription = "Photo galerie ${currentIndex + 1}",
+                    GalleryPhoto(
+                        fileId = currentPhotoFileId,
                         modifier = Modifier.fillMaxSize(),
+                        shape = RoundedCornerShape(0.dp),
                         contentScale = ContentScale.Fit
                     )
                 }
                 
                 // Photo suivante (si elle existe et qu'on swipe vers la gauche)
                 if (currentIndex < photos.size - 1 && offsetX < 0) {
-                    val nextPhoto = photos[currentIndex + 1]
+                    val nextPhotoFileId = photos[currentIndex + 1]
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
                             .offset(x = with(density) { (screenWidth + offsetX).toDp() })
                     ) {
-                        Image(
-                            bitmap = nextPhoto.second,
-                            contentDescription = "Photo suivante",
+                        GalleryPhoto(
+                            fileId = nextPhotoFileId,
                             modifier = Modifier.fillMaxSize(),
+                            shape = RoundedCornerShape(0.dp),
                             contentScale = ContentScale.Fit
                         )
                     }
@@ -2277,16 +2173,16 @@ private fun FullScreenGalleryViewer(
                 
                 // Photo précédente (si elle existe et qu'on swipe vers la droite)
                 if (currentIndex > 0 && offsetX > 0) {
-                    val prevPhoto = photos[currentIndex - 1]
+                    val prevPhotoFileId = photos[currentIndex - 1]
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
                             .offset(x = with(density) { (-screenWidth + offsetX).toDp() })
                     ) {
-                        Image(
-                            bitmap = prevPhoto.second,
-                            contentDescription = "Photo précédente",
+                        GalleryPhoto(
+                            fileId = prevPhotoFileId,
                             modifier = Modifier.fillMaxSize(),
+                            shape = RoundedCornerShape(0.dp),
                             contentScale = ContentScale.Fit
                         )
                     }

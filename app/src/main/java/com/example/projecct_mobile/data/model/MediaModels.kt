@@ -8,9 +8,27 @@ import com.google.gson.annotations.SerializedName
 data class UserMedia(
     @SerializedName("photoFileId")
     val photoFileId: String? = null,
+    
+    @SerializedName("photoMimeType")
+    val photoMimeType: String? = null,
+    
+    @SerializedName("photoOriginalName")
+    val photoOriginalName: String? = null,
+    
+    @SerializedName("photoLength")
+    val photoLength: Long? = null,
 
     @SerializedName("documentFileId")
     val documentFileId: String? = null,
+    
+    @SerializedName("documentMimeType")
+    val documentMimeType: String? = null,
+    
+    @SerializedName("documentOriginalName")
+    val documentOriginalName: String? = null,
+    
+    @SerializedName("documentLength")
+    val documentLength: Long? = null,
 
     @SerializedName("gallery")
     val gallery: List<MediaFileRef>? = null
@@ -21,11 +39,20 @@ data class UserMedia(
  */
 data class MediaFileRef(
     @SerializedName("fileId")
-    val fileId: String? = null,
+    val fileId: String,
 
     @SerializedName("mimeType")
-    val mimeType: String? = null,
+    val mimeType: String,
 
+    @SerializedName("originalName")
+    val originalName: String,
+    
+    @SerializedName("length")
+    val length: Long,
+
+    @SerializedName("uploadDate")
+    val uploadDate: String? = null,
+    
     @SerializedName("uploadedAt")
     val uploadedAt: String? = null,
 

@@ -33,7 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import android.graphics.BitmapFactory
 import kotlinx.coroutines.launch
-import coil.compose.rememberAsyncImagePainter
+import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.example.projecct_mobile.data.local.TokenManager
 import com.example.projecct_mobile.data.model.Casting
@@ -587,37 +587,46 @@ private fun LocalAgencyCastingCard(
                 contentAlignment = Alignment.Center
             ) {
                 if (casting.afficheUrl != null) {
-                    val painter = rememberAsyncImagePainter(
+                    LaunchedEffect(casting.afficheUrl) {
+                        android.util.Log.d("CastingListAgency", "🖼️ Chargement image: ${casting.afficheUrl}")
+                    }
+                    
+                    SubcomposeAsyncImage(
                         model = ImageRequest.Builder(context)
                             .data(casting.afficheUrl)
                             .crossfade(true)
+                            .listener(
+                                onStart = {
+                                    android.util.Log.d("CastingListAgency", "⏳ Début chargement image: ${casting.afficheUrl}")
+                                },
+                                onSuccess = { _, _ ->
+                                    android.util.Log.d("CastingListAgency", "✅ Image chargée avec succès: ${casting.afficheUrl}")
+                                },
+                                onError = { _, result ->
+                                    android.util.Log.e("CastingListAgency", "❌ Erreur chargement image: ${result.throwable.message}")
+                                    android.util.Log.e("CastingListAgency", "❌ URL: ${casting.afficheUrl}")
+                                }
+                            )
                             .build(),
-                        imageLoader = imageLoader
-                    )
-                    
-                    when (painter.state) {
-                        is coil.compose.AsyncImagePainter.State.Loading -> {
+                        imageLoader = imageLoader,
+                        contentDescription = "Affiche du casting",
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(12.dp)),
+                        contentScale = ContentScale.Crop,
+                        loading = {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(24.dp),
                                 color = DarkBlue,
                                 strokeWidth = 2.dp
                             )
-                        }
-                        is coil.compose.AsyncImagePainter.State.Error -> {
+                        },
+                        error = {
                             Text("📷", fontSize = 48.sp)
                         }
-                        else -> {
-                            Image(
-                                painter = painter,
-                                contentDescription = "Affiche du casting",
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .clip(RoundedCornerShape(12.dp)),
-                                contentScale = ContentScale.Crop
-                            )
-                        }
-                    }
+                    )
                 } else {
+                    android.util.Log.d("CastingListAgency", "⚠️ Pas d'afficheUrl pour le casting: ${casting.title}")
                     Text("📷", fontSize = 48.sp)
                 }
             }

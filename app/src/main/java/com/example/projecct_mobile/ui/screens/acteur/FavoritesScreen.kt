@@ -33,6 +33,7 @@ import android.graphics.BitmapFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import coil.compose.SubcomposeAsyncImage
 import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
 import com.example.projecct_mobile.data.model.ApiException
@@ -349,37 +350,46 @@ private fun FavoriteCastingItemCard(
                 contentAlignment = Alignment.Center
             ) {
                 if (casting.afficheUrl != null) {
-                    val painter = rememberAsyncImagePainter(
+                    LaunchedEffect(casting.afficheUrl) {
+                        android.util.Log.d("FavoritesScreen", "🖼️ Chargement image: ${casting.afficheUrl}")
+                    }
+                    
+                    SubcomposeAsyncImage(
                         model = ImageRequest.Builder(context)
                             .data(casting.afficheUrl)
                             .crossfade(true)
+                            .listener(
+                                onStart = {
+                                    android.util.Log.d("FavoritesScreen", "⏳ Début chargement image: ${casting.afficheUrl}")
+                                },
+                                onSuccess = { _, _ ->
+                                    android.util.Log.d("FavoritesScreen", "✅ Image chargée avec succès: ${casting.afficheUrl}")
+                                },
+                                onError = { _, result ->
+                                    android.util.Log.e("FavoritesScreen", "❌ Erreur chargement image: ${result.throwable.message}")
+                                    android.util.Log.e("FavoritesScreen", "❌ URL: ${casting.afficheUrl}")
+                                }
+                            )
                             .build(),
-                        imageLoader = imageLoader
-                    )
-                    
-                    when (painter.state) {
-                        is coil.compose.AsyncImagePainter.State.Loading -> {
+                        imageLoader = imageLoader,
+                        contentDescription = "Affiche du casting",
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(12.dp)),
+                        contentScale = ContentScale.Crop,
+                        loading = {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(24.dp),
                                 color = DarkBlue,
                                 strokeWidth = 2.dp
                             )
-                        }
-                        is coil.compose.AsyncImagePainter.State.Error -> {
+                        },
+                        error = {
                             Text("📷", fontSize = 48.sp)
                         }
-                        else -> {
-                            Image(
-                                painter = painter,
-                                contentDescription = "Affiche du casting",
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .clip(RoundedCornerShape(12.dp)),
-                                contentScale = ContentScale.Crop
-                            )
-                        }
-                    }
+                    )
                 } else {
+                    android.util.Log.d("FavoritesScreen", "⚠️ Pas d'afficheUrl pour le casting: ${casting.title}")
                     Text("📷", fontSize = 48.sp)
                 }
             }
