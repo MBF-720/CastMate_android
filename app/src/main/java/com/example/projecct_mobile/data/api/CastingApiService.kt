@@ -218,6 +218,31 @@ interface CastingApiService {
     ): Response<Unit>
     
     /**
+     * Accepter un candidat avec interview (Recruteur/Admin)
+     * 
+     * Méthode: POST
+     * URL: /castings/:id/candidates/:acteurId/accept-with-interview
+     * Auth: Requise (JWT)
+     * 
+     * Body:
+     * {
+     *   "proposedDates": [
+     *     { "date": "2025-12-15", "time": "14:30" },
+     *     { "date": "2025-12-16", "time": "10:00" },
+     *     { "date": "2025-12-18", "time": "16:45" }
+     *   ]
+     * }
+     * 
+     * Réponse 200: Casting et Interview créée
+     */
+    @POST("castings/{id}/candidates/{acteurId}/accept-with-interview")
+    suspend fun acceptCandidateWithInterview(
+        @Path("id") id: String,
+        @Path("acteurId") acteurId: String,
+        @Body request: com.example.projecct_mobile.data.model.AcceptCandidateWithInterviewRequest
+    ): Response<com.example.projecct_mobile.data.model.AcceptCandidateWithInterviewResponse>
+    
+    /**
      * Refuser un candidat (Recruteur/Admin)
      * 
      * Méthode: PATCH

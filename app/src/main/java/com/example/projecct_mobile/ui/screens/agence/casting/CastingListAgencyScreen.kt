@@ -260,6 +260,7 @@ fun CastingListAgencyScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .statusBarsPadding()
                 .background(Color(0xFFF3F5FB))
         ) {
             Box(
@@ -741,7 +742,7 @@ private fun LocalAgencyCastingCard(
 }
 
 @Composable
-private fun AgencyBottomNavigationBar(
+fun AgencyBottomNavigationBar(
     onHomeClick: () -> Unit,
     onAgendaClick: () -> Unit,
     onHistoryClick: () -> Unit,
@@ -751,6 +752,7 @@ private fun AgencyBottomNavigationBar(
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .navigationBarsPadding()
             .padding(horizontal = 16.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -781,6 +783,13 @@ private fun AgencyBottomNavigationBar(
                     label = "Accueil",
                     onClick = onHomeClick,
                     isSelected = true
+                )
+
+                NavigationItem(
+                    icon = Icons.Default.Event,
+                    label = "Agenda",
+                    onClick = onAgendaClick,
+                    isSelected = false
                 )
 
                 Box(

@@ -469,7 +469,11 @@ fun ActorProfileScreen(
         return // Ne pas afficher le reste de l'UI quand l'écran de recadrage est actif
     }
     
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+    ) {
         // Header avec gradient bleu foncé et forme ondulée blanche
         Box(
             modifier = Modifier
@@ -1484,6 +1488,7 @@ fun ActorProfileScreen(
                     selectedItem = NavigationItem.PROFILE,
                     onCandidaturesClick = onMyCandidaturesClick,
                     onHomeClick = onHomeClick,
+                    onAgendaClick = onAgendaClick,
                     onProfileClick = onProfileClick
                 )
             }

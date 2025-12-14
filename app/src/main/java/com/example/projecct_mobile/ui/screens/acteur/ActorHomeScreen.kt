@@ -287,6 +287,7 @@ fun ActorHomeScreen(
             Column(
                 modifier = Modifier
             .fillMaxSize()
+            .statusBarsPadding()
             .background(DarkBlue)
             ) {
         // Espacement en haut pour donner plus d'espace à la zone bleue
@@ -506,7 +507,8 @@ fun ActorHomeScreen(
                 ActorBottomNavigationBar(
                     selectedItem = NavigationItem.HOME,
                     onCandidaturesClick = { onMyCandidaturesClick() },
-                onHomeClick = { /* Déjà sur la page d'accueil */ },
+                    onHomeClick = { /* Déjà sur la page d'accueil */ },
+                    onAgendaClick = { onAgendaClick() },
                     onProfileClick = { onProfileClick() }
             )
             }

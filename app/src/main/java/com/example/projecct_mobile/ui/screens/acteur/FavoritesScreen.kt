@@ -57,6 +57,7 @@ fun FavoritesScreen(
     onCastingClick: (CastingItem) -> Unit = {},
     onProfileClick: () -> Unit = {},
     onHomeClick: () -> Unit = {},
+    onAgendaClick: () -> Unit = {},
     onMyCandidaturesClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -296,6 +297,7 @@ fun FavoritesScreen(
                     selectedItem = NavigationItem.PROFILE,
                     onCandidaturesClick = { onMyCandidaturesClick() },
                     onHomeClick = { onHomeClick() },
+                    onAgendaClick = { onAgendaClick() },
                     onProfileClick = { onProfileClick() }
                 )
             }

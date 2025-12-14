@@ -11,7 +11,7 @@ object GeminiConfig {
      * - Chatbot agence (filtrage d'acteurs)
      * - Entraînement acteur (analyse vidéo)
      */
-    const val GEMINI_API_KEY = "AIzaSyDeXr1mMFY-_68owmm8QiFx3c_l3wcjLu8"
+    const val GEMINI_API_KEY = "AIzaSyBmebtmZxhr44J8CTpdbknXVGxxJkcX5xg"
     
     /**
      * Modèles Gemini disponibles

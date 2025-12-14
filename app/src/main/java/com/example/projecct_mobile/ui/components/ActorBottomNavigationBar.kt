@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.navigationBarsPadding
 import com.example.projecct_mobile.ui.theme.*
 
 /**
@@ -27,11 +28,13 @@ fun ActorBottomNavigationBar(
     selectedItem: NavigationItem = NavigationItem.HOME,
     onCandidaturesClick: () -> Unit = {},
     onHomeClick: () -> Unit = {},
+    onAgendaClick: () -> Unit = {},
     onProfileClick: () -> Unit = {}
 ) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .navigationBarsPadding()
             .padding(horizontal = 16.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -72,6 +75,14 @@ fun ActorBottomNavigationBar(
                     label = "Home",
                     onClick = onHomeClick,
                     isSelected = selectedItem == NavigationItem.HOME
+                )
+                
+                // Agenda
+                ActorNavigationItem(
+                    icon = Icons.Default.Event,
+                    label = "Agenda",
+                    onClick = onAgendaClick,
+                    isSelected = selectedItem == NavigationItem.AGENDA
                 )
                 
                 // Profile
@@ -118,6 +129,7 @@ private fun ActorNavigationItem(
 enum class NavigationItem {
     CANDIDATURES,
     HOME,
+    AGENDA,
     PROFILE
 }
 

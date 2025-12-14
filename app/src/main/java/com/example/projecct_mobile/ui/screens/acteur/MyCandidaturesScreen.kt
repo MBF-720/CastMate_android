@@ -56,6 +56,7 @@ fun MyCandidaturesScreen(
     onBackClick: () -> Unit = {},
     onCastingClick: ((String) -> Unit)? = null,
     onHomeClick: () -> Unit = {},
+    onAgendaClick: () -> Unit = {},
     onProfileClick: () -> Unit = {}
 ) {
     val acteurRepository = remember { ActeurRepository() }
@@ -371,6 +372,7 @@ fun MyCandidaturesScreen(
                 selectedItem = NavigationItem.CANDIDATURES,
                 onCandidaturesClick = { /* Déjà sur la page */ },
                 onHomeClick = onHomeClick,
+                onAgendaClick = onAgendaClick,
                 onProfileClick = onProfileClick
             )
         }

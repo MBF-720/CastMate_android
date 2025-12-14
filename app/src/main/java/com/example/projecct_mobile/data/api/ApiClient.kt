@@ -152,6 +152,13 @@ object ApiClient {
     }
     
     /**
+     * Crée une instance du service des interviews
+     */
+    fun getInterviewService(): InterviewApiService {
+        return getRetrofit().create(InterviewApiService::class.java)
+    }
+    
+    /**
      * Récupère l'OkHttpClient configuré avec l'authentification
      * Utile pour configurer Coil avec le même client authentifié
      */

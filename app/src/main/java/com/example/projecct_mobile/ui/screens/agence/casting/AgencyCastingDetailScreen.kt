@@ -36,6 +36,7 @@ import com.example.projecct_mobile.data.repository.ActeurRepository
 import com.example.projecct_mobile.data.api.ApiClient
 import com.example.projecct_mobile.ui.theme.*
 import com.example.projecct_mobile.ui.utils.CoilImageLoader
+import com.example.projecct_mobile.ui.screens.interview.InterviewDateProposalDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -47,7 +48,8 @@ fun AgencyCastingDetailScreen(
     onEditClick: () -> Unit = {},
     onDeleteClick: () -> Unit = {},
     onViewActorProfile: (String) -> Unit = {},
-    onNavigateToLogin: () -> Unit = {}
+    onNavigateToLogin: () -> Unit = {},
+    onChatbotClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val imageLoader = remember { CoilImageLoader.getImageLoader(context) }
@@ -56,7 +58,7 @@ fun AgencyCastingDetailScreen(
     val castingRepository = remember { com.example.projecct_mobile.data.repository.CastingRepository() }
     val scope = rememberCoroutineScope()
     var selectedTabIndex by remember { mutableStateOf(0) }
-    val tabs = listOf("Détails", "Candidats", "Chatbot")
+    val tabs = listOf("Détails", "Candidats")
     var currentCasting by remember { mutableStateOf(casting) }
     var isUpdatingStatus by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -179,7 +181,7 @@ fun AgencyCastingDetailScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     // Bouton Chatbot
                     IconButton(
-                        onClick = { selectedTabIndex = 2 }, // Ouvrir l'onglet Chatbot
+                        onClick = onChatbotClick, // Naviguer vers l'interface chatbot dédiée
                         modifier = Modifier
                             .size(40.dp)
                             .background(Color.White.copy(alpha = 0.3f), CircleShape)
@@ -361,7 +363,7 @@ fun AgencyCastingDetailScreen(
                                     }
                                 },
                                 isUpdating = isUpdatingStatus,
-                                onOpenChatbot = { selectedTabIndex = 2 }
+                                onOpenChatbot = onChatbotClick
                             )
                         }
                     }
@@ -371,30 +373,9 @@ fun AgencyCastingDetailScreen(
                             castingId = currentCasting.actualId ?: "",
                             candidates = currentCasting.candidats ?: emptyList(),
                             modifier = Modifier.fillMaxSize(),
-                            onAcceptCandidate = { acteurId ->
-                                scope.launch {
-                                    try {
-                                        val result = castingRepository.acceptCandidate(
-                                            castingId = currentCasting.actualId ?: "",
-                                            acteurId = acteurId
-                                        )
-                                        result.onSuccess {
-                                            // Recharger le casting pour obtenir la liste mise à jour
-                                            val refreshResult = castingRepository.getCastingById(currentCasting.actualId ?: "")
-                                            refreshResult.onSuccess { refreshedCasting ->
-                                                currentCasting = refreshedCasting
-                                                android.util.Log.d("AgencyCastingDetail", "✅ Candidat accepté")
-                                            }
-                                        }
-                                        result.onFailure { exception ->
-                                            errorMessage = "Erreur: ${exception.message}"
-                                            android.util.Log.e("AgencyCastingDetail", "❌ Erreur acceptation: ${exception.message}")
-                                        }
-                                    } catch (e: Exception) {
-                                        errorMessage = "Erreur: ${e.message}"
-                                        android.util.Log.e("AgencyCastingDetail", "❌ Exception: ${e.message}")
-                                    }
-                                }
+                            onAcceptCandidateWithInterview = { acteurId ->
+                                // Cette fonction est gérée dans CandidateCard avec le dialogue InterviewDateProposalDialog
+                                // Le dialogue appelle acceptCandidateWithInterview directement
                             },
                             onRejectCandidate = { acteurId ->
                                 scope.launch {
@@ -423,16 +404,6 @@ fun AgencyCastingDetailScreen(
                             },
                             onViewProfile = onViewActorProfile,
                             onNavigateToLogin = onNavigateToLogin
-                        )
-                    }
-                   2 -> {
-                        // Onglet "Chatbot"
-                        ChatbotContent(
-                            castingId = currentCasting.actualId ?: "",
-                            castingTitle = currentCasting.titre ?: "",
-                            casting = currentCasting,
-                            modifier = Modifier.fillMaxSize(),
-                            onViewActorProfile = onViewActorProfile
                         )
                     }
                 }
@@ -673,42 +644,6 @@ private fun CastingDetailsContent(
         modifier = Modifier.padding(top = 8.dp),
         lineHeight = 16.sp
     )
-    
-    // Bouton Chatbot IA
-    Spacer(modifier = Modifier.height(8.dp))
-    Button(
-        onClick = onOpenChatbot,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(56.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = DarkBlue
-        ),
-        shape = RoundedCornerShape(16.dp)
-    ) {
-        Icon(
-            imageVector = Icons.Default.Chat,
-            contentDescription = null,
-            tint = White,
-            modifier = Modifier.size(24.dp)
-        )
-        Spacer(modifier = Modifier.width(12.dp))
-        Text(
-            text = "💬 Parler au Chatbot IA",
-            fontSize = 16.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = White
-        )
-    }
-    
-    // Texte d'aide
-    Text(
-        text = "Le chatbot IA vous aide à trouver les meilleurs acteurs parmi vos candidats",
-        fontSize = 12.sp,
-        color = Color(0xFF999999),
-        modifier = Modifier.padding(top = 8.dp),
-        lineHeight = 16.sp
-    )
 }
 
 @Composable
@@ -815,7 +750,7 @@ private fun CandidatesContent(
     castingId: String,
     candidates: List<Candidat>,
     modifier: Modifier = Modifier,
-    onAcceptCandidate: (String) -> Unit = {},
+    onAcceptCandidateWithInterview: (String) -> Unit = {},
     onRejectCandidate: (String) -> Unit = {},
     onViewProfile: (String) -> Unit = {},
     onNavigateToLogin: () -> Unit = {}
@@ -868,8 +803,8 @@ private fun CandidatesContent(
                 CandidateCard(
                     candidat = candidat,
                     castingId = castingId,
-                    onAccept = {
-                        candidat.acteurId?.actualId?.let { onAcceptCandidate(it) }
+                    onAcceptWithInterview = {
+                        candidat.acteurId?.actualId?.let { onAcceptCandidateWithInterview(it) }
                     },
                     onReject = {
                         candidat.acteurId?.actualId?.let { onRejectCandidate(it) }
@@ -888,7 +823,7 @@ private fun CandidatesContent(
 private fun CandidateCard(
     candidat: Candidat,
     castingId: String,
-    onAccept: () -> Unit = {},
+    onAcceptWithInterview: () -> Unit = {},
     onReject: () -> Unit = {},
     onViewProfile: () -> Unit = {},
     onNavigateToLogin: () -> Unit = {}
@@ -900,6 +835,8 @@ private fun CandidateCard(
     var videoUri by remember { mutableStateOf<android.net.Uri?>(null) }
     var isLoadingVideo by remember { mutableStateOf(false) }
     var videoError by remember { mutableStateOf<String?>(null) }
+    var showInterviewDialog by remember { mutableStateOf(false) }
+    var isAcceptingWithInterview by remember { mutableStateOf(false) }
     
     // Fonction pour télécharger la vidéo via l'endpoint candidat
            suspend fun downloadVideoViaCandidate(castingId: String, acteurId: String) {
@@ -1210,13 +1147,14 @@ private fun CandidateCard(
             // Boutons d'action (seulement si en attente)
             if (candidat.statut?.uppercase() == "EN_ATTENTE" || candidat.statut?.uppercase() == "PENDING") {
                 Spacer(modifier = Modifier.height(12.dp))
-                Row(
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    // Bouton "Refuser"
                     Button(
                         onClick = onReject,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Red.copy(alpha = 0.1f),
                             contentColor = Red
@@ -1236,23 +1174,24 @@ private fun CandidateCard(
                         )
                     }
                     
+                    // Bouton "Accepter avec interview"
                     Button(
-                        onClick = onAccept,
-                        modifier = Modifier.weight(1f),
+                        onClick = { showInterviewDialog = true },
+                        modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF4CAF50),
+                            containerColor = DarkBlue,
                             contentColor = White
                         ),
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Check,
+                            imageVector = Icons.Default.Event,
                             contentDescription = null,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "Accepter",
+                            text = "Accepter avec interview",
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp
                         )
@@ -1260,6 +1199,57 @@ private fun CandidateCard(
                 }
             }
         }
+    }
+    
+    // Dialogue pour proposer des dates d'interview
+    if (showInterviewDialog) {
+        InterviewDateProposalDialog(
+            onDismiss = { showInterviewDialog = false },
+            onConfirm = { dateOptions ->
+                showInterviewDialog = false
+                isAcceptingWithInterview = true
+                
+                scope.launch {
+                    try {
+                        val acteurId = candidat.acteurId?.actualId
+                        if (acteurId == null) {
+                            videoError = "Erreur: ID acteur non disponible"
+                            isAcceptingWithInterview = false
+                            return@launch
+                        }
+                        
+                        val result = castingRepository.acceptCandidateWithInterview(
+                            castingId = castingId,
+                            acteurId = acteurId,
+                            dates = dateOptions
+                        )
+                        
+                        result.onSuccess { response ->
+                            android.util.Log.d("CandidateCard", "✅ Candidat accepté avec interview créée")
+                            // Recharger le casting pour obtenir la liste mise à jour
+                            val refreshResult = castingRepository.getCastingById(castingId)
+                            refreshResult.onSuccess { refreshedCasting ->
+                                // Mettre à jour le casting dans le parent
+                                // Note: Il faudrait passer un callback pour mettre à jour le casting
+                                android.util.Log.d("CandidateCard", "✅ Casting rechargé")
+                            }
+                            isAcceptingWithInterview = false
+                            onAcceptWithInterview() // Notifier le parent
+                        }
+                        
+                        result.onFailure { exception ->
+                            videoError = "Erreur: ${exception.message}"
+                            android.util.Log.e("CandidateCard", "❌ Erreur acceptation avec interview: ${exception.message}")
+                            isAcceptingWithInterview = false
+                        }
+                    } catch (e: Exception) {
+                        videoError = "Erreur: ${e.message}"
+                        android.util.Log.e("CandidateCard", "❌ Exception: ${e.message}")
+                        isAcceptingWithInterview = false
+                    }
+                }
+            }
+        )
     }
     
     // Dialog d'erreur si le téléchargement échoue

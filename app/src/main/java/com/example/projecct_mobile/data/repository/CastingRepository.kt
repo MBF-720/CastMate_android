@@ -452,6 +452,71 @@ class CastingRepository {
     }
     
     /**
+     * Accepter un candidat avec interview (route protégée - Recruteur/Admin uniquement)
+     * 
+     * @param castingId ID du casting
+     * @param acteurId ID de l'acteur
+     * @param dates Liste de EXACTEMENT 3 dates avec heures (format: "YYYY-MM-DD" et "HH:mm")
+     * @return Result<AcceptCandidateWithInterviewResponse>
+     */
+    suspend fun acceptCandidateWithInterview(
+        castingId: String,
+        acteurId: String,
+        dates: List<com.example.projecct_mobile.data.model.InterviewDateOption>
+    ): Result<com.example.projecct_mobile.data.model.AcceptCandidateWithInterviewResponse> {
+        return try {
+            // Validation: doit avoir exactement 3 dates
+            if (dates.size != 3) {
+                return Result.failure(
+                    ApiException.BadRequestException("Vous devez proposer exactement 3 dates")
+                )
+            }
+            
+            // Validation: toutes les dates doivent avoir une heure
+            if (dates.any { it.time.isNullOrBlank() }) {
+                return Result.failure(
+                    ApiException.BadRequestException("Chaque date doit avoir une heure")
+                )
+            }
+            
+            val request = com.example.projecct_mobile.data.model.AcceptCandidateWithInterviewRequest(
+                proposedDates = dates
+            )
+            
+            val response = castingService.acceptCandidateWithInterview(castingId, acteurId, request)
+            
+            if (response.isSuccessful) {
+                val body = response.body()
+                if (body != null) {
+                    android.util.Log.d("CastingRepository", "✅ Candidat accepté avec interview créée")
+                    Result.success(body)
+                } else {
+                    Result.failure(ApiException.UnknownException("Réponse vide"))
+                }
+            } else {
+                val errorCode = response.code()
+                val errorBody = response.errorBody()?.string()
+                android.util.Log.e("CastingRepository", "❌ Erreur ${errorCode}: $errorBody")
+                
+                val exception = when (errorCode) {
+                    400 -> ApiException.BadRequestException("Requête invalide: ${errorBody ?: "Dates invalides"}")
+                    401 -> ApiException.UnauthorizedException("Non autorisé")
+                    403 -> ApiException.ForbiddenException("Accès refusé")
+                    404 -> ApiException.NotFoundException("Casting ou candidat non trouvé")
+                    else -> ApiException.UnknownException("Erreur ${errorCode}: ${errorBody ?: response.message()}")
+                }
+                Result.failure(exception)
+            }
+        } catch (e: ApiException) {
+            android.util.Log.e("CastingRepository", "❌ ApiException: ${e.message}", e)
+            Result.failure(e)
+        } catch (e: Exception) {
+            android.util.Log.e("CastingRepository", "❌ Exception: ${e.message}", e)
+            Result.failure(ApiException.UnknownException("Erreur inconnue: ${e.message}"))
+        }
+    }
+    
+    /**
      * Refuser un candidat (route protégée - Recruteur/Admin uniquement)
      */
     suspend fun rejectCandidate(castingId: String, acteurId: String): Result<Unit> {

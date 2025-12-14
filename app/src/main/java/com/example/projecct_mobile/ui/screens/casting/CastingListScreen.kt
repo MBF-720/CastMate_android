@@ -34,6 +34,8 @@ import androidx.compose.ui.unit.sp
 import com.example.projecct_mobile.ui.components.ComingSoonAlert
 import com.example.projecct_mobile.ui.components.ErrorMessage
 import com.example.projecct_mobile.ui.components.getErrorMessage
+import com.example.projecct_mobile.ui.components.ActorBottomNavigationBar
+import com.example.projecct_mobile.ui.components.NavigationItem
 import com.example.projecct_mobile.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -87,7 +89,9 @@ fun CastingListScreen(
     onProfileClick: () -> Unit = {},
     onSettingsClick: () -> Unit = onProfileClick,
     onFilterClick: () -> Unit = {},
-    onNavigateToProfile: (() -> Unit)? = null
+    onNavigateToProfile: (() -> Unit)? = null,
+    onAgendaClick: () -> Unit = {},
+    onCandidaturesClick: () -> Unit = {}
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var castings by remember { mutableStateOf<List<CastingItem>>(emptyList()) }
@@ -147,6 +151,7 @@ fun CastingListScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .statusBarsPadding()
             .background(Color(0xFFF3F5FB))
     ) {
         Box(
@@ -383,10 +388,12 @@ fun CastingListScreen(
             }
         }
         
-        // Barre de navigation du bas
-        BottomNavigationBar(
+        // Barre de navigation du bas (même que AgendaScreen pour acteurs)
+        ActorBottomNavigationBar(
+            selectedItem = NavigationItem.HOME,
+            onCandidaturesClick = onCandidaturesClick,
             onHomeClick = onHomeClick,
-            onHistoryClick = { showComingSoon = "Historique" },
+            onAgendaClick = onAgendaClick,
             onProfileClick = {
                 onNavigateToProfile?.invoke() ?: onProfileClick()
             }

@@ -70,7 +70,8 @@ fun CastingDetailScreen(
     onNavigateToApplication: ((Casting) -> Unit)? = null, // Nouveau callback pour navigation vers candidature avec vidéo
     onNavigateToProfile: (() -> Unit)? = null,
     onNavigateToHome: (() -> Unit)? = null,
-    onNavigateToCandidatures: (() -> Unit)? = null
+    onNavigateToCandidatures: (() -> Unit)? = null,
+    onNavigateToAgenda: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val imageLoader = remember { CoilImageLoader.getImageLoader(context) }
@@ -561,6 +562,10 @@ fun CastingDetailScreen(
                     onHomeClick = { 
                         // Retourner à la page d'accueil de l'acteur
                         onNavigateToHome?.invoke() 
+                    },
+                    onAgendaClick = {
+                        // Naviguer vers l'agenda
+                        onNavigateToAgenda?.invoke()
                     },
                     onProfileClick = { 
                         // Naviguer vers les paramètres de l'acteur

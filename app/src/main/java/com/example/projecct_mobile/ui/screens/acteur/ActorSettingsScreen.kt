@@ -54,6 +54,7 @@ fun ActorSettingsScreen(
     onSettingsClick: (() -> Unit)? = null,
     onLogoutClick: (() -> Unit)? = null,
     onHomeClick: () -> Unit = {},
+    onAgendaClick: () -> Unit = {},
     onProfileClick: () -> Unit = {}
 ) {
     var isActive by remember { mutableStateOf(true) }
@@ -285,6 +286,7 @@ fun ActorSettingsScreen(
                     onMyCandidaturesClick?.invoke() ?: Unit
                 },
                 onHomeClick = onHomeClick,
+                onAgendaClick = onAgendaClick,
                 onProfileClick = { 
                     // Déjà sur la page de profil, ne rien faire
                 }

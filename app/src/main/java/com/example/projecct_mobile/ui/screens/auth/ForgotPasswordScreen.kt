@@ -37,7 +37,11 @@ fun ForgotPasswordScreen(
                    userRole.equals("recruteur", ignoreCase = true) ||
                    userRole.equals("agence", ignoreCase = true)
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(White)
+    ) {
         // Section bleue avec l'icône de cadenas
         Column(
             modifier = Modifier
@@ -81,6 +85,7 @@ fun ForgotPasswordScreen(
         Card(
             modifier = Modifier
                 .fillMaxWidth()
+                .fillMaxHeight()
                 .padding(top = 120.dp)
                 .clip(RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp)),
             shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp),

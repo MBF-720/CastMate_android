@@ -46,8 +46,10 @@ import com.example.projecct_mobile.ui.screens.profile.*
 import com.example.projecct_mobile.ui.screens.acteur.*
 import com.example.projecct_mobile.ui.screens.agence.auth.*
 import com.example.projecct_mobile.ui.screens.agence.casting.*
+import com.example.projecct_mobile.ui.screens.agence.casting.AgencyChatbotScreen
 import com.example.projecct_mobile.ui.screens.agence.profile.AgencyProfileScreen
 import com.example.projecct_mobile.ui.screens.agence.profile.ActorProfileDetails
+import com.example.projecct_mobile.ui.screens.interview.SelectInterviewDateScreen
 import com.example.projecct_mobile.ui.screens.settings.SettingsScreen
 import com.example.projecct_mobile.ui.screens.acteur.ActorSettingsScreen
 import com.example.projecct_mobile.ui.screens.acteur.ActorTrainingScreen
@@ -56,6 +58,7 @@ import com.example.projecct_mobile.ui.screens.acteur.MyCandidaturesScreen
 import com.example.projecct_mobile.ui.components.getErrorMessage
 import com.example.projecct_mobile.ui.theme.Projecct_MobileTheme
 import com.example.projecct_mobile.ui.theme.DarkBlue
+import com.example.projecct_mobile.ui.theme.White
 import com.example.projecct_mobile.ui.utils.EmailSender
 import androidx.compose.ui.graphics.Color
 import org.json.JSONObject
@@ -1359,6 +1362,9 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                 onFilterClick = {
                     navController.navigate("filter")
                 },
+                onAgendaClick = {
+                    navController.navigate("agenda")
+                },
                 onCreateCastingClick = {
                     navController.navigate("agencyCreateCasting")
                 },
@@ -1367,9 +1373,6 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                 },
                 onSettingsClick = {
                     navController.navigate("settings/agency")
-                },
-                onAgendaClick = {
-                    navController.navigate("agenda")
                 },
                 onLogoutClick = {
                     // Déconnexion agence : on efface token + infos locales
@@ -1650,6 +1653,9 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                         navController.navigate("actorHome") {
                             popUpTo("actorHome") { inclusive = true }
                         }
+                    },
+                    onAgendaClick = {
+                        navController.navigate("agenda")
                     },
                     onProfileClick = {
                         // Déjà sur la page de profil
@@ -2118,7 +2124,7 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                     navController.navigate("settings/actor")
                 },
                 onAgendaClick = {
-                    navController.navigate("settings/actor")
+                    navController.navigate("agenda")
                 },
                 onFilterClick = {
                     navController.navigate("filter")
@@ -2162,6 +2168,12 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                 onSettingsClick = {
                     navController.navigate("settings/actor")
                 },
+                onAgendaClick = {
+                    navController.navigate("agenda")
+                },
+                onCandidaturesClick = {
+                    navController.navigate("myCandidatures")
+                },
                 onFilterClick = {
                     // Géré par l'alerte "coming soon" dans CastingListScreen
                 },
@@ -2172,21 +2184,148 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
         }
         
         composable("agenda") {
+            val context = LocalContext.current
+            val tokenManager = remember { com.example.projecct_mobile.data.local.TokenManager(context) }
+            var userRole by remember { mutableStateOf<String?>(null) }
+            
+            LaunchedEffect(Unit) {
+                userRole = withContext(Dispatchers.IO) {
+                    tokenManager.getUserRoleSync()
+                }
+            }
+            
             AgendaScreen(
                 onBackClick = {
                     navController.popBackStack()
                 },
-                onItemClick = { casting ->
-                    // Navigation simple vers les détails du casting
-                    navController.navigate("castingDetail/${casting.id}")
+                onInterviewClick = { interview ->
+                    // Seuls les acteurs peuvent sélectionner une date
+                    if (interview.statusEnum == com.example.projecct_mobile.data.model.InterviewStatus.PENDING 
+                        && userRole?.uppercase() == "ACTEUR") {
+                        navController.navigate("selectInterviewDate/${interview.id}")
+                    }
                 },
                 onFilterClick = {
                     navController.navigate("filter")
                 },
                 onNavigateToProfile = {
-                    navController.navigate("profile")
+                    // Navigation selon le rôle
+                    when (userRole?.uppercase()) {
+                        "RECRUTEUR", "ADMIN" -> navController.navigate("agencyProfile")
+                        "ACTEUR" -> navController.navigate("actorProfile")
+                        else -> navController.navigate("profile")
+                    }
+                },
+                onHomeClick = {
+                    // Navigation selon le rôle
+                    when (userRole?.uppercase()) {
+                        "RECRUTEUR", "ADMIN" -> navController.navigate("agencyCastingList") {
+                            popUpTo("agencyCastingList") { inclusive = true }
+                        }
+                        "ACTEUR" -> navController.navigate("actorHome") {
+                            popUpTo("actorHome") { inclusive = true }
+                        }
+                        else -> navController.popBackStack()
+                    }
+                },
+                onAgendaClick = {
+                    // Déjà sur l'agenda
+                },
+                onCreateCastingClick = {
+                    navController.navigate("agencyCreateCasting")
+                },
+                onCandidaturesClick = {
+                    navController.navigate("myCandidatures")
                 }
             )
+        }
+        
+        composable(
+            route = "selectInterviewDate/{interviewId}",
+            arguments = listOf(
+                navArgument("interviewId") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val interviewId = backStackEntry.arguments?.getString("interviewId") ?: ""
+            val context = LocalContext.current
+            val tokenManager = remember { com.example.projecct_mobile.data.local.TokenManager(context) }
+            val interviewRepository = remember { com.example.projecct_mobile.data.repository.InterviewRepository() }
+            val scope = rememberCoroutineScope()
+            
+            var userRole by remember { mutableStateOf<String?>(null) }
+            var interview by remember { mutableStateOf<com.example.projecct_mobile.data.model.InterviewResponse?>(null) }
+            var isLoading by remember { mutableStateOf(true) }
+            var errorMessage by remember { mutableStateOf<String?>(null) }
+            
+            // Protection par rôle : seuls les acteurs peuvent accéder
+            LaunchedEffect(Unit) {
+                userRole = withContext(Dispatchers.IO) {
+                    tokenManager.getUserRoleSync()
+                }
+                
+                // Si l'utilisateur n'est pas un acteur, rediriger
+                if (userRole?.uppercase() != "ACTEUR") {
+                    android.util.Log.w("MainActivity", "⚠️ Accès refusé à SelectInterviewDateScreen: rôle = '$userRole'")
+                    navController.popBackStack()
+                    return@LaunchedEffect
+                }
+                
+                // Charger l'interview par ID
+                val result = interviewRepository.getInterviewById(interviewId)
+                result.onSuccess { loadedInterview ->
+                    interview = loadedInterview
+                    isLoading = false
+                }
+                result.onFailure { exception ->
+                    errorMessage = "Erreur: ${exception.message}"
+                    isLoading = false
+                }
+            }
+            
+            when {
+                isLoading -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = com.example.projecct_mobile.ui.theme.DarkBlue)
+                    }
+                }
+                errorMessage != null || interview == null -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Text(
+                                text = errorMessage ?: "Interview non trouvée",
+                                color = com.example.projecct_mobile.ui.theme.Red
+                            )
+                            Button(
+                                onClick = { navController.popBackStack() }
+                            ) {
+                                Text("Retour")
+                            }
+                        }
+                    }
+                }
+                else -> {
+                    com.example.projecct_mobile.ui.screens.interview.SelectInterviewDateScreen(
+                        interviewId = interviewId,
+                        interview = interview!!,
+                        onBackClick = {
+                            navController.popBackStack()
+                        },
+                        onDateSelected = {
+                            // Recharger l'agenda après sélection
+                            navController.popBackStack()
+                        }
+                    )
+                }
+            }
         }
         
         composable("filter") {
@@ -2398,6 +2537,11 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                                 navController.navigate("agencySignIn") {
                                     popUpTo("agencySignIn") { inclusive = true }
                                 }
+                            },
+                            onChatbotClick = {
+                                // Naviguer vers l'interface chatbot dédiée pour ce casting
+                                android.util.Log.d("MainActivity", "🤖 Navigation vers chatbot pour casting: ${currentCasting.actualId ?: castingId}")
+                                navController.navigate("agencyChatbot/${currentCasting.actualId ?: castingId}")
                             }
                         )
                     } else {
@@ -2423,8 +2567,11 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                     onNavigateToProfile = {
                                     // Navigue vers la page settings de l'acteur
                                     navController.navigate("settings/actor")
-                                },
-                                onNavigateToHome = {
+                    },
+                    onNavigateToAgenda = {
+                        navController.navigate("agenda")
+                    },
+                    onNavigateToHome = {
                                     // Retourne à la page d'accueil de l'acteur
                                     navController.navigate("actorHome") {
                                         popUpTo("actorHome") { inclusive = false }
@@ -2575,6 +2722,9 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                         popUpTo("actorHome") { inclusive = true }
                     }
                 },
+                onAgendaClick = {
+                    navController.navigate("agenda")
+                },
                 onProfileClick = {
                     navController.navigate("settings/actor")
                 }
@@ -2723,6 +2873,97 @@ fun NavigationScreen(intent: android.content.Intent? = null) {
                     }
                 }
             )
+        }
+        
+        // Route pour le chatbot d'agence pour un casting spécifique
+        composable(
+            route = "agencyChatbot/{castingId}",
+            arguments = listOf(
+                navArgument("castingId") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val castingId = backStackEntry.arguments?.getString("castingId") ?: ""
+            var casting by remember { mutableStateOf<com.example.projecct_mobile.data.model.Casting?>(null) }
+            var isLoading by remember { mutableStateOf(true) }
+            var errorMessage by remember { mutableStateOf<String?>(null) }
+            val castingRepository = remember { CastingRepository() }
+            val scope = rememberCoroutineScope()
+            
+            LaunchedEffect(castingId) {
+                if (castingId.isNotBlank()) {
+                    scope.launch {
+                        try {
+                            val result = castingRepository.getCastingById(castingId)
+                            result.onSuccess { loadedCasting ->
+                                casting = loadedCasting
+                                isLoading = false
+                            }
+                            result.onFailure { exception ->
+                                errorMessage = exception.message
+                                isLoading = false
+                            }
+                        } catch (e: Exception) {
+                            errorMessage = e.message
+                            isLoading = false
+                        }
+                    }
+                } else {
+                    isLoading = false
+                }
+            }
+            
+            when {
+                isLoading -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = DarkBlue)
+                    }
+                }
+                errorMessage != null -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            Text(
+                                text = "Erreur",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF1A1A1A)
+                            )
+                            Text(
+                                text = errorMessage ?: "Une erreur est survenue",
+                                fontSize = 14.sp,
+                                color = Color(0xFF666666)
+                            )
+                            Button(
+                                onClick = { navController.popBackStack() },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = DarkBlue
+                                )
+                            ) {
+                                Text("Retour", color = White)
+                            }
+                        }
+                    }
+                }
+                casting != null -> {
+                    AgencyChatbotScreen(
+                        casting = casting!!,
+                        onBackClick = {
+                            navController.popBackStack()
+                        },
+                        onViewActorProfile = { acteurId ->
+                            navController.navigate("actorProfile/$acteurId")
+                        }
+                    )
+                }
+            }
         }
     }
 }
